@@ -6,6 +6,7 @@
 // work. See ATTRIBUTION.md and LICENSE.
 
 import type { Cell, MapStore } from './map-store'
+import type { CellHitTester } from '../input/map-tap'
 import { parseCellKey } from './map-store'
 import { decodeColor, DEFAULT_FG, flashColor } from './colors'
 import { TEX, type TileLoader, type TileSprite } from '../tiles/tile-loader'
@@ -374,6 +375,29 @@ export class TileMapView {
   // minimap's you-are-here rectangle.
   viewRect(): { x: number; y: number; w: number; h: number } {
     return { x: this.offX, y: this.offY, w: this.viewportW, h: this.viewportH }
+  }
+
+  // Screen point → dungeon coord, for the map tap gestures; same contract
+  // as MapView.hitTester (one rect read per gesture, live offX/offY). The
+  // canvas rect already reflects the CSS scale (cellPx per cell) and the
+  // sub-cell full-bleed shift margins, so plain rect division is exact.
+  // Null before layout (zero-sized rect, e.g. happy-dom).
+  hitTester(): CellHitTester | null {
+    const r = this.canvas.getBoundingClientRect()
+    if (r.width <= 0 || r.height <= 0) return null
+    const { left, top } = r
+    const cellW = r.width / this.viewportW
+    const cellH = r.height / this.viewportH
+    return (clientX, clientY) => {
+      const col = Math.floor((clientX - left) / cellW)
+      const row = Math.floor((clientY - top) / cellH)
+      if (!this.inView(col, row)) return null
+      return { x: this.offX + col, y: this.offY + row }
+    }
+  }
+
+  cellAtPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+    return this.hitTester()?.(clientX, clientY) ?? null
   }
 
   render(dirty?: Set<string>): void {

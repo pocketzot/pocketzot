@@ -137,6 +137,7 @@ describe('mini-server client→engine routing', () => {
     { msg: 'menu_scroll', first: 0, last: 10, hover: 2 },
     { msg: 'formatted_scroller_scroll', scroll: 5 },
     { msg: 'click_cell', x: 1, y: 2, button: 1 },
+    { msg: 'target_cursor', x: 3, y: 4 },
     { msg: 'ui_state_sync', widget_id: 'input', text: 'x', generation_id: 7 },
   ]
   for (const m of controlMsgs) {

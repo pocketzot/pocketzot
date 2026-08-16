@@ -17,6 +17,7 @@ import { openSettings } from './settings-view'
 import { isOverlayOpen, closeTopOverlay } from './overlay'
 import { handleKeydown, CK_UP, CK_DOWN, CK_PGUP, CK_PGDN, CK_HOME, CK_END } from '../game/input/keyboard'
 import { createShiftToggle } from '../game/input/shift-state'
+import { attachMapGestures, canDescribe, canHover } from '../game/input/map-tap'
 import { uiColor, escHtml, dcssToHtml } from '../game/dcss-colors'
 import { htmlToRuns, exportScreenPng, screenSlug, type DcssRun } from './screen-export'
 import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
@@ -695,9 +696,14 @@ export function buildGameView(
   mapWrap.id = 'map-wrap'
   mapWrap.appendChild(mapView.element)
 
-  // Double-tap the map to toggle zoom. Bypassed while X-mode is active
-  // (font scale is overridden there) — single-tap behavior is undefined on
-  // the map today, so we don't need to suppress click propagation.
+  // Double-tap the map to toggle zoom. In normal play any tile works — a
+  // single tap is wire-silent there (see the hover gate below), so nothing
+  // is lost by letting it double as the zoom's first half. While a
+  // direction chooser is up (canHover) the first tap would re-aim, so the
+  // double-tap is restricted to the PLAYER'S TILE: the one spot where hover
+  // is consequence-free (the engine skips the (0,0) direction, so it only
+  // aims at yourself). Bypassed while X-mode is active (font scale is
+  // overridden there).
   // Bound to mapWrap (not mapView.element) so it survives the in-place swap
   // between MapView and TileMapView.
   let lastTap = { t: 0, x: 0, y: 0 }
@@ -708,6 +714,13 @@ export function buildGameView(
     if (!e.isPrimary) return
     const target = e.target as HTMLElement | null
     if (!target || !target.closest('#map-grid')) return
+    if (canHover(currentInputMode)) {
+      const cell = mapView.cellAtPoint(e.clientX, e.clientY)
+      if (!cell || cell.x !== store.playerPos.x || cell.y !== store.playerPos.y) {
+        lastTap = { t: 0, x: 0, y: 0 }
+        return
+      }
+    }
     const now = e.timeStamp
     const dt = now - lastTap.t
     const dx = e.clientX - lastTap.x
@@ -719,6 +732,24 @@ export function buildGameView(
       return
     }
     lastTap = { t: now, x: e.clientX, y: e.clientY }
+  })
+
+  // One-finger map gestures, reference mouse-control on touch: tap/drag =
+  // hover (target_cursor — aims while targeting, moves the `x` examine
+  // cursor), still long-press = right-click (click_cell 3 — describe).
+  // No left-click mapping at all, so a stray tap can never move or fire;
+  // in normal play a tap is wire-silent. Gating mirrors game.js
+  // can_target()/can_describe(); spectators never send.
+  attachMapGestures(mapWrap, {
+    hitTester: () => mapView.hitTester(),
+    onHover: (cell) => {
+      if (spectating || !canHover(currentInputMode)) return
+      conn.send({ msg: 'target_cursor', x: cell.x, y: cell.y })
+    },
+    onLongPress: (cell) => {
+      if (spectating || !canDescribe(currentInputMode, inXMode)) return
+      conn.send({ msg: 'click_cell', x: cell.x, y: cell.y, button: 3 })
+    },
   })
 
   // Two-finger long-press on the map flips between ASCII and tile rendering.

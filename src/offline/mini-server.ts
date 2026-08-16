@@ -17,7 +17,7 @@ import type { EnginePort } from './engine-port'
 // either absorbed (chat) or can't occur (lobby/login flows).
 const CONTROL_FORWARD_TYPES = new Set([
   'key', 'menu_hover', 'menu_scroll', 'formatted_scroller_scroll',
-  'click_cell', 'ui_state_sync', 'outer_menu_focus',
+  'click_cell', 'target_cursor', 'ui_state_sync', 'outer_menu_focus',
 ])
 
 export interface MiniServer {

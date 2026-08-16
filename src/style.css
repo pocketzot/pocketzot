@@ -1547,6 +1547,10 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   padding: 2px;
   white-space: pre;
   user-select: none;
+  /* The map long-press (describe) must not pop iOS text selection on the
+     ASCII <pre> or the save-image callout on the tile canvas. */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   height: 100%;
   min-height: 0;
   box-sizing: border-box;

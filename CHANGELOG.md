@@ -9,6 +9,13 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-08-29
+
+- The map now responds to touch like the desktop client's mouse: while
+  aiming or examining, tap a tile to move the cursor there (drag to sweep
+  it); press and hold a tile to describe what's there. Double-tap zoom is
+  unchanged in normal play; while aiming, double-tap your own character.
+
 ## 2026-08-28
 
 - Control buttons now show tap feedback on Android as intended, instead of
