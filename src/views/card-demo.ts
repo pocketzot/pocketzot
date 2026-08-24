@@ -93,7 +93,7 @@ export function buildDemoCards(base: Avatar | null): Array<{ label: string; mode
       model: avatarToCard(online({ runes: ['serpentine'] })) },
     { label: 'Live save on the orb run · carrying the Orb, 3 runes',
       model: avatarToCard(online({ runes: ['serpentine', 'decaying', 'silver'], orb: true, xl: 27, place: 'Depths', depth: 2 })) },
-    { label: 'Crypt-modal form · grid-sized doll, Orb beneath, runes last',
+    { label: 'Crypt-modal form · 64px doll, Orb beneath, runes last',
       model: avatarToCard(online({ species: 'Merfolk', title: 'the Intangible', god: 'Cheibriados',
         runes: ALL_RUNES, outcome: { reason: 'won', message: WIN_BLURB, dump: 'https://crawl.dcss.io/morgue/demo/x', endedAt: Date.now() - 86400e3 } })),
       hero: true },

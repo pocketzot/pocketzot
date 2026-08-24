@@ -71,15 +71,16 @@ export interface CharCardModel {
 }
 
 const DOLL_SCALE = 1.75 // 56px box — between the login strip (64) and inline row sizes
-// The crypt modal: the doll at the crypt grid's own 80px, so the tapped tile
-// reads as moving into the card. (A 4× centred "hero" doll was tried on
-// device and dropped — it only repeated the grid tile behind the modal,
-// bigger; the modal's room goes to what the grid can't show.)
-const HERO_DOLL_SCALE = 2.5
+// The crypt modal: 64px — the login shelf's size, and an integer scale of
+// the 32px sprite, so every source pixel is a clean 2×2. Not the grid's
+// 80px: that narrows the text column until the stats line wraps to three
+// rows. (A 4× centred "hero" doll was also tried and dropped — it only
+// repeated the grid tile behind the modal, bigger.)
+const HERO_DOLL_SCALE = 2
 
 // Pure, synchronous DOM builder — no store reads. compact drops the stats,
 // meta, and god-rank lines (crypt-grid form); the full card is the list form;
-// hero (the crypt modal) is the full card with the grid-sized doll.
+// hero (the crypt modal) is the full card with the larger doll.
 export function renderCharCard(
   model: CharCardModel,
   opts: { onOpen?: (dump?: DumpRef) => void; compact?: boolean; hero?: boolean } = {},

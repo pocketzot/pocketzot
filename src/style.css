@@ -5262,8 +5262,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .char-card-runes { margin-top: 0.2rem; }
 /* Doll column: doll on the floor line, the Orb trophy centred beneath it. */
 .char-card-doll-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-/* Crypt modal (char-card.ts `hero`): the doll at the grid's 80px. */
-.char-card-hero .char-card-doll { min-width: 80px; min-height: 80px; }
+/* Crypt modal (char-card.ts `hero`): the 64px doll, sized by HERO_DOLL_SCALE. */
+.char-card-hero .char-card-doll { min-width: 64px; min-height: 64px; }
 /* Doll marks (rune-marks.ts): wrapper keeps the doll's inline box; the marks
    layer floats over it — Orb badge top-right, rune fan bottom-right with
    each card overlapping the last, "+N" pip for the overflow. */
