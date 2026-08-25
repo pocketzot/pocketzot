@@ -12,10 +12,8 @@ Notable changes to PocketZot, newest first.
 ## 2026-08-24
 
 - Character cards now show the runes a character has collected, and the Orb
-  of Zot once carried. Characters on the login screen, in the crypt, and on
-  the offline save list also show these as small badges.
-- Crypt cards show score, turns, duration, and god standing, with a larger
-  character sprite.
+  of Zot if carried. Characters on the login screen, in the crypt, and on
+  the offline save list also show these as badges.
 
 ## 2026-08-23
 
