@@ -2698,8 +2698,8 @@ export function buildGameView(
       btns = [
         { label: '⎋', keycode: 27 },
         { label: '!', key: '!' },
-        { label: '/', key: '/' },
         { label: '⇧', shift: true },
+        { label: '/', key: '/' },
         { label: '⏎', keycode: 13, dynamic: true },
       ]
     } else if (tag === 'acquirement') {
@@ -2716,28 +2716,32 @@ export function buildGameView(
       // The three letter-keys mirror the cues the server prints in the menu
       // title:
       //   !  toggle travel/examine target mode
-      //   /  cycle sort (alpha / by distance)
       //   =  hide useless & duplicates
+      //   /  cycle sort (alpha / by distance)
       // No accept (⏎) button: with no visible default hover (see
       // menuHoverFromUser) there's no obvious target, and tapping a row
       // already activates it.
       btns = [
         { label: '⎋', keycode: 27 },
         { label: '!', key: '!' },
-        { label: '/', key: '/' },
         { label: '=', key: '=' },
+        { label: '/', key: '/' },
       ]
     } else if (tag === 'skills') {
+      // Key roles (skill-menu.cc init_switches / init_help): ! = train
+      // mode switch, ⇧ = shift-tap rows, * = show all skills, - = clear
+      // targets (a visible no-op until some skill has a target set), _ =
+      // level/progress display, = = set target, / = auto/manual, ? = help.
       btns = [
         { label: '⎋', keycode: 27 },
-        { label: '⇧', shift: true },
-        { label: '?',   key: '?' },
-        { label: '=',   key: '=' },
-        { label: '-',   key: '-' },
-        { label: '/',   key: '/' },
-        { label: '*',   key: '*' },
-        { label: '_',   key: '_' },
         { label: '!',   key: '!' },
+        { label: '⇧', shift: true },
+        { label: '*',   key: '*' },
+        { label: '-',   key: '-' },
+        { label: '_',   key: '_' },
+        { label: '=',   key: '=' },
+        { label: '/',   key: '/' },
+        { label: '?',   key: '?' },
       ]
     } else if (flags !== undefined && (flags & MF_MULTISELECT)) {
       btns = [
