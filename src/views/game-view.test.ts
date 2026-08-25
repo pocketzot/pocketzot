@@ -855,6 +855,28 @@ describe('menu handler', () => {
     expect(sent(h)).toContainEqual({ msg: 'key', keycode: 97 })
   })
 
+  it('ability and spell menus get their own permanent control bars', () => {
+    const bar = (h: Harness) => h.view.querySelector<HTMLElement>('#menu-controls')!
+    const labels = (h: Harness) => [...bar(h).querySelectorAll<HTMLElement>('.menu-ctrl-btn')].map(b => b.textContent)
+    const h = setup()
+    h.dispatch({ msg: 'menu', tag: 'ability', title: { text: 'Ability - do what?' },
+      items: [{ level: 2, text: 'a - Renounce Religion', hotkeys: [97] }] })
+    expect(isHidden(bar(h))).toBe(false)
+    expect(labels(h)).toEqual(['⎋', '?'])
+    bar(h).querySelectorAll<HTMLElement>('.menu-ctrl-btn')[1].click()
+    expect(sent(h).at(-1)).toEqual({ msg: 'input', text: '?' })
+    // A describe popup layered over the menu keeps the menu's bar.
+    h.dispatch({ msg: 'ui-push', type: 'describe-generic', title: 'Renounce Religion', body: '...' })
+    expect(isHidden(bar(h))).toBe(false)
+    h.dispatch({ msg: 'close_menu' })
+
+    h.dispatch({ msg: 'menu', tag: 'spell', title: { text: 'Your spells (describe)' },
+      items: [{ level: 2, text: 'a - Magic Dart', hotkeys: [97] }] })
+    expect(labels(h)).toEqual(['⎋', '!'])
+    bar(h).querySelectorAll<HTMLElement>('.menu-ctrl-btn')[1].click()
+    expect(sent(h).at(-1)).toEqual({ msg: 'input', text: '!' })
+  })
+
   it('renders a type:crt menu as a CRT display and paints txt lines into it', () => {
     const h = setup()
     h.dispatch({ msg: 'menu', type: 'crt' })

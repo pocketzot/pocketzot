@@ -1903,13 +1903,13 @@ export function buildGameView(
         // YESNO prompts fire inside any menu that calls yesno() while open:
         // shop purchase (shopping.cc), acquirement (acquire.cc), Nemelex
         // StackFive (decks.cc:708). Menus with their own permanent bar
-        // (shop/stash/acquirement) rebuild on every mode change so the bar
+        // (menuTagHasBar) rebuild on every mode change so the bar
         // can swap to ⎋ Y N. Other menus get a bar only for the duration of
         // the YESNO prompt — shown on the entering edge, hidden on the
         // leaving edge.
         if (activeMenu) {
           const tag = activeMenu.tag
-          const tagHasBar = tag === 'shop' || tag === 'stash' || tag === 'acquirement'
+          const tagHasBar = menuTagHasBar(tag)
           const enteringYesno = msg.mode === MOUSE_MODE_YESNO
           const leavingYesno = prevInputMode === MOUSE_MODE_YESNO && !enteringYesno
           if (tagHasBar || enteringYesno || leavingYesno) {
@@ -2487,12 +2487,12 @@ export function buildGameView(
         setExportSource({ runs: () => htmlToRuns(dcssToHtml(exportText)), slug: screenSlug(slugSrc) })
       }
     }
-    // A ui-push layered over a shop/stash/acquirement menu (e.g. describe-item
+    // A ui-push layered over a menuTagHasBar menu (e.g. describe-item
     // after `!`) should keep the menu's bottom row. Same for the skills CRT
     // (`m` → `?` → letter opens a describe popup): keep the skills row (its ⎋
     // dismisses) instead of swapping in the d-pad. Fixed row only — the
     // letter row is derived from the CRT lines and isn't rebuilt here.
-    if (activeMenu?.tag === 'shop' || activeMenu?.tag === 'stash' || activeMenu?.tag === 'acquirement') {
+    if (activeMenu && menuTagHasBar(activeMenu.tag)) {
       buildMenuControls(activeMenu.tag, activeMenu.flags)
       menuControls.style.display = ''
       touchControls.element.style.display = 'none'
@@ -2680,6 +2680,14 @@ export function buildGameView(
     else btn.innerHTML = glyphHtml('⏎')
   }
 
+  // Menus whose tag earns a permanent bottom control bar (shown on open,
+  // kept under layered ui-pushes, rebuilt across input-mode changes). Every
+  // tag here needs a matching branch in buildMenuControls.
+  function menuTagHasBar(tag: string | undefined): boolean {
+    return tag === 'shop' || tag === 'stash' || tag === 'acquirement'
+      || tag === 'ability' || tag === 'spell'
+  }
+
   function buildMenuControls(tag?: string, flags?: number): void {
     menuControls.innerHTML = ''
     type BtnDef = { label: string; key?: string; keycode?: number; dynamic?: true; shift?: true }
@@ -2726,6 +2734,26 @@ export function buildGameView(
         { label: '!', key: '!' },
         { label: '=', key: '=' },
         { label: '/', key: '/' },
+      ]
+    } else if (tag === 'ability') {
+      // ToggleableMenu with MF_TOGGLE_ACTION (ability.cc choose_ability_menu):
+      // ? (also ! and _, via add_toggle_from_command) flips every row and the
+      // title between "do what?" and "describe what?" — there is no separate
+      // help screen. It's the only extra key the menu has and the only one
+      // its footer advertises; row taps act/describe per the current mode.
+      btns = [
+        { label: '⎋', keycode: 27 },
+        { label: '?', key: '?' },
+      ]
+    } else if (tag === 'spell') {
+      // SpellMenu (spl-cast.cc list_spells): ! toggles each row's columns
+      // (base school/fail/level ↔ extra stats). No ?: it describes the
+      // HOVERED spell (SpellMenu::process_command → examine_index), and a
+      // row tap is the only hover mover here — which already selected the
+      // row (describe in the `I` menu, cast in the `z` one).
+      btns = [
+        { label: '⎋', keycode: 27 },
+        { label: '!', key: '!' },
       ]
     } else if (tag === 'skills') {
       // Key roles (skill-menu.cc init_switches / init_help): ! = train
@@ -3365,7 +3393,7 @@ export function buildGameView(
     const promptMoreIsInfo = (msg.more ?? '') !== '' && msg.more === msg.alt_more
     uiOverlay.classList.toggle('prompt-menu-alert',
       promptFamily && (promptMoreIsInfo || (msg.more ?? '') !== promptInitialMore))
-    if (msg.tag === 'shop' || msg.tag === 'stash' || msg.tag === 'acquirement') {
+    if (menuTagHasBar(msg.tag)) {
       buildMenuControls(msg.tag, msg.flags)
       menuControls.style.display = ''
       touchControls.element.style.display = 'none'

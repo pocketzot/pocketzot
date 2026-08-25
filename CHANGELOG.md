@@ -9,6 +9,11 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-08-25
+
+- Added control rows for the ability and spell list menus.
+- Reordered the custom control rows for several menus.
+
 ## 2026-08-24
 
 - Character cards now show the runes a character has collected, and the Orb
