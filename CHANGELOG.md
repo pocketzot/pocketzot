@@ -11,7 +11,7 @@ Notable changes to PocketZot, newest first.
 
 ## 2026-08-26
 
-- Message log adjustments: reduced line height, +1 default line to use the
+- Message log adjustments: reduced line height, +1 default line into the
   freed space (existing installs unchanged), and +3 lines while spectating.
 - Improvements to character card content and styling.
 - Other minor improvements.
