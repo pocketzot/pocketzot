@@ -9,6 +9,12 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-08-26
+
+- Message log adjustments: reduced line height, +1 default line, and +3
+  lines while spectating.
+- Minor improvements to character card content and styling.
+
 ## 2026-08-25
 
 - Added control rows for the ability and spell list menus.
