@@ -39,7 +39,7 @@ describe('parseExitBlurb', () => {
     expect(b?.rest).toBe('Escaped with the Orb')
   })
 
-  it('keeps the whole death sentence, including its place line and the Xom rank', () => {
+  it('keeps the death sentence and the Xom rank; drops the plain closing place line', () => {
     const b = parseExitBlurb([
       '1648 particleface the Impregnable (level 12, -3/95 HPs)',
       'Began as a Minotaur Fighter on Feb 13, 2026.',
@@ -49,7 +49,35 @@ describe('parseExitBlurb', () => {
       'The game lasted 00:40:12 (9904 turns).',
     ].join('\n'))
     expect(b?.godRank).toBe('Was a Favourite Plaything of Xom.')
-    expect(b?.rest).toBe('Slain by an orc warrior (13 damage)\n... on level 9 of the Dungeon on Feb 14, 2026.')
+    expect(b?.rest).toBe('Slain by an orc warrior (13 damage)')
+  })
+
+  // The card carries place + date structurally; the closing line is dropped
+  // only in its plain forms, and only when it isn't the whole sentence.
+  const death = (...desc: string[]) => parseExitBlurb([
+    '4 Test2 the Chopper (level 1, -1/20 HPs)',
+    'Began as a Minotaur Berserker on Aug 4, 2026.',
+    ...desc,
+    'The game lasted 00:00:32 (219 turns).',
+  ].join('\n'))?.rest
+
+  it('drops the plain place line in every prep_branch_level_name form', () => {
+    // Same-day death: no date tail.
+    expect(death('Slain by a kobold', '... wielding a +2 short sword of draining', '(1 damage)', '... on level 1 of the Dungeon.'))
+      .toBe('Slain by a kobold\n... wielding a +2 short sword of draining\n(1 damage)')
+    // Single-level / unnumbered branches take the "in X" form.
+    expect(death('Slain by a lich (44 damage)', '... in the Abyss on Aug 5, 2026.')).toBe('Slain by a lich (44 damage)')
+    expect(death('Slain by a pandemonium lord (60 damage)', '... in Pandemonium.')).toBe('Slain by a pandemonium lord (60 damage)')
+  })
+
+  it('keeps a place line naming the vault (mapdesc) — the one fact the card lacks', () => {
+    expect(death('Slain by a vault warden (22 damage)', '... on level 5 of the Vaults (vaults_mini_ghost) on Aug 3, 2026.'))
+      .toBe('Slain by a vault warden (22 damage)\n... on level 5 of the Vaults (vaults_mini_ghost) on Aug 3, 2026.')
+  })
+
+  it('never empties the description: a boring death glues the place onto its only line', () => {
+    expect(death('Quit the game on level 3 of the Dungeon.')).toBe('Quit the game on level 3 of the Dungeon.')
+    expect(death('... on level 3 of the Dungeon.')).toBe('... on level 3 of the Dungeon.')
   })
 
   it('rejects anything that does not open with the identity line (shown verbatim)', () => {

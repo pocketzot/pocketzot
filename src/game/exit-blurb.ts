@@ -19,8 +19,9 @@
 //
 // Starred lines are format-fixed and consumed here; everything between is
 // the death description + place, kept as `rest` for the card's verbose
-// result line. Strict: a blurb whose first line doesn't match yields null
-// and the caller shows the message verbatim, exactly as before.
+// result line (minus a plain closing place line — see PLAIN_PLACE).
+// Strict: a blurb whose first line doesn't match yields null and the
+// caller shows the message verbatim, exactly as before.
 
 export interface ExitBlurb {
   score: number
@@ -40,6 +41,17 @@ const GOD = /^Was (?:an? |the )?.+ of .+\.$|^Was a (?:Favourite )?Plaything of X
 // make_time_string (stringutil.cc:601) prefixes "N day(s) " past 24 h of
 // real time — a slow 15-rune run or a long-lived offline character.
 const LASTED = /^The game lasted ((?:\d+ days? )?\d+:\d\d:\d\d) \((\d+) turns\)\.$/
+// The death sentence's closing place line (death_place, hiscores.cc:2131):
+// "... " + prep_branch_level_name (place.cc:16 — "on level N of X" or
+// "in X": the Abyss, Pandemonium) + optional " (mapdesc)" + optional
+// " on <date>" (omitted when the death was the same day as creation) + ".".
+// The card already carries the place and date structurally, so the PLAIN
+// form is dropped from `rest`; a line with a "(mapdesc)" parenthetical —
+// the vault you died in, the one fact nothing else on the card has —
+// stays verbatim, as does anything not matching (fail-safe). Wins and
+// escapes never get a place line; "boring" deaths (quit) glue the place
+// onto the death line itself with no "..." — untouched, it's the only line.
+const PLAIN_PLACE = /^\.\.\. (?:on level \d+ of|in) [^()]+?(?: on [A-Z][a-z]+ \d+, \d{4})?\.$/
 
 export function parseExitBlurb(message: string): ExitBlurb | null {
   const lines = message.split('\n').map((l) => l.trim()).filter((l) => l !== '')
@@ -59,6 +71,7 @@ export function parseExitBlurb(message: string): ExitBlurb | null {
       out.turns = Number(lasted[2])
     } else rest.push(l)
   }
+  if (rest.length > 1 && PLAIN_PLACE.test(rest[rest.length - 1])) rest.pop()
   out.rest = rest.join('\n')
   return out
 }
