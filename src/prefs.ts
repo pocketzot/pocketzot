@@ -62,7 +62,7 @@ const DEFAULTS: Prefs = {
   loginSprites: true,
   changelogSeen: null,
   dpadSize: 3.5,
-  msglogLines: 4,
+  msglogLines: 5,
   msglogFont: 0.75,
 }
 

@@ -12,7 +12,7 @@ import { getPrefs, UI_SCALE_CHANGED_EVENT } from './prefs'
 // D-pad steps are 0.2rem (3.2px): big enough that each tap visibly changes
 // the pad, unlike the original 0.1rem ladder whose neighbors were ~3% apart.
 export const DPAD_STOPS = [3.1, 3.3, 3.5, 3.7, 3.9]  // rem
-export const MSGLOG_LINE_STOPS = [2, 3, 4, 5, 6]
+export const MSGLOG_LINE_STOPS = [3, 4, 5, 6, 7]
 export const MSGLOG_FONT_STOPS = [0.65, 0.7, 0.75, 0.8, 0.85]  // rem
 
 // Snap to a legal stop — guards hand-edited localStorage and lets the stop

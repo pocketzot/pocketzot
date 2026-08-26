@@ -1413,15 +1413,15 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
      --pz-msglog-lines on :root (ui-scale.ts); the fallbacks here are the
      stock values. */
   --msglog-font: var(--pz-msglog-font, 0.75rem);
-  --msglog-line: 1.3;
+  --msglog-line: 1.1;
   /* Message-log height in lines (line-count × font × line-height rather than
      `lh`, which would re-resolve against each consumer's own line-height).
      A var so #map-grid can reserve exactly the log's height above the float.
-     4 lines still spans several turns (the server glues
+     5 lines still spans several turns (the server glues
      same-turn messages onto one line) and tapping the log opens full
      history; lines trimmed here come back as clear map area, since
      #map-grid reserves exactly this height above the floating log. */
-  --msglog-h: calc(var(--pz-msglog-lines, 4) * var(--msglog-font) * var(--msglog-line));
+  --msglog-h: calc(var(--pz-msglog-lines, 5) * var(--msglog-font) * var(--msglog-line));
   /* Tight black halo + 1px drop: keeps every DCSS message color (incl. brown/
      darkgrey) legible over bright floor tiles without raising the scrim — the
      scrim level is tuned for layer separation, not contrast. Shared with the
@@ -1479,6 +1479,16 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
     "menu";
   overflow: hidden;
   outline: none;
+}
+
+/* Spectating: the ~46px spectator bar replaces the d-pad strip (≥150px) in
+   the `touch` slot, and the log spends part of the freed height on 3 more
+   lines (default 5 → 8, bracketing upstream's 7–10-line pane; +6 reads as
+   a wall of text at ~50-column wrapping). Must
+   override --msglog-h itself — the calc resolves on :root, so overriding
+   --pz-msglog-lines here would never reach it. */
+#game-view.spectating {
+  --msglog-h: calc((var(--pz-msglog-lines, 5) + 3) * var(--msglog-font) * var(--msglog-line));
 }
 
 /* Old-version advisory banner (maybeShowVersionNotice in game-view.ts):

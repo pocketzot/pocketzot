@@ -534,6 +534,8 @@ export function buildGameView(
 
   const view = document.createElement('div')
   view.id = 'game-view'
+  // Widens the message log (see the #game-view.spectating rule in style.css).
+  if (spectating) view.classList.add('spectating')
 
   // --- Old-version advisory (see dev-material/old-version-support.md) ---
   // Below the 0.24 support cutoff we inform, never block: a dismissible

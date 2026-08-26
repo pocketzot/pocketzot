@@ -467,7 +467,7 @@ describe('size sliders', () => {
   it('labels the lines slider dots with their values', () => {
     openSettings()
     const nums = [...segGroup('Message log lines').querySelectorAll('.set-slider-num')]
-    expect(nums.map(n => n.textContent)).toEqual(['2', '3', '4', '5', '6'])
+    expect(nums.map(n => n.textContent)).toEqual(['3', '4', '5', '6', '7'])
   })
 
   it('labels only the endpoint dots of a worded slider', () => {
