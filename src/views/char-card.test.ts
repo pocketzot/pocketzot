@@ -299,13 +299,12 @@ describe('renderCharCard', () => {
   const model = xlogToCard(parseXlogLine(PROBE_LINE))
 
   it('shows the rune row for any run with runes; the Orb is the doll column trophy on wins', () => {
-    const runes = (m: typeof model, compact = false) =>
-      renderCharCard(m, { compact }).querySelector<HTMLElement>('.char-card-runes.rune-row')?.dataset.runes
+    const runes = (m: typeof model) =>
+      renderCharCard(m).querySelector<HTMLElement>('.char-card-runes.rune-row')?.dataset.runes
     const orb = (m: typeof model) => renderCharCard(m).querySelector('.char-card-doll-col .char-card-orb') !== null
     expect(runes(model)).toBeUndefined()
     expect(orb(model)).toBe(false)
     expect(runes({ ...model, runes: ['golden'] })).toBe('golden')
-    expect(runes({ ...model, runes: ['golden'] }, true)).toBe('golden') // compact keeps it
     // Rune-less win: no row, but the doll column exists for the Orb alone.
     const win = { ...model, result: { kind: 'won' as const, verb: 'Won!' } }
     expect(runes(win)).toBeUndefined()
@@ -328,8 +327,7 @@ describe('renderCharCard', () => {
 
   it('lays out the full card', () => {
     const card = renderCharCard(model)
-    expect(card.className).toContain('char-card-k-quit')
-    expect(card.classList.contains('char-card-k-won')).toBe(false)
+    expect(card.querySelector('.char-card-result')?.classList.contains('char-card-kind-quit')).toBe(true)
     expect(card.querySelector('.char-card-head')?.textContent).toBe('TmsgProbe the Trooper')
     expect(card.querySelector('.char-card-head-title')?.textContent).toBe(' the Trooper')
     // Place rides the result line for terminal kinds, not the identity line.
@@ -354,8 +352,9 @@ describe('renderCharCard', () => {
       ...model,
       result: { kind: 'won', verb: 'Escaped with the Orb and 3 runes!' },
     })
-    expect(win.classList.contains('char-card-k-won')).toBe(true)
-    expect(win.querySelector('.char-card-result')?.textContent).toBe('Escaped with the Orb and 3 runes!')
+    const result = win.querySelector('.char-card-result')
+    expect(result?.classList.contains('char-card-kind-won')).toBe(true)
+    expect(result?.textContent).toBe('Escaped with the Orb and 3 runes!')
     // A winner's place is the dungeon exit — suppressed everywhere.
     expect(win.querySelector('.char-card-sub')?.textContent).not.toContain('D:')
   })
@@ -365,23 +364,13 @@ describe('renderCharCard', () => {
     expect(live.querySelector('.char-card-sub')?.textContent).toContain('D:1')
   })
 
-  it('compact drops stats, meta, and god-rank; god moves to the sub line', () => {
-    const card = renderCharCard(model, { compact: true })
-    expect(card.querySelector('.char-card-stats')).toBeNull()
-    expect(card.querySelector('.char-card-meta')).toBeNull()
-    expect(card.querySelector('.char-card-god')).toBeNull()
-    expect(card.querySelector('.char-card-sub')?.textContent).toContain('Trog')
-  })
-
-  it('prefers verbose prose on the full card, terse on compact', () => {
+  it('prefers verbose prose over the terse verb', () => {
     const m = { ...model, result: { ...model.result, kind: 'dead' as const, verb: 'Slain by an orc', verbose: 'Slain by an orc wielding a +2 mace (17 damage)' } }
     // Verbose prose never carries the appended place (an online blurb already
-    // narrates it, and the line-clamp could swallow the tail) — the place
-    // falls back to the identity line instead.
+    // narrates it) — the place falls back to the identity line instead.
     const full = renderCharCard(m)
     expect(full.querySelector('.char-card-result')?.textContent).toBe('Slain by an orc wielding a +2 mace (17 damage)')
     expect(full.querySelector('.char-card-sub')?.textContent).toContain('D:1')
-    expect(renderCharCard(m, { compact: true }).querySelector('.char-card-result')?.textContent).toBe('Slain by an orc in D:1')
   })
 
   it('never duplicates a place an online blurb already narrates', () => {
@@ -394,9 +383,6 @@ describe('renderCharCard', () => {
     )
     const full = renderCharCard(m)
     expect(full.querySelector('.char-card-result')?.textContent).toBe('Slain by an ogre... on level 7 of the Dungeon.')
-    // Compact renders the short verb, which safely carries the place.
-    const compact = renderCharCard(m, { compact: true })
-    expect(compact.querySelector('.char-card-result')?.textContent).toBe('Died in D:7')
   })
 
   it('renders the wiz/explore marker as the headline tail', () => {

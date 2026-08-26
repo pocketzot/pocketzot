@@ -26,6 +26,14 @@ const WIN_BLURB = [
   '             ',
   '             The game lasted 03:29:45 (86006 turns).',
 ].join('\n')
+const DEATH_BLURB_LONG = [
+  '67 Demo the Sneak (level 3, -2/18 HPs)',
+  '             Began as a Spriggan Conjurer on Aug 8, 2026.',
+  '             Killed from afar by an orc wizard (9 damage)',
+  '             ... with a magic dart',
+  '             ... on level 3 of the Dungeon on Aug 8, 2026.',
+  '             The game lasted 00:11:44 (2336 turns).',
+].join('\n')
 const WIZ_BLURB = [
   '254000 Demo the Ruthless (level 27, 120/120 HPs) *WIZ*',
   '             Began as a Minotaur Berserker on Aug 24, 2026.',
@@ -64,7 +72,7 @@ function pureRecipe(a: Avatar): DollRecipe {
   return { doll: a.doll, mcache: a.mcache, httpBase: a.httpBase, version: a.version, fp: a.fp }
 }
 
-export function buildDemoCards(base: Avatar | null): Array<{ label: string; model: CharCardModel; compact?: boolean; hero?: boolean }> {
+export function buildDemoCards(base: Avatar | null): Array<{ label: string; model: CharCardModel; hero?: boolean }> {
   // No real entry to borrow from: a doll-less recipe on the offline pack's
   // coords, so the fallback fixture can never send a request to a live server.
   const recipe: DollRecipe = base ? pureRecipe(base) : { httpBase: '', version: 'local', doll: null, mcache: null }
@@ -97,9 +105,9 @@ export function buildDemoCards(base: Avatar | null): Array<{ label: string; mode
       model: avatarToCard(online({ species: 'Merfolk', title: 'the Intangible', god: 'Cheibriados',
         runes: ALL_RUNES, outcome: { reason: 'won', message: WIN_BLURB, dump: 'https://crawl.dcss.io/morgue/demo/x', endedAt: Date.now() - 86400e3 } })),
       hero: true },
-    { label: 'Crypt-modal compact form · win with runes',
-      model: avatarToCard(online({ runes: ['golden', 'abyssal'], outcome: { reason: 'won', message: WIN_BLURB, endedAt: Date.now() } })),
-      compact: true },
+    { label: 'Online death · 3-line blurb (death + "..." continuations, shown whole)',
+      model: avatarToCard(online({ species: 'Spriggan', title: 'the Sneak', place: 'Dungeon', depth: 3,
+        outcome: { reason: 'dead', message: DEATH_BLURB_LONG, dump: 'https://crawl.dcss.io/morgue/demo/y', endedAt: Date.now() - 18 * 86400e3 } })) },
     { label: 'Unparseable blurb → verbatim (pre-parse behaviour)',
       model: avatarToCard(online({ outcome: { reason: 'dead', message: 'Slain by an orc\nOn D:9', endedAt: Date.now() } })) },
   ]
@@ -159,12 +167,12 @@ export function toggleCardDemo(): void {
   cap0.textContent = 'Doll marks · 1 rune / 3 runes / 15 + Orb / Orb only / plain / live orb run — shelf and crypt-grid scales'
   list.append(cap0)
   void mountDollStrip(list, base)
-  for (const { label, model, compact, hero } of buildDemoCards(base)) {
+  for (const { label, model, hero } of buildDemoCards(base)) {
     const cap = document.createElement('div')
     cap.className = 'card-demo-label'
     cap.textContent = label
     // onOpen exists only to show the ↗ affordance on dump-bearing cards.
-    list.append(cap, renderCharCard(model, { compact, hero, onOpen: model.dump ? () => {} : undefined }))
+    list.append(cap, renderCharCard(model, { hero, onOpen: model.dump ? () => {} : undefined }))
   }
 }
 

@@ -24,7 +24,7 @@ describe('buildDemoCards', () => {
     expect(by('Offline death').runes).toEqual(['serpentine', 'decaying', 'silver'])
     expect(by('Live save').result.kind).toBe('saved')
     expect(by('Unparseable').result.verbose).toBe('Slain by an orc\nOn D:9')
-    for (const c of cards) expect(renderCharCard(c.model, { compact: c.compact })).toBeInstanceOf(HTMLElement)
+    for (const c of cards) expect(renderCharCard(c.model, { hero: c.hero })).toBeInstanceOf(HTMLElement)
     expect(renderCharCard(by('Online win')).querySelector<HTMLElement>('.rune-row')?.dataset.n).toBe('15')
   })
 })

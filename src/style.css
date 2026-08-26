@@ -322,6 +322,12 @@ html, body {
 .crypt-card-backdrop .char-card {
   width: 100%;
   max-width: 26rem;
+  /* The backdrop is a fixed, centered flex box with no scroll of its own
+     (like .doc-card): a tall card — long blurb + two rune rows on a
+     landscape phone — must scroll inside itself or its headline clips
+     off the top. */
+  max-height: 100%;
+  overflow-y: auto;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   outline: none; /* programmatic focus (dismissal focus-parking), no ring */
 }
@@ -5182,10 +5188,9 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .chat-send:active { background: var(--surface); }
 
 /* ── Character card (views/char-card.ts) ──────────────────────
-   Shared by the crypt, the offline scores browser, and online history.
-   Left accent bar carries the result: green for a win/escape, red for a
-   death, border-dim otherwise. Compact form (crypt grid) drops the stats,
-   meta, and god-rank lines in the renderer, not here. */
+   Shared by the crypt modal and the offline past-games list. The result
+   line alone carries the outcome colour (.char-card-kind-*); the frame
+   stays neutral. */
 .char-card {
   position: relative;
   display: flex;
@@ -5193,13 +5198,10 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   gap: 0.6rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 0.7rem;
   text-align: left;
 }
-.char-card-k-dead { border-left-color: var(--danger); }
-.char-card-k-won { border-left-color: var(--ok); }
 .char-card-tappable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .char-card-tappable:active { background: var(--surface2); }
 .char-card-doll {
@@ -5233,13 +5235,10 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .char-card-result {
   color: var(--text);
   font-size: 0.8rem;
-  /* Online verbose blurbs are multi-line morgue text; keep their breaks but
-     clamp runaways. */
+  /* Online verbose blurbs are multi-line morgue text (death line + "..."
+     continuations, hiscores.cc); keep their breaks, show them whole — a
+     line clamp was tried and cut normal blurbs at phone width. */
   white-space: pre-line;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
 }
 .char-card-kind-won { color: var(--ok); }
 .char-card-kind-dead { color: var(--danger); }
@@ -5305,8 +5304,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   font-size: 0.9rem;
 }
 .char-card-has-open .char-card-head { padding-right: 1.1rem; }
-.char-card-compact { padding: 0.45rem 0.55rem; }
-.char-card-compact .char-card-doll { min-width: 48px; min-height: 48px; }
 /* " *WIZ*" / " *EXPLORE*" headline tail: plain dim text like the title, the
    game's own marker rather than a chip. */
 .char-card-badge { font-weight: 400; font-size: 0.8em; color: var(--text-dim); opacity: 0.8; }

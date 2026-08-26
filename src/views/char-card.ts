@@ -24,7 +24,7 @@ export type DumpRef =
   | { kind: 'idbfs'; path: string }  // offline: absolute path in the engine mount
 
 export interface CardResult {
-  kind: 'won' | 'dead' | 'quit' | 'left' | 'saved' | 'other' // 'won' also drives the green accent
+  kind: 'won' | 'dead' | 'quit' | 'left' | 'saved' | 'other' // colours the result line (.char-card-kind-*)
   verb: string     // "Quit the game" | "Slain by a tengu warrior" — offline tmsg
                    // (which already carries "… and 3 runes!" on wins), online reason
   verbose?: string // longer form: offline vmsg; online the blurb's death description
@@ -78,16 +78,14 @@ const DOLL_SCALE = 1.75 // 56px box — between the login strip (64) and inline 
 // repeated the grid tile behind the modal, bigger.)
 const HERO_DOLL_SCALE = 2
 
-// Pure, synchronous DOM builder — no store reads. compact drops the stats,
-// meta, and god-rank lines (crypt-grid form); the full card is the list form;
-// hero (the crypt modal) is the full card with the larger doll.
+// Pure, synchronous DOM builder — no store reads. hero (the crypt modal) is
+// the card with the larger doll.
 export function renderCharCard(
   model: CharCardModel,
-  opts: { onOpen?: (dump?: DumpRef) => void; compact?: boolean; hero?: boolean } = {},
+  opts: { onOpen?: (dump?: DumpRef) => void; hero?: boolean } = {},
 ): HTMLElement {
   const card = document.createElement('article')
-  card.className = `char-card char-card-k-${model.result.kind}`
-  if (opts.compact) card.classList.add('char-card-compact')
+  card.className = 'char-card'
   if (opts.hero) card.classList.add('char-card-hero')
   const dollScale = opts.hero ? HERO_DOLL_SCALE : DOLL_SCALE
 
@@ -121,7 +119,7 @@ export function renderCharCard(
       void paintAvatars(line(col, 'char-card-doll', ''), [recipeDoll], dollScale, 'char-card-doll-img', NO_MARKS)
     }
     if (won) {
-      const orb = renderOrbTrophy(model.doll, opts.compact ? 0.75 : 1)
+      const orb = renderOrbTrophy(model.doll, 1)
       orb.classList.add('char-card-orb')
       col.append(orb)
     }
@@ -145,14 +143,13 @@ export function renderCharCard(
   }
 
   // The end location belongs to the death sentence ("slain by an ogre in
-  // D:7") — but only the short verb can safely carry it: verbose prose may
-  // already narrate the location (online blurbs do), and the result line's
-  // 3-line clamp can swallow a tail appended to wrapped text. When verbose
-  // renders, the place falls back to the identity line instead.
+  // D:7") — but only the short verb can safely carry it: verbose prose
+  // already narrates the location (online blurbs do). When verbose renders,
+  // the place falls back to the identity line instead.
   // Wins/escapes suppress it everywhere — their xlog place is the dungeon
   // exit, noise. Live/other entries keep it on the identity line.
   const r = model.result
-  const resultText = (!opts.compact && r.verbose) || r.verb
+  const resultText = r.verbose || r.verb
   const placeInResult = model.place != null && resultText !== '' && resultText === r.verb
     && (r.kind === 'dead' || r.kind === 'quit')
   const placeInSub = model.place != null && !placeInResult && r.kind !== 'won' && r.kind !== 'left'
@@ -162,7 +159,7 @@ export function renderCharCard(
   if (model.xl != null) sub.push(`XL:${model.xl}`)
   if (model.place && placeInSub) sub.push(model.place)
   // God on the sub line only when there's no rank line to carry it.
-  if (model.god && !(model.godRank && !opts.compact)) sub.push(model.god)
+  if (model.god && !model.godRank) sub.push(model.god)
   // The combo may wrap internally — "Mountain Dwarf Earth Elementalist"
   // can outgrow a narrow line, and its own word breaks read fine. Every
   // other fact (god name, XL, place) moves whole — so no soft slot when
@@ -174,27 +171,24 @@ export function renderCharCard(
     el.classList.add(`char-card-kind-${r.kind}`)
   }
 
-  if (!opts.compact) {
-    if (model.godRank) line(body, 'char-card-god', model.godRank)
-    if (model.stats) body.append(statsRow(model.stats))
+  if (model.godRank) line(body, 'char-card-god', model.godRank)
+  if (model.stats) body.append(statsRow(model.stats))
+
+  const meta: string[] = []
+  if (model.score != null) meta.push(`${model.score.toLocaleString()} pts`)
+  if (model.turns != null) meta.push(`${model.turns.toLocaleString()} turns`)
+  if (model.duration) meta.push(model.duration)
+  if (model.endedAt != null) {
+    const ago = agoLabel(model.endedAt)
+    const date = DATE_FMT.format(model.endedAt)
+    const when = ago || date
+    meta.push(model.dateQualifier ? `${model.dateQualifier} ${when}` : when)
+    if (ago) meta.push(date)
   }
-  if (!opts.compact) {
-    const meta: string[] = []
-    if (model.score != null) meta.push(`${model.score.toLocaleString()} pts`)
-    if (model.turns != null) meta.push(`${model.turns.toLocaleString()} turns`)
-    if (model.duration) meta.push(model.duration)
-    if (model.endedAt != null) {
-      const ago = agoLabel(model.endedAt)
-      const date = DATE_FMT.format(model.endedAt)
-      const when = ago || date
-      meta.push(model.dateQualifier ? `${model.dateQualifier} ${when}` : when)
-      if (ago) meta.push(date)
-    }
-    if (model.origin) meta.push(model.origin)
-    if (model.version) meta.push(model.version)
-    if (meta.length > 0) joinedLine(body, 'char-card-meta', meta)
-  }
-  // The collection, last in both forms — a trophy shelf under the text
+  if (model.origin) meta.push(model.origin)
+  if (model.version) meta.push(model.version)
+  if (meta.length > 0) joinedLine(body, 'char-card-meta', meta)
+  // The collection, last — a trophy shelf under the text
   // rather than a break in it (on-device call). Shown for any run that got a
   // rune, not just wins (a 3-rune death is most players' proudest run).
   // Sprites resolve async (rune-sprites.ts); the recipe is its cross-origin
