@@ -104,6 +104,13 @@ export class MapStore {
   // display.js `inv_mons_msg` — updated only when the key is present, cleared
   // by an explicit '' or a map clear. Rendered by MonsterListView.
   invisMonDesc = ''
+  // Wire `player_on_level` (tileweb.cc:1933): false during level transitions,
+  // when the store may still hold the previous level's cells at the new
+  // player.pos. Gates the tile-mode minibars like the reference's
+  // map_knowledge.player_on_level() (cell_renderer.js draw_minibars call).
+  // Sticky: only a present key changes it; NOT reset by clear() — the
+  // reference's clear_map leaves it alone too.
+  playerOnLevel = true
 
   // Ballistomycetes and tentacles have no_exp=true but are threatening and should display.
   private isDisplayMonster(mon: MonsterInfo): boolean {

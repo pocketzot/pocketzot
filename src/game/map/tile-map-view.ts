@@ -441,8 +441,13 @@ export class TileMapView {
     this.paintCursorIfHere(mx, my, col * ATLAS_CELL, row * ATLAS_CELL)
     // Mini HP/MP bars under the player tile, mirroring cell_renderer.js
     // draw_minibars (called for the player cell at the tail of do_render_cell,
-    // right after render_cursors). Player-cell-only, like the reference.
-    if (mx === this.store.playerPos.x && my === this.store.playerPos.y) {
+    // right after render_cursors). Player-cell-only, like the reference, and
+    // behind its two guards: do_render_cell returns before the bars when the
+    // cell has no data (`player` precedes the level's first `map`, and a
+    // --more-- can hold that gap on screen — bars floated alone on black),
+    // and player_on_level covers stale previous-level cells at the new pos.
+    if (mx === this.store.playerPos.x && my === this.store.playerPos.y
+        && this.store.playerOnLevel && this.store.get(mx, my)) {
       this.paintMinibars(col * ATLAS_CELL, row * ATLAS_CELL)
     }
   }

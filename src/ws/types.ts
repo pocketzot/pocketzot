@@ -155,7 +155,9 @@ export type ServerMsg =
   // invis_mon_desc: names of sensed invisible monsters whose position is
   // unknown (trunk invisibility rework) — sticky until the next value arrives;
   // '' clears. Shown as the monster list's first row.
-  | { msg: 'map'; cells: CellUpdate[]; clear?: boolean; vgrdc?: { x: number; y: number }; invis_mon_desc?: string }
+  // player_on_level: tileweb.cc _send_map writes `you.on_current_level` on
+  // full sends and on change; false while a level is being left/built.
+  | { msg: 'map'; cells: CellUpdate[]; clear?: boolean; vgrdc?: { x: number; y: number }; invis_mon_desc?: string; player_on_level?: boolean }
   | { msg: 'player' } & PlayerMsg
   // Game-option snapshot from the binary (TilesFramework::send_options),
   // sent at process start and again whenever options change (rc reload).

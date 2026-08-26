@@ -1492,6 +1492,7 @@ export function buildGameView(
         // Sticky like the reference's inv_mons_msg: only a present key
         // changes it ('' clears); store.clear() above also resets it.
         if (msg.invis_mon_desc !== undefined) store.invisMonDesc = msg.invis_mon_desc
+        if (msg.player_on_level !== undefined) store.playerOnLevel = msg.player_on_level
         const dirty = store.merge(msg.cells ?? [])
         // Render now, synchronously (reference display.js order, except we
         // merge before panning so the blit's exposed strips paint this turn's
