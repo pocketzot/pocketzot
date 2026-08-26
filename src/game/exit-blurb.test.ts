@@ -32,6 +32,23 @@ describe('parseExitBlurb', () => {
     expect(parseExitBlurb('1 A the B (level 1) *EXPLORE*')?.mode).toBe('explore')
   })
 
+  it('keeps the dated runes line of a win — it is not a place line', () => {
+    // Orb escape more than a day after creation: the date rides on the
+    // "... and N runes" line (hiscores.cc death_description). PLAIN_PLACE
+    // must not eat it — the rune count is the card's verbose result.
+    const b = parseExitBlurb([
+      '1811892 Oblivion the Ruinous (level 26, 141/141 HPs)',
+      '             Began as a Deep Elf Conjurer on Aug 17, 2026.',
+      '             Was an Elder of Yredelemnul.',
+      '             Escaped with the Orb',
+      '             ... and 3 runes on Aug 25, 2026!',
+      '             ',
+      '             The game lasted 15:59:03 (60309 turns).',
+    ].join('\n'))
+    expect(b?.rest).toBe('Escaped with the Orb\n... and 3 runes on Aug 25, 2026!')
+    expect(b?.godRank).toBe('Was an Elder of Yredelemnul.')
+  })
+
   it('reads a multi-day duration (make_time_string day prefix) without leaking the line', () => {
     const b = parseExitBlurb('5 A the B (level 27)\nEscaped with the Orb\nThe game lasted 2 days 03:29:45 (186006 turns).')
     expect(b?.duration).toBe('2 days 03:29:45')
