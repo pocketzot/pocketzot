@@ -9,6 +9,12 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-08-28
+
+- Control buttons now show tap feedback on Android as intended, instead of
+  only on iOS.
+- Restyled the menu row cursor.
+
 ## 2026-08-26
 
 - Message log adjustments: reduced line height, +1 default line into the
