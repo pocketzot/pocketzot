@@ -3759,17 +3759,19 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
    as the same bordered-button family as the Esc/Enter actions flanking
    them, so the active tab read as "a pressed button" and nothing marked
    @ > ? as a mutually exclusive group; the track is what separates
-   selectors from actions in the row. The track is recessed a half-step
-   below the buttons' --tc-fill so the selected lozenge sits IN a groove
-   rather than ON a wide button — a half-step because the full step (--bg)
-   IS the strip's own ground, and the track dissolved into it. No dividers
-   between segments: iOS hides them next to the selection anyway, and at
-   this size they'd be noise. */
+   selectors from actions in the row. The track is the same --tc-fill as
+   the buttons: a recessed half-step (toward --bg) was tried and read as a
+   hole in the row — --surface is only ~5 levels above --bg, so the step
+   down was invisible; a raised half-step (toward --surface2) reads as a
+   lighter slab that pulls the eye off the row. Flush, the track is just a
+   wider member of the button family and the amber lozenge alone carries
+   the selection. No dividers between segments: iOS hides them next to
+   the selection anyway, and at this size they'd be noise. */
 .tc-tabs {
   display: flex;
   flex-direction: row;
   flex: 1;
-  background: color-mix(in srgb, var(--tc-fill) 50%, var(--bg));
+  background: var(--tc-fill);
   border: 1px solid var(--tc-border);
   border-radius: 3px;
   /* 1px inset for the lozenge: iOS insets its segment 2pt in a 32pt track
