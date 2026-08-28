@@ -2785,24 +2785,21 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 
 .overlay-item .tile-stack {
   margin-right: -0.2rem;
-  /* Overhang into the row's padding (same value, negative): the text sets the
-     row height, the tile never does — otherwise 32px + padding beats the
-     34px min-height below. */
-  margin-block: -0.35rem;
+  /* Centre the 32px tile on the FIRST text line, and let its overhang be
+     absorbed symmetrically so the text alone sets the row height. */
+  margin-block: calc((1lh - 32px) / 2);
 }
-/* Reference tile row = 34px li (32px tile + 1px padding + 1px border) with
-   the tile vertical-align:middle. Same here, carried over to wrapped rows:
-   the tile centres on the whole block, not the first line (pinning it to
-   line 1 needs 1lh margin arithmetic and pads wrapped rows to the 34px
-   single-line pitch — rejected). */
+/* Reference tile row = 34px li (32px tile + 1px padding + 1px border), whose
+   rows never wrap. Ours wrap to 2–3 lines at phone width, so the tile pins to
+   line 1 (the hotkey + item name it labels) rather than centring on the
+   block, keeping the tile column at one pitch across mixed-wrap lists. The
+   34px single-line height comes from padding, not min-height (a min-height
+   would also override the flex min-content floor and let an overflowing
+   .overlay-list squash wrapped rows), so a one-line row's text is centred by
+   construction and wrapped rows grow downward from .overlay-item's own
+   flex-start alignment. */
 .overlay-item:has(> .tile-stack) {
-  min-height: 34px;
-  align-items: center;
-  /* An explicit min-height replaces the flex automatic (min-content) minimum,
-     so once .overlay-list overflows its column would shrink wrapped rows back
-     to 34px and spill the label out of the button (measured 8.5px each side
-     for a 3-line row). Never let these rows shrink. */
-  flex-shrink: 0;
+  padding-block: calc((34px - 1lh) / 2);
 }
 
 .overlay-list {
