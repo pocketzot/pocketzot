@@ -10,6 +10,12 @@
   --bg:        #0a0908;
   --surface:   #14110f;
   --surface2:  #1f1b18;
+  /* Pressed-state fill for every tappable control, dark-UI style: press
+     LIGHTENS (12% white over --surface, Material's pressed state-layer
+     opacity; iOS/Gboard dark keyboards make a similar-size jump). surface2
+     was tried as the press fill and is only ~1.1:1 against --surface —
+     invisible on an OLED phone; don't reuse a resting surface token here. */
+  --press:     #302e2c;
   --accent:    #f59e0b;
   --text:      #e7e5e4;
   --text-dim:  #a8a29e;
@@ -1944,7 +1950,12 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 
 .numpad-btn:active,
-.numpad-btn.pressed {
+.numpad-btn.pressed { background: var(--press); color: var(--accent); }
+/* The accent-filled primary can't lighten to --press; brighten it instead. */
+.numpad-btn.numpad-primary:active,
+.numpad-btn.numpad-primary.pressed {
+  background: var(--accent);
+  color: var(--bg);
   filter: brightness(1.25);
 }
 
@@ -3520,7 +3531,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   text-align: center;
 }
 .menu-ctrl-btn:active,
-.menu-ctrl-btn.pressed { background: var(--surface); color: var(--accent); }
+.menu-ctrl-btn.pressed { background: var(--press); color: var(--accent); }
 .menu-ctrl-glyph { font-size: 1.25rem; line-height: 1; }
 
 .skill-letter-row {
@@ -3580,7 +3591,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
      the inverse of the app-wide darken-on-press — so tap feedback stays
      crisp against the dim resting state. */
   --tc-fill: var(--surface);
-  --tc-press: var(--surface2);
+  --tc-press: var(--press);
   --tc-label: var(--text-dim);
   --tc-label-dim: #78716c;  /* one stone step below --text-dim, for the wait btn */
   --tc-border: rgba(245, 158, 11, 0.07);
@@ -3767,7 +3778,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 
 .tc-tab:active,
-.tc-tab.pressed { background: var(--tc-press); }
+.tc-tab.pressed { background: var(--tc-press); color: var(--accent); }
 
 /* Content area: tab-specific buttons */
 .tc-content {
@@ -3984,7 +3995,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .kbd-row > .kbd-key:last-child::after { right: -2rem; }
 
 .kbd-key:active,
-.kbd-key.pressed { background: var(--surface); color: var(--accent); }
+.kbd-key.pressed { background: var(--press); color: var(--accent); }
 
 .kbd-key.wide {
   width: auto;
