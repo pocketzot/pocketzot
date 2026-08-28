@@ -36,6 +36,20 @@ type DpadDef =
 // `repeat` opts a control into hold-to-repeat on the touch path.
 type BindTap = (btn: HTMLElement, fire: () => void, opts?: { repeat?: boolean }) => void
 
+// Press feedback for controls that fire on a preventDefault()ed touchstart.
+// CSS :active alone is not enough there: WebKit sets :active from the touch
+// itself, but Blink sets it from its gesture recognizer, which a cancelled
+// touchstart shuts down — so Android showed no highlight at all (reported
+// 2026-08-28) while iOS did. Toggle a `pressed` class off the same events
+// instead; the selectors pair it with :active for the mouse path.
+export const PRESSED_CLASS = 'pressed'
+export function bindPressedClass(btn: HTMLElement): void {
+  btn.addEventListener('touchstart', () => btn.classList.add(PRESSED_CLASS), { passive: true })
+  const release = (): void => btn.classList.remove(PRESSED_CLASS)
+  btn.addEventListener('touchend', release)
+  btn.addEventListener('touchcancel', release)
+}
+
 // Hold-to-repeat pacing, roughly matching OS keyboard auto-repeat defaults.
 export const REPEAT_DELAY_MS = 350
 export const REPEAT_INTERVAL_MS = 85
@@ -466,6 +480,7 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
   window.addEventListener('pagehide', stopAllRepeats)
 
   const bindTap: BindTap = (btn, fire, opts) => {
+    bindPressedClass(btn)
     if (opts?.repeat) {
       // Hold-to-repeat, touch path only: touch events stay bound to their
       // start element, so this button's own touchend/touchcancel always

@@ -141,6 +141,20 @@ describe('phantom-engagement guard', () => {
     expect(sent).toHaveLength(0)
   })
 
+  // Press feedback rides on our own `pressed` class, not :active — Blink
+  // drops :active for a preventDefault()ed touchstart (see bindPressedClass).
+  it('marks the button pressed for the duration of the touch', () => {
+    const { tc } = setup()
+    const btn = dpadUp(tc.element)
+    btn.dispatchEvent(touchEvent('touchstart', [{ clientX: 0, clientY: 0 }]))
+    expect(btn.classList.contains('pressed')).toBe(true)
+    btn.dispatchEvent(touchEvent('touchend'))
+    expect(btn.classList.contains('pressed')).toBe(false)
+    btn.dispatchEvent(touchEvent('touchstart', [{ clientX: 0, clientY: 0 }]))
+    btn.dispatchEvent(touchEvent('touchcancel'))
+    expect(btn.classList.contains('pressed')).toBe(false)
+  })
+
   it('still engages on a mouse click with no preceding touch', () => {
     const { tc, sent } = setup()
     dpadUp(tc.element).click()

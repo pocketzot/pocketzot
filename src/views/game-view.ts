@@ -11,7 +11,7 @@ import { MonsterPanelView } from '../game/hud/monster-panel'
 import { MinimapView } from '../game/map/minimap-view'
 import { fgHaloDngnName } from '../game/hud/monster-style'
 import { InventoryStore } from '../game/inventory-store'
-import { buildTouchControls } from '../game/input/touch'
+import { buildTouchControls, bindPressedClass } from '../game/input/touch'
 import type { TouchControls } from '../game/input/touch'
 import { openSettings } from './settings-view'
 import { isOverlayOpen, closeTopOverlay } from './overlay'
@@ -2653,6 +2653,7 @@ export function buildGameView(
         e.preventDefault()
         fire()
       }, { passive: false })
+      bindPressedClass(btn)
       row.appendChild(btn)
     }
   }
@@ -2816,6 +2817,7 @@ export function buildGameView(
       e.preventDefault()
       fire()
     }, { passive: false })
+    bindPressedClass(btn)
     return btn
   }
 
@@ -4093,6 +4095,7 @@ export function buildGameView(
         e.preventDefault()
         b.onTap()
       }, { passive: false })
+      bindPressedClass(btn)
       grid.appendChild(btn)
     }
     numpadInput.appendChild(grid)

@@ -1943,7 +1943,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   font-size: 1.35rem;
 }
 
-.numpad-btn:active {
+.numpad-btn:active,
+.numpad-btn.pressed {
   filter: brightness(1.25);
 }
 
@@ -3521,7 +3522,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   padding: 0.3rem 0.5rem;
   text-align: center;
 }
-.menu-ctrl-btn:active { background: var(--surface); color: var(--accent); }
+.menu-ctrl-btn:active,
+.menu-ctrl-btn.pressed { background: var(--surface); color: var(--accent); }
 .menu-ctrl-glyph { font-size: 1.25rem; line-height: 1; }
 
 .skill-letter-row {
@@ -3687,7 +3689,10 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   touch-action: manipulation;
 }
 
-.tc-dpad-btn:active { background: var(--tc-press); color: var(--accent); }
+/* `.pressed` alongside :active on every touch control: see bindPressedClass
+   in touch.ts (Blink drops :active on a preventDefault()ed touchstart). */
+.tc-dpad-btn:active,
+.tc-dpad-btn.pressed { background: var(--tc-press); color: var(--accent); }
 .tc-dpad-btn.wait { color: var(--tc-label-dim); }
 
 /* Right panel */
@@ -3728,7 +3733,9 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 
 .tc-esc:active,
-.tc-enter:active { background: var(--tc-press); color: var(--accent); }
+.tc-esc.pressed,
+.tc-enter:active,
+.tc-enter.pressed { background: var(--tc-press); color: var(--accent); }
 
 /* Tab strip */
 .tc-tabs {
@@ -3762,7 +3769,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   background: rgba(245, 158, 11, 0.18);
 }
 
-.tc-tab:active { background: var(--tc-press); }
+.tc-tab:active,
+.tc-tab.pressed { background: var(--tc-press); }
 
 /* Content area: tab-specific buttons */
 .tc-content {
@@ -3797,7 +3805,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   touch-action: manipulation;
 }
 
-.tc-btn:active { background: var(--tc-press); color: var(--accent); }
+.tc-btn:active,
+.tc-btn.pressed { background: var(--tc-press); color: var(--accent); }
 
 .tc-btn-spacer { background: transparent; border-color: transparent; pointer-events: none; }
 
@@ -3885,8 +3894,11 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 
 .tc-shift:active,
+.tc-shift.pressed,
 .tc-ctrl:active,
-.tc-kbd:active { background: var(--tc-press); color: var(--accent); }
+.tc-ctrl.pressed,
+.tc-kbd:active,
+.tc-kbd.pressed { background: var(--tc-press); color: var(--accent); }
 
 /* Virtual QWERTY keyboard overlay */
 #kbd-overlay {
@@ -3974,7 +3986,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .kbd-row > .kbd-key:first-child::after { left: -2rem; }
 .kbd-row > .kbd-key:last-child::after { right: -2rem; }
 
-.kbd-key:active { background: var(--surface); color: var(--accent); }
+.kbd-key:active,
+.kbd-key.pressed { background: var(--surface); color: var(--accent); }
 
 .kbd-key.wide {
   width: auto;
