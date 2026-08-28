@@ -3498,24 +3498,25 @@ export function buildGameView(
         // reference client (menu.js set_item_contents): the hotkey letter and
         // the " - "/" + " selection marker are part of item.text — DCSS bakes
         // them in for letter-selectable rows — so we don't destructure them
-        // into separate key/separator chips. The base colour comes from
-        // item.colour (like the reference's fg<col> class); inline markup in
-        // the text overrides per span. The label wraps at our display width.
-        // The hotkey still drives clicks below.
-        const itemColor = item.colour != null ? uiColor(item.colour) : undefined
+        // into separate key/separator chips. The base colour is the
+        // reference's own mechanism: an `fg<col>` class on the row (menu.js
+        // set_item_contents), never an inline style — the cursor rule
+        // `.overlay-item.item-hovered` must outrank it to turn the row white,
+        // and an inline colour would beat any stylesheet rule. Inline markup
+        // in the text still overrides per span. The label wraps at our
+        // display width. The hotkey still drives clicks below.
+        const itemColor = item.colour != null ? (item.colour & 0xf) : undefined
         // Detect the DCSS "<key> - " prefix without stripping it (rendering
         // stays verbatim). Two shapes: a plain hotkey ("a - ...", shop
         // "<col>a - </col>...") and the gods-style colour-wrapped hotkey
-        // ("<yellow>A</yellow> - ..."). Two things key off the result:
-        //   • the " + " marker drives the selected-row highlight (multiselect
-        //     menus — shop purchase, known-items autopickup);
-        //   • a prefix means wrapped continuation lines should hang-indent 4ch
-        //     (the fixed "<key> - " width) so they sit under the item title.
+        // ("<yellow>A</yellow> - ..."). A prefix means wrapped continuation
+        // lines should hang-indent 4ch (the fixed "<key> - " width) so they
+        // sit under the item title. The " + " multiselect marker gets no
+        // styling of its own — the text carries it, as in the reference.
         // Prefixless rows (the unrecognised-items list — bare " staff of air"
         // / " scroll of fog (uncommon)") start at column 0 and must NOT indent.
         const prefix = String(item.text ?? '')
           .match(/^\s*(?:<[a-zA-Z]+>.<\/[a-zA-Z]+>|(?:<[^>]+>)*.)\s([-+# $])\s/)
-        const selected = prefix?.[1] === '+'
         const el = makeItemButton(dcssToHtml(String(item.text ?? '')), () => {
           // Shop shift-tap: shopping list uses the uppercase letter as a direct
           // keybind (shopping.cc), separate from the arrows-select activate-on-
@@ -3555,7 +3556,6 @@ export function buildGameView(
           el.insertBefore(renderTiles(loader, item.tiles), el.firstChild)
         }
         el.dataset.menuIdx = String(i)
-        if (selected) el.classList.add('item-selected')
         if (prefix) el.classList.add('item-hang')
         if (i === hoveredMenuIdx) el.classList.add('item-hovered')
         listEl.appendChild(el)
@@ -3961,11 +3961,11 @@ export function buildGameView(
     })
   }
 
-  function makeItemButton(labelHtml: string, onClick: () => void, color?: string): HTMLButtonElement {
+  function makeItemButton(labelHtml: string, onClick: () => void, colour?: number): HTMLButtonElement {
     const el = document.createElement('button')
     el.className = 'overlay-item'
-    const labelStyle = color ? ` style="color:${color}"` : ''
-    el.innerHTML = `<span class="overlay-label"${labelStyle}>${labelHtml}</span>`
+    if (colour != null) el.classList.add(`fg${colour}`)
+    el.innerHTML = `<span class="overlay-label">${labelHtml}</span>`
     el.addEventListener('click', () => {
       onClick()
       focusView()

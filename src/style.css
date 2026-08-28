@@ -2784,13 +2784,24 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 
 .overlay-item .tile-stack {
   margin-right: -0.2rem;
-  /* Centre the 32px tile on the FIRST text line (not the whole row): the row
-     is align-items:flex-start, so pull the tile up by half its overhang vs one
-     line-height. Matches the reference client's vertical-align:middle tile on
-     its (non-wrapping) rows, but stays correct when our rows wrap to 2+ lines —
-     the icon sits next to the title/first line instead of floating at the
-     vertical middle of the block. */
-  margin-top: calc((1lh - 32px) / 2);
+  /* Overhang into the row's padding (same value, negative): the text sets the
+     row height, the tile never does — otherwise 32px + padding beats the
+     34px min-height below. */
+  margin-block: -0.35rem;
+}
+/* Reference tile row = 34px li (32px tile + 1px padding + 1px border) with
+   the tile vertical-align:middle. Same here, carried over to wrapped rows:
+   the tile centres on the whole block, not the first line (pinning it to
+   line 1 needs 1lh margin arithmetic and pads wrapped rows to the 34px
+   single-line pitch — rejected). */
+.overlay-item:has(> .tile-stack) {
+  min-height: 34px;
+  align-items: center;
+  /* An explicit min-height replaces the flex automatic (min-content) minimum,
+     so once .overlay-list overflows its column would shrink wrapped rows back
+     to 34px and spill the label out of the button (measured 8.5px each side
+     for a 3-line row). Never let these rows shrink. */
+  flex-shrink: 0;
 }
 
 .overlay-list {
@@ -2845,12 +2856,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border: 1px solid #000;
   outline: 2px solid #7d623c;
 }
-/* Rows here are short and never wrap, so centre the ✓/✗ tile and the text
-   in the row instead of the wrapping-row treatment (tile pulled up onto the
-   first text line), which pokes the tile out of the hover-highlight bar. */
-#ui-overlay.prompt-menu .overlay-item { align-items: center; }
-#ui-overlay.prompt-menu .overlay-item .tile-stack { margin-top: 0; }
-
 .overlay-item {
   display: flex;
   align-items: flex-start;
@@ -2868,11 +2873,13 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   touch-action: manipulation;
 }
 
-.overlay-item.item-selected { background: var(--surface); }
+/* The engine's menu cursor (last_hovered), shown only when game-view reveals
+   it (see adoptMenu); values are the reference's `.menu_contents li.hovered`
+   (game_data/static/style.css). Multiselect " + " rows get no styling — the
+   marker in the text carries it, as in the reference. */
 .overlay-item.item-hovered {
-  /*outline: 1px solid var(--accent);
-  outline-offset: -1px;*/
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;  /* outranks the row's fgN class (0,2,0 vs 0,1,0), as upstream */
 }
 
 /* Rows render item.text verbatim (hotkey + selection marker are inline in
@@ -2880,7 +2887,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
    Note we don't follow the reference convention of right-aligned item prices
    within a 4-char column, followed by literal spaces before item names. To
    match that, append `white-space: pre-wrap;`. Tested and rejected. */
-.overlay-label { color: var(--text); min-width: 0; }
+/* No colour here — it would beat the row's fgN / hover colour. */
+.overlay-label { min-width: 0; }
 
 /* Rows carrying a fixed-width "<key> - " prefix (4 monospace cells) get a 4ch
    hanging indent so wrapped continuation lines sit under the item title:
