@@ -13,6 +13,7 @@ Notable changes to PocketZot, newest first.
 
 - Control buttons now show tap feedback on Android as intended, instead of
   only on iOS.
+- Restyled the control tabs selector.
 - Restyled the menu row cursor.
 
 ## 2026-08-26
