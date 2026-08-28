@@ -2877,7 +2877,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   padding: 0.35rem 0.25rem;
   text-align: left;
   cursor: pointer;
-  border-radius: 3px;
   width: 100%;
   touch-action: manipulation;
 }
