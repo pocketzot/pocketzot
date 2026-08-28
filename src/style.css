@@ -3559,6 +3559,15 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   color: var(--bg);
   font-weight: bold;
 }
+/* Accent-filled like .numpad-primary: can't lighten to --press, brighten
+   instead. Same (0,2,0) specificity as .menu-ctrl-btn.pressed, later in
+   source, so without this the Accept button showed no press at all. */
+.menu-ctrl-btn[data-dynamic="accept"]:active,
+.menu-ctrl-btn[data-dynamic="accept"].pressed {
+  background: var(--accent);
+  color: var(--bg);
+  filter: brightness(1.25);
+}
 
 .menu-ctrl-btn[data-shift="true"].active {
   background: var(--accent);
@@ -3587,9 +3596,9 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   --tc-dpad: var(--pz-dpad, 3.5rem);
   /* Resting palette one step darker than the app-wide tokens: at night the
      map is sparse dim glyphs on near-black, so --text/--surface2 buttons
-     outshine the play area. Presses brighten (--tc-press + accent label) —
-     the inverse of the app-wide darken-on-press — so tap feedback stays
-     crisp against the dim resting state. */
+     outshine the play area. Presses brighten to the app-wide --press fill
+     (+ accent label), so tap feedback stays crisp against the dim resting
+     state. */
   --tc-fill: var(--surface);
   --tc-press: var(--press);
   --tc-label: var(--text-dim);
@@ -3771,7 +3780,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 
 .tc-tab {
-  position: relative;
   flex: 1;
   background: transparent;
   border: 0;
@@ -3788,20 +3796,11 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   padding: 0 0.1rem;
 }
 
-/* Hit area reaches 12px above the segment: 3px of that is the track's own
-   border+padding and the strip's top padding, the rest lands in the HUD
-   status row's bottom edge, which has no tap handlers. Upward only: the
-   macro grid starts 2px below, so any downward reach would shadow its top
-   row. Makes the ~16px-tall segments a ~28px target. Portrait only — the
-   landscape block zeroes it, where the spell rail sits 4px above. */
-.tc-tab::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -12px;
-  bottom: 0;
-}
+/* No hit-area extension above the tabs: a ::after reaching upward was
+   tried and leaks out of the strip into whatever the layout puts above it
+   — the HUD in normal play, but the examine map in X mode, the chat input
+   row with the sheet open, the spell rail in landscape — each needing its
+   own gate. The row was usable as-is; keep hit-testing inside the strip. */
 
 .tc-tab.active {
   color: var(--accent);
@@ -4424,11 +4423,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
     grid-area: spells;
     padding: 0.25rem 0.0rem;
   }
-
-  /* The rail's buttons end 4px above the panel header, and the tabs'
-     portrait upward hit extension (.tc-tab::after, DOM-later so it wins
-     hit-testing) would shadow their bottom edge — no reach here. */
-  .tc-tab::after { top: 0; }
 
   /* QWERTY overlay: the base key height scales with viewport WIDTH
      (11vw, clamped) — sensible in portrait where width is the narrow
