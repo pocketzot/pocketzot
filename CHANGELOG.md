@@ -15,6 +15,7 @@ Notable changes to PocketZot, newest first.
   aiming or examining, tap a tile to move the cursor there (drag to sweep
   it); press and hold a tile to describe what's there. Double-tap zoom is
   unchanged in normal play; while aiming, double-tap your own character.
+- On the level map (`X`), tap a location to send the cursor there.
 
 ## 2026-08-28
 

@@ -31,23 +31,47 @@ function setup(cellAt?: (x: number, y: number) => { x: number; y: number } | nul
   document.body.appendChild(wrap)
   const hovers: { x: number; y: number }[] = []
   const presses: { x: number; y: number }[] = []
+  const taps: { x: number; y: number }[] = []
   attachMapGestures(wrap, {
     // Default fake geometry: 10px cells, dungeon origin at the screen origin.
     hitTester: () => cellAt ?? ((x, y) => ({ x: Math.floor(x / 10), y: Math.floor(y / 10) })),
     onHover: (c) => hovers.push(c),
     onLongPress: (c) => presses.push(c),
+    onTap: (c) => taps.push(c),
   })
-  return { wrap, grid, hovers, presses }
+  return { wrap, grid, hovers, presses, taps }
 }
 
 describe('attachMapGestures', () => {
-  it('a tap hovers the touched cell once', () => {
-    const { grid, hovers, presses } = setup()
+  it('a tap hovers the touched cell once, then reports the tap on lift', () => {
+    const { grid, hovers, presses, taps } = setup()
     fire(grid, 'pointerdown', 25, 35)
     fire(grid, 'pointerup', 25, 35)
     vi.advanceTimersByTime(LONG_PRESS_MS + 50)
     expect(hovers).toEqual([{ x: 2, y: 3 }])
+    expect(taps).toEqual([{ x: 2, y: 3 }])
     expect(presses).toEqual([])
+  })
+
+  it('a tap reports the touch-down cell even if the lift drifted within slop', () => {
+    const { grid, taps } = setup()
+    fire(grid, 'pointerdown', 25, 35)
+    fire(grid, 'pointermove', 25 + SLOP_PX - 2, 35)
+    fire(grid, 'pointerup', 25 + SLOP_PX - 2, 35)
+    expect(taps).toEqual([{ x: 2, y: 3 }])
+  })
+
+  it('neither a drag nor a completed hold counts as a tap', () => {
+    const { grid, taps, presses } = setup()
+    fire(grid, 'pointerdown', 5, 5)
+    fire(grid, 'pointermove', 5 + SLOP_PX + 5, 5)
+    fire(grid, 'pointerup', 5 + SLOP_PX + 5, 5)
+    expect(taps).toEqual([])
+    fire(grid, 'pointerdown', 25, 35)
+    vi.advanceTimersByTime(LONG_PRESS_MS)
+    fire(grid, 'pointerup', 25, 35)
+    expect(presses).toEqual([{ x: 2, y: 3 }])
+    expect(taps).toEqual([])
   })
 
   it('a drag streams hover per cell entered, deduped', () => {

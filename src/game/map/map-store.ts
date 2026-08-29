@@ -323,10 +323,13 @@ export class MapStore {
   }
 
   // Bounding box of minimap-worthy cells (mf > 0, so MF_UNSEEN and mf-less
-  // cells are excluded), or null before any are known. Computed on demand in
-  // one pass: only the minimap reads it, and it already re-scans the whole
-  // store to draw — so keeping merge (the hot path) free of per-cell bbox
-  // bookkeeping is the better trade.
+  // cells are excluded), or null before any are known. Matches the engine's
+  // known_map_bounds() (map-knowledge.cc), which the level map clamps its
+  // cursor to — map-jump.ts relies on that equality (verified live: the
+  // store's edge and the engine's clamp agreed). Computed on demand in one
+  // pass: readers are the minimap (already re-scanning the store to draw)
+  // and a per-tap jump, so keeping merge (the hot path) free of per-cell
+  // bbox bookkeeping is the better trade.
   mfBounds(): { left: number; top: number; right: number; bottom: number } | null {
     let box: { left: number; top: number; right: number; bottom: number } | null = null
     this.forEachCell((x, y, cell) => {

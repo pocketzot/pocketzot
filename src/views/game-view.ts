@@ -18,6 +18,7 @@ import { isOverlayOpen, closeTopOverlay } from './overlay'
 import { handleKeydown, CK_UP, CK_DOWN, CK_PGUP, CK_PGDN, CK_HOME, CK_END } from '../game/input/keyboard'
 import { createShiftToggle } from '../game/input/shift-state'
 import { attachMapGestures, canDescribe, canHover } from '../game/input/map-tap'
+import { MapJumper } from '../game/input/map-jump'
 import { uiColor, escHtml, dcssToHtml } from '../game/dcss-colors'
 import { htmlToRuns, exportScreenPng, screenSlug, type DcssRun } from './screen-export'
 import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
@@ -498,6 +499,13 @@ export function buildGameView(
   // Last cursor loc from the server. Tracked here so an ASCII↔tiles swap
   // can re-apply it to the new view (each view keeps its own cursor state).
   let cursorLoc: { x: number; y: number } | null = null
+  // X-map tap-to-jump: walks the level-map cursor with synthesized vi-keys
+  // in one atomic `input` message; learns the user's jump stride from its
+  // first JUMP key (see map-jump.ts). Fed every id-2 cursor loc below.
+  const mapJumper = new MapJumper({
+    send: (keys) => conn.send({ msg: 'input', text: keys }),
+    bounds: () => store.mfBounds(),
+  })
   // Last `input_mode` from the server. MOUSE_MODE_YESNO (8) is sent while
   // a (y/N) prompt is active inside an open menu (e.g. shop "Purchase
   // items for X gold?"); buildMenuControls swaps the row when this is set.
@@ -700,10 +708,13 @@ export function buildGameView(
   // single tap is wire-silent there (see the hover gate below), so nothing
   // is lost by letting it double as the zoom's first half. While a
   // direction chooser is up (canHover) the first tap would re-aim, so the
-  // double-tap is restricted to the PLAYER'S TILE: the one spot where hover
-  // is consequence-free (the engine skips the (0,0) direction, so it only
-  // aims at yourself). Bypassed while X-mode is active (font scale is
-  // overridden there).
+  // double-tap is restricted to the PLAYER'S TILE — and the hover handler
+  // below never sends that cell while aiming. It has to be suppressed, not
+  // relied on: the engine does NOT skip it (CMD_TARGET_MOUSE_MOVE →
+  // tiles_update_target → set_target(gc), directn.cc, no self check), so a
+  // sent hover would drop the auto-selected target onto yourself and the
+  // next confirm would be refused/prompted (move_is_ok's looking_at_you).
+  // Bypassed while X-mode is active (font scale is overridden there).
   // Bound to mapWrap (not mapView.element) so it survives the in-place swap
   // between MapView and TileMapView.
   let lastTap = { t: 0, x: 0, y: 0 }
@@ -744,11 +755,23 @@ export function buildGameView(
     hitTester: () => mapView.hitTester(),
     onHover: (cell) => {
       if (spectating || !canHover(currentInputMode)) return
+      // Own tile: reserved for the double-tap zoom above — see its comment
+      // for why the engine can't be trusted to ignore it. Self-targeting
+      // stays on the keyboard/d-pad.
+      if (cell.x === store.playerPos.x && cell.y === store.playerPos.y) return
       conn.send({ msg: 'target_cursor', x: cell.x, y: cell.y })
     },
     onLongPress: (cell) => {
       if (spectating || !canDescribe(currentInputMode, inXMode)) return
       conn.send({ msg: 'click_cell', x: cell.x, y: cell.y, button: 3 })
+    },
+    // X level map only: the engine ignores hover there, so a tap becomes a
+    // synthesized cursor walk (map-jump.ts). Local tiles also travels when
+    // the cursor's own cell is clicked (CMD_MAP_GOTO_TARGET) — deliberately
+    // not mirrored: no tap on the map ever acts.
+    onTap: (cell) => {
+      if (spectating || !inXMode || !cursorLoc) return
+      mapJumper.tap(cursorLoc, cell)
     },
   })
 
@@ -2100,6 +2123,7 @@ export function buildGameView(
         // cursor-clear (e.g. exit-for-text-input) must not strand this one.
         touchControls.setCursorMode(cursorId !== 2 && !!msg.loc)
         if (cursorId === 2) {
+          if (msg.loc) mapJumper.onCursor(msg.loc)
           if (msg.loc && !inXMode) enterXMode()
           else if (!msg.loc && inXMode) exitXMode()
         } else if (!msg.loc && inXMode) {
@@ -2271,6 +2295,7 @@ export function buildGameView(
 
   function exitXMode(): void {
     inXMode = false
+    mapJumper.reset()  // an unanswered stride probe can't complete now
     view.classList.remove('x-mode')
     syncMoreDisplay()  // a pending --more-- returns to the inline log row
     xdescReset()

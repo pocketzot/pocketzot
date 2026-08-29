@@ -42,6 +42,12 @@ export interface MapGestureOpts {
   hitTester(): CellHitTester | null
   onHover(cell: { x: number; y: number }): void
   onLongPress(cell: { x: number; y: number }): void
+  // A lift while the press is still "still" — under SLOP_PX and before the
+  // long-press fires. Optional: hover already covers the tap's only wire
+  // meaning in TARGET modes, so this exists for the X level map, where the
+  // engine ignores hover and a tap becomes a synthesized cursor jump
+  // (map-jump.ts). Fires at the touch-down cell, not the lift point.
+  onTap?(cell: { x: number; y: number }): void
 }
 
 // Binds to a stable ancestor of #map-grid (mapWrap in game-view, like the
@@ -109,6 +115,13 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
     hoverAt(e.clientX, e.clientY)
   })
 
-  el.addEventListener('pointerup', cancel)
+  el.addEventListener('pointerup', (e) => {
+    // A live timer at lift means neither the drag conversion nor the hold
+    // happened: this was a tap.
+    const tapped = timer != null && (e.pointerId ?? 0) === activePointer
+    const cell = tapped ? hit?.(startX, startY) : null
+    cancel()
+    if (cell) opts.onTap?.(cell)
+  })
   el.addEventListener('pointercancel', cancel)
 }
