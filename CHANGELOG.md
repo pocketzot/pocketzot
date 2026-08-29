@@ -11,11 +11,9 @@ Notable changes to PocketZot, newest first.
 
 ## 2026-08-29
 
-- The map now responds to touch like the desktop client's mouse: while
-  aiming or examining, tap a tile to move the cursor there (drag to sweep
-  it); press and hold a tile to describe what's there. Double-tap zoom is
-  unchanged in normal play; while aiming, double-tap your own character.
-- On the level map (`X`), tap a location to send the cursor there.
+- New map touch interactions: while targeting or examining (`x`), tap or
+  drag to move the cursor. In `X` mode, tap a location to send the cursor
+  there. Press and hold any map cell to describe what's there.
 
 ## 2026-08-28
 
