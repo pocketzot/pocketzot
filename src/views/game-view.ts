@@ -500,8 +500,8 @@ export function buildGameView(
   // can re-apply it to the new view (each view keeps its own cursor state).
   let cursorLoc: { x: number; y: number } | null = null
   // X-map tap-to-jump: walks the level-map cursor with synthesized vi-keys
-  // in one atomic `input` message; learns the user's jump stride from its
-  // first JUMP key (see map-jump.ts). Fed every id-2 cursor loc below.
+  // in one atomic `input` message (see map-jump.ts). Fed every id-2 cursor
+  // loc below.
   const mapJumper = new MapJumper({
     send: (keys) => conn.send({ msg: 'input', text: keys }),
     bounds: () => store.mfBounds(),
@@ -2295,7 +2295,7 @@ export function buildGameView(
 
   function exitXMode(): void {
     inXMode = false
-    mapJumper.reset()  // an unanswered stride probe can't complete now
+    mapJumper.reset()  // an in-flight walk can't be confirmed now
     view.classList.remove('x-mode')
     syncMoreDisplay()  // a pending --more-- returns to the inline log row
     xdescReset()

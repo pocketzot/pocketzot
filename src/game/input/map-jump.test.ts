@@ -1,50 +1,41 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type Box, clampToBox, DEFAULT_STRIDE, jumpKeys, MapJumper, SETTLE_MS } from './map-jump'
+import { type Box, clampToBox, MapJumper, SETTLE_BASE_MS, SETTLE_PER_KEY_MS, walkKeys } from './map-jump'
 
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { vi.useRealTimers() })
 
-// Walk a key string with a given stride and return where it lands — the
-// engine-side meaning of the keys (cmd-keys.h level-map section), so tests
-// check arrival rather than one particular spelling. `box` applies the
-// engine's componentwise clamp after every key (viewmap.cc clamp_lpos).
-function walk(from: { x: number; y: number }, keys: string, stride: number, box: Box | null = null) {
+// Walk a key string and return where it lands — the engine-side meaning of
+// the keys (cmd-keys.h level-map section), so tests check arrival rather
+// than one particular spelling. `box` applies the engine's componentwise
+// clamp after every key (viewmap.cc clamp_lpos).
+function walk(from: { x: number; y: number }, keys: string, box: Box | null = null) {
   const step: Record<string, [number, number]> = {
     h: [-1, 0], l: [1, 0], k: [0, -1], j: [0, 1], y: [-1, -1], u: [1, -1], b: [-1, 1], n: [1, 1],
   }
   let p = { ...from }
   for (const k of keys) {
-    const [dx, dy] = step[k.toLowerCase()]
-    const m = k === k.toUpperCase() ? stride : 1
-    p = clampToBox({ x: p.x + dx * m, y: p.y + dy * m }, box)
+    const [dx, dy] = step[k]
+    p = clampToBox({ x: p.x + dx, y: p.y + dy }, box)
   }
   return p
 }
 
-describe('jumpKeys', () => {
+describe('walkKeys', () => {
   it('lands on the target for every direction and distance', () => {
     const from = { x: 40, y: 30 }
     for (let dx = -25; dx <= 25; dx += 3) {
       for (let dy = -20; dy <= 20; dy += 3) {
         const to = { x: from.x + dx, y: from.y + dy }
-        expect(walk(from, jumpKeys(from, to), DEFAULT_STRIDE)).toEqual(to)
+        expect(walk(from, walkKeys(from, to))).toEqual(to)
       }
     }
   })
 
-  it('is minimal: diagonal jumps for the shared part, jumps before singles', () => {
-    // dx=+24, dy=-7: one U (7 diagonal), then 17 right = LL + lll.
-    expect(jumpKeys({ x: 10, y: 10 }, { x: 34, y: 3 })).toBe('ULLlll')
-    expect(jumpKeys({ x: 0, y: 0 }, { x: 3, y: 0 })).toBe('lll')
-    expect(jumpKeys({ x: 0, y: 0 }, { x: 0, y: 0 })).toBe('')
-  })
-
-  it('honours a non-default stride, and Infinity means singles only', () => {
-    const from = { x: 0, y: 0 }
-    const to = { x: 23, y: 0 }
-    expect(jumpKeys(from, to, 10)).toBe('LLlll')
-    expect(walk(from, jumpKeys(from, to, 10), 10)).toEqual(to)
-    expect(jumpKeys(from, to, Infinity)).toBe('l'.repeat(23))
+  it('is minimal: diagonals for the shared part (Chebyshev length)', () => {
+    expect(walkKeys({ x: 10, y: 10 }, { x: 34, y: 3 })).toBe('u'.repeat(7) + 'l'.repeat(17))
+    expect(walkKeys({ x: 0, y: 0 }, { x: 3, y: 0 })).toBe('lll')
+    expect(walkKeys({ x: 0, y: 0 }, { x: -2, y: 5 })).toBe('bbjjj')
+    expect(walkKeys({ x: 0, y: 0 }, { x: 0, y: 0 })).toBe('')
   })
 })
 
@@ -53,16 +44,14 @@ describe('MapJumper', () => {
 
   function make(box: Box | null = WIDE) {
     const sent: string[] = []
-    let bounds = box
-    const j = new MapJumper({ send: (k) => sent.push(k), bounds: () => bounds })
-    return { j, sent, setBounds: (b: Box | null) => { bounds = b } }
+    const j = new MapJumper({ send: (k) => sent.push(k), bounds: () => box })
+    return { j, sent }
   }
 
-  it('short hops go straight out as singles with no probe', () => {
+  it('a tap walks the cursor there in one message', () => {
     const { j, sent } = make()
     j.tap({ x: 5, y: 5 }, { x: 8, y: 3 })
     expect(sent).toEqual(['uul'])
-    expect(j.calibratedStride).toBeNull()
   })
 
   it('a tap on the cursor cell is a no-op', () => {
@@ -71,145 +60,66 @@ describe('MapJumper', () => {
     expect(sent).toEqual([])
   })
 
-  it('first long hop probes with one JUMP key, then routes with the measured stride', () => {
-    const { j, sent } = make()
-    j.tap({ x: 10, y: 10 }, { x: 34, y: 3 })
-    expect(sent).toEqual(['U'])
-    j.onCursor({ x: 17, y: 3 })  // the engine answers: stride 7 (default)
-    expect(j.calibratedStride).toBe(7)
-    expect(sent).toEqual(['U', 'LLlll'])
-    j.onCursor({ x: 34, y: 3 })  // route confirmed
-    j.tap({ x: 34, y: 3 }, { x: 0, y: 3 })  // later hops: no probe
-    expect(sent[2]).toBe('HHHHhhhhhh')
+  it('a tap into the void targets the known-map edge instead (engine clamp_lpos)', () => {
+    const { j, sent } = make({ left: -10, top: -10, right: 11, bottom: 5 })
+    j.tap({ x: 5, y: 0 }, { x: 40, y: 30 })
+    expect(sent).toEqual(['nnnnnl'])  // to (11,5)
   })
 
-  it('adopts an off-default stride from the probe answer', () => {
-    const { j, sent } = make()
-    j.tap({ x: 0, y: 0 }, { x: 23, y: 0 })
-    expect(sent).toEqual(['L'])
-    j.onCursor({ x: 10, y: 0 })  // level_map_cursor_step = 10
-    expect(j.calibratedStride).toBe(10)
-    expect(sent[1]).toBe('Llll')
-    expect(walk({ x: 10, y: 0 }, sent[1], 10)).toEqual({ x: 23, y: 0 })
+  it('works with no bounds known yet', () => {
+    const { j, sent } = make(null)
+    j.tap({ x: 0, y: 0 }, { x: 2, y: 0 })
+    expect(sent).toEqual(['ll'])
   })
 
-  it('ignores cursor reports that do not move the cursor yet', () => {
-    const { j, sent } = make()
-    j.tap({ x: 0, y: 0 }, { x: 23, y: 0 })
-    j.onCursor({ x: 0, y: 0 })
-    expect(sent).toEqual(['L'])
-    expect(j.calibratedStride).toBeNull()
-  })
-
-  it('a move off the probe axis finishes the route on singles without learning', () => {
-    const { j, sent } = make()
-    j.tap({ x: 0, y: 0 }, { x: 23, y: 0 })
-    j.onCursor({ x: 0, y: 1 })  // user pressed down on the d-pad first
-    expect(j.calibratedStride).toBeNull()
-    expect(sent).toHaveLength(2)
-    expect(sent[1]).not.toMatch(/[A-Z]/)
-    expect(walk({ x: 0, y: 1 }, sent[1], 7)).toEqual({ x: 23, y: 0 })
-  })
-
-  it('a tap during an in-flight probe retargets the answer', () => {
-    const { j, sent } = make()
-    j.tap({ x: 0, y: 0 }, { x: 23, y: 0 })
-    j.tap({ x: 0, y: 0 }, { x: 9, y: 0 })
-    expect(sent).toEqual(['L'])
-    j.onCursor({ x: 7, y: 0 })
-    expect(sent).toEqual(['L', 'll'])
-  })
-
-  it('reset drops the probe but keeps a learned stride', () => {
-    const { j, sent } = make()
-    j.tap({ x: 0, y: 0 }, { x: 23, y: 0 })
-    j.reset()
-    j.onCursor({ x: 7, y: 0 })
-    expect(sent).toEqual(['L'])
-    j.tap({ x: 0, y: 0 }, { x: 23, y: 0 })
-    j.onCursor({ x: 7, y: 0 })
-    j.reset()
-    expect(j.calibratedStride).toBe(7)
-  })
-
-  describe('clamping (engine clamp_lpos to known_map_bounds)', () => {
-    const box: Box = { left: -10, top: -10, right: 11, bottom: 5 }
-
-    it('a tap into the void targets the known-map edge instead', () => {
-      const { j, sent } = make(box)
-      j.tap({ x: 5, y: 0 }, { x: 40, y: 0 })
-      // Route to x=11 (6 cells): singles, no probe needed.
-      expect(sent).toEqual(['llllll'])
-    })
-
-    it('a diagonal probe clamped on one axis teaches nothing and finishes on singles', () => {
-      // Cursor 3 short of the right bound; the diagonal jump (7,7) clamps to
-      // (11,7) — off-axis motion AND on the edge.
-      const b: Box = { left: -10, top: -10, right: 11, bottom: 30 }
-      const { j, sent } = make(b)
-      j.tap({ x: 8, y: 0 }, { x: 11, y: 20 })
-      expect(sent).toEqual(['N'])
-      j.onCursor(walk({ x: 8, y: 0 }, 'N', 7, b))
-      expect(j.calibratedStride).toBeNull()
-      expect(sent).toHaveLength(2)
-      expect(sent[1]).not.toMatch(/[A-Z]/)
-      expect(walk({ x: 11, y: 7 }, sent[1], 7, b)).toEqual({ x: 11, y: 20 })
-    })
-
-    it('a clean probe next to an edge still teaches when it does not touch it', () => {
-      const b: Box = { left: -10, top: -10, right: 11, bottom: 30 }
-      const { j, sent } = make(b)
-      j.tap({ x: 0, y: 0 }, { x: 0, y: 20 })
-      expect(sent).toEqual(['J'])
-      j.onCursor({ x: 0, y: 7 })
-      expect(j.calibratedStride).toBe(7)
-    })
-
-    it('a small learned stride can never come from a clamp', () => {
-      // Real stride 7; box bottom 3 away from a cursor whose target is far
-      // below (target clamps to y=3, so this is singles — but force the
-      // probe case with a box that lets the target through yet clamps
-      // the probe short).
-      const b: Box = { left: -10, top: -10, right: 11, bottom: 3 }
-      const { j, sent, setBounds } = make({ left: -10, top: -10, right: 11, bottom: 30 })
-      j.tap({ x: 0, y: 0 }, { x: 0, y: 20 })
-      expect(sent).toEqual(['J'])
-      setBounds(b)  // the engine's box was actually smaller
-      j.onCursor({ x: 0, y: 3 })  // clamped landing, on the edge
-      expect(j.calibratedStride).toBeNull()
-    })
-  })
-
-  describe('settle timer', () => {
-    it('an unanswered probe gives up and finishes on singles', () => {
-      const { j, sent } = make()
-      j.tap({ x: 0, y: 0 }, { x: 23, y: 0 })
-      expect(sent).toEqual(['L'])
-      vi.advanceTimersByTime(SETTLE_MS)
-      expect(sent).toHaveLength(2)
-      expect(sent[1]).toBe('l'.repeat(23))
-      // Feature is alive again: next tap is handled normally.
-      j.tap({ x: 23, y: 0 }, { x: 25, y: 0 })
-      expect(sent[2]).toBe('ll')
-    })
-
+  describe('in-flight chaining', () => {
     it('a tap before the previous route is confirmed chains from its landing', () => {
       const { j, sent } = make()
-      j.tap({ x: 0, y: 0 }, { x: 5, y: 0 })  // 'lllll', expected (5,0)
-      j.tap({ x: 0, y: 0 }, { x: 5, y: 4 })  // cursor still reported at origin
+      j.tap({ x: 0, y: 0 }, { x: 5, y: 0 })  // expected (5,0)
+      j.tap({ x: 2, y: 0 }, { x: 5, y: 4 })  // cursor reported mid-flight
       expect(sent).toEqual(['lllll', 'jjjj'])
     })
 
-    it('chaining stops once the landing is confirmed or the window lapses', () => {
+    it('landing is confirmed once every key has reported (one cursor frame per key)', () => {
       const { j, sent } = make()
       j.tap({ x: 0, y: 0 }, { x: 5, y: 0 })
-      j.onCursor({ x: 5, y: 0 })
-      j.tap({ x: 5, y: 0 }, { x: 6, y: 0 })
+      for (let x = 1; x <= 4; x++) j.onCursor({ x, y: 0 })  // mid-flight: still chaining
+      j.tap({ x: 4, y: 0 }, { x: 5, y: 2 })
+      expect(sent[1]).toBe('jj')
+      j.onCursor({ x: 5, y: 0 }); j.onCursor({ x: 5, y: 1 }); j.onCursor({ x: 5, y: 2 })  // all 7 landed
+      j.tap({ x: 5, y: 2 }, { x: 6, y: 2 })
+      expect(sent[2]).toBe('l')
+    })
+
+    it('a chain that doubles back over its own endpoint is not confirmed early', () => {
+      const { j, sent } = make()
+      j.tap({ x: 0, y: 0 }, { x: 10, y: 0 })  // 10 keys, expected (10,0)
+      j.tap({ x: 0, y: 0 }, { x: 5, y: 0 })   // chains: 5 keys back, expected (5,0)
+      expect(sent).toEqual(['l'.repeat(10), 'hhhhh'])
+      // The first walk passes (5,0) on its way out — position would say
+      // "landed"; count says 10 more frames to go.
+      for (let x = 1; x <= 6; x++) j.onCursor({ x, y: 0 })
+      j.tap({ x: 6, y: 0 }, { x: 5, y: 3 })   // still anchored at (5,0)
+      expect(sent[2]).toBe('jjj')
+    })
+
+    it('an unconfirmed landing stops anchoring after a window scaled by keys in flight', () => {
+      const { j, sent } = make()
+      j.tap({ x: 0, y: 0 }, { x: 9, y: 0 })  // 9 keys, never reported
+      vi.advanceTimersByTime(SETTLE_BASE_MS + SETTLE_PER_KEY_MS * 9 - 1)
+      j.tap({ x: 7, y: 0 }, { x: 8, y: 0 })  // still anchored at (9,0): walks back
+      expect(sent[1]).toBe('h')
+      vi.advanceTimersByTime(SETTLE_BASE_MS + SETTLE_PER_KEY_MS * 10)
+      j.tap({ x: 7, y: 0 }, { x: 8, y: 0 })  // trusts the reported cursor again
+      expect(sent[2]).toBe('l')
+    })
+
+    it('reset forgets the in-flight landing', () => {
+      const { j, sent } = make()
+      j.tap({ x: 0, y: 0 }, { x: 9, y: 0 })
+      j.reset()
+      j.tap({ x: 4, y: 0 }, { x: 5, y: 0 })
       expect(sent[1]).toBe('l')
-      j.tap({ x: 6, y: 0 }, { x: 9, y: 0 })  // expected (9,0)
-      vi.advanceTimersByTime(SETTLE_MS)       // never confirmed (clamped short)
-      j.tap({ x: 7, y: 0 }, { x: 8, y: 0 })   // trusts the reported cursor again
-      expect(sent[3]).toBe('l')
     })
   })
 })
