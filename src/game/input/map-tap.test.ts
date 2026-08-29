@@ -99,6 +99,21 @@ describe('attachMapGestures', () => {
     expect(hovers).toHaveLength(1)
   })
 
+  it('holds the page unselectable from the long-press until the finger lifts', () => {
+    const { grid } = setup()
+    const root = document.documentElement
+    fire(grid, 'pointerdown', 25, 35)
+    expect(root.classList.contains('map-hold')).toBe(false)
+    vi.advanceTimersByTime(LONG_PRESS_MS)
+    expect(root.classList.contains('map-hold')).toBe(true)
+    fire(grid, 'pointerup', 25, 35)
+    expect(root.classList.contains('map-hold')).toBe(false)
+    // A tap never sets it.
+    fire(grid, 'pointerdown', 25, 35)
+    fire(grid, 'pointerup', 25, 35)
+    expect(root.classList.contains('map-hold')).toBe(false)
+  })
+
   it('lifting before the hold threshold cancels the long-press', () => {
     const { grid, presses } = setup()
     fire(grid, 'pointerdown', 25, 35)

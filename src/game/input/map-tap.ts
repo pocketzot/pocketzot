@@ -6,12 +6,11 @@
 // left-click mapping: movement stays on the d-pad, so a stray map tap can
 // never move the character or fire.
 
-// Hold duration. Well under the platform long-press defaults (iOS 500,
-// Android 400) and the d-pad's REPEAT_DELAY_MS 350: those guard costly or
-// modal actions, while describe is cheap and Esc-dismissible, so the only
-// floor that matters is tap duration (~50–150 ms, slow taps ~200) — and
-// SLOP_PX already cancels the drifting ones. Tried on-device: 450 and 350
-// felt slow, 250 too eager on careful aim taps; 300 is the compromise.
+// Hold duration. Under the platform long-press defaults (iOS 500,
+// Android 400): those guard costly or modal actions, while describe is
+// cheap and Esc-dismissible, so the floor that matters is tap duration
+// (~50–150 ms, slow taps ~200) — and SLOP_PX already cancels the
+// drifting ones.
 export const LONG_PRESS_MS = 300
 // Finger drift allowed before a press stops counting as "still". Beyond it
 // the gesture is a drag: the long-press timer is cancelled and (while
@@ -67,11 +66,20 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
   let lastHover: { x: number; y: number } | null = null
   let hit: CellHitTester | null = null
 
+  // Set from the moment the long-press fires until the finger lifts. The
+  // describe overlay opens UNDER the still-held finger, and iOS's native
+  // text-selection long-press (~500 ms from touch start, independent of
+  // DOM touch targets) then selects a word in it with a haptic pop. The
+  // class makes the page unselectable for exactly that window (style.css).
+  const HOLD_CLASS = 'map-hold'
+  const release = (): void => document.documentElement.classList.remove(HOLD_CLASS)
+
   const cancel = (): void => {
     if (timer != null) { window.clearTimeout(timer); timer = null }
     activePointer = null
     lastHover = null
     hit = null
+    release()
   }
 
   const hoverAt = (clientX: number, clientY: number): void => {
@@ -105,7 +113,9 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
       activePointer = null
       const cell = hit?.(startX, startY)
       hit = null
-      if (cell) opts.onLongPress(cell)
+      if (!cell) return
+      document.documentElement.classList.add(HOLD_CLASS)
+      opts.onLongPress(cell)
     }, LONG_PRESS_MS)
   })
 
@@ -129,4 +139,9 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
     if (cell) opts.onTap?.(cell)
   })
   el.addEventListener('pointercancel', cancel)
+  // Touch pointers are implicitly captured to the pointerdown target, so
+  // the lift reaches `el` even with the overlay now under the finger; the
+  // window hooks are insurance that the hold class can never stick.
+  window.addEventListener('pointerup', release)
+  window.addEventListener('pointercancel', release)
 }

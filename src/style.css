@@ -1535,6 +1535,16 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 #map-wrap > #map-grid { flex: 1; }
 
+/* While a map long-press finger is still down (map-tap.ts sets/clears the
+   class): the describe overlay it opened sits under that finger, and iOS's
+   native selection long-press would otherwise grab a word in it. Page-wide
+   for the hold's duration only; selection is back on lift. */
+html.map-hold, html.map-hold * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* Map */
 #map-grid {
   background: #000000;
