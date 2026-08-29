@@ -13,7 +13,7 @@ Notable changes to PocketZot, newest first.
 
 - New map touch interactions: while targeting or examining (`x`), tap or
   drag to move the cursor. In `X` mode, tap a location to send the cursor
-  there. Press and hold any map cell to describe what's there.
+  there. Long press any map cell to see what's there.
 
 ## 2026-08-28
 

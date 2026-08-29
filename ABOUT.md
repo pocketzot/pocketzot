@@ -33,12 +33,14 @@ Obligatory virtual keyboard also available.
 
 ## Gestures
 
+- Tap floating monster list to inspect monsters
+- Tap place name in HUD (e.g. @D:1) to toggle minimap
+- Long press on map cell to see what's there
+- Tap or drag on map while targeting or examining (`x`) to move the cursor
+- Tap on level map (`X`) to send the cursor there
 - Double tap on map to toggle zoom level
 - Two-finger long press on map to toggle ASCII/tiles
 - Double tap Shift to lock it
-- Tap place name in HUD (e.g. @D:1) to toggle minimap
-- Tap floating monster list for full view, then tap monster to inspect
-- Tap chevron at top-right of monster list to collapse to single-line view
 
 ## Offline play
 
