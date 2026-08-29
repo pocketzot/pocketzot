@@ -6,8 +6,13 @@
 // left-click mapping: movement stays on the d-pad, so a stray map tap can
 // never move the character or fire.
 
-// Hold duration matches the two-finger render-toggle gesture in game-view.
-export const LONG_PRESS_MS = 450
+// Hold duration. Well under the platform long-press defaults (iOS 500,
+// Android 400) and the d-pad's REPEAT_DELAY_MS 350: those guard costly or
+// modal actions, while describe is cheap and Esc-dismissible, so the only
+// floor that matters is tap duration (~50–150 ms, slow taps ~200) — and
+// SLOP_PX already cancels the drifting ones. Tried on-device: 450 and 350
+// felt slow, 250 too eager on careful aim taps; 300 is the compromise.
+export const LONG_PRESS_MS = 300
 // Finger drift allowed before a press stops counting as "still". Beyond it
 // the gesture is a drag: the long-press timer is cancelled and (while
 // targeting) the hover stream follows the finger instead.
