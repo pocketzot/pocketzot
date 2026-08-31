@@ -22,6 +22,10 @@ describe('buildDemoCards', () => {
     expect(by('Wizmode').badge).toBe('wizmode')
     expect(by('Wizmode').runes).toBeUndefined()
     expect(by('Offline death').runes).toEqual(['serpentine', 'decaying', 'silver'])
+    // ktyp=winning is what earns the Orb trophy; the runes stay a body row.
+    expect(by('Offline win').result.kind).toBe('won')
+    expect(by('Offline win').result.verb).toBe('Escaped with the Orb and 3 runes!')
+    expect(by('Offline win').runes).toHaveLength(3)
     expect(by('Live save').result.kind).toBe('saved')
     expect(by('Unparseable').result.verbose).toBe('Slain by an orc\nOn D:9')
     for (const c of cards) expect(renderCharCard(c.model, { hero: c.hero })).toBeInstanceOf(HTMLElement)

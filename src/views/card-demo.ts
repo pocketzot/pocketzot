@@ -72,10 +72,12 @@ function pureRecipe(a: Avatar): DollRecipe {
   return { doll: a.doll, mcache: a.mcache, httpBase: a.httpBase, version: a.version, fp: a.fp }
 }
 
-export function buildDemoCards(base: Avatar | null): Array<{ label: string; model: CharCardModel; hero?: boolean }> {
-  // No real entry to borrow from: a doll-less recipe on the offline pack's
-  // coords, so the fallback fixture can never send a request to a live server.
-  const recipe: DollRecipe = base ? pureRecipe(base) : { httpBase: '', version: 'local', doll: null, mcache: null }
+export function buildDemoCards(base: Avatar | null, fallback?: DollRecipe | null): Array<{ label: string; model: CharCardModel; hero?: boolean }> {
+  // No real entry to borrow from: the caller's local-pack recipe
+  // (localHumanRecipe) if it resolved, else a doll-less one on the offline
+  // pack's coords — either way the fixtures can never reach a live server.
+  const recipe: DollRecipe = base ? pureRecipe(base)
+    : fallback ?? { httpBase: '', version: 'local', doll: null, mcache: null }
   const online = (over: Partial<Avatar>): Avatar => ({
     ...recipe, turn: null, wsUrl: 'wss://crawl.dcss.io/socket', username: 'demo', gameId: 'dcss-0.35',
     charName: 'Demo', species: 'Minotaur', title: 'the Slayer', god: 'Trog', xl: 14,
@@ -90,6 +92,21 @@ export function buildDemoCards(base: Avatar | null): Array<{ label: string; mode
         runes: ALL_RUNES, outcome: { reason: 'won', message: WIN_BLURB, dump: 'https://crawl.dcss.io/morgue/demo/x', endedAt: Date.now() - 86400e3 } })) },
     { label: 'Offline death · 3 runes from the morgue } line (xlog path)',
       model: xlogToCard(parseXlogLine(xlog({})), null, offlineDoll, ['serpentine', 'decaying', 'silver']) },
+    // The offline counterpart of the online win above. Three runes is Zot's
+    // entry price, so a minimum-rune win is the common shape, not the 15-rune
+    // tour. ktyp=winning (KTYP_KIND → 'won') is what puts the Orb under the
+    // doll; the runes stay a body row. tmsg is crawl's own terse line —
+    // "escaped" plus runes_gems_desc's "... and 3 runes" (hiscores.cc:1980),
+    // lowercased by short_kill_message and re-capped by the adapter. `end`
+    // sits months back because xlogTimeMs parses LOCAL time: a same-day
+    // fixture reads as the future west of the viewer and agoLabel drops to
+    // date-only.
+    { label: 'Offline win · Orb trophy + 3 runes (xlog path)',
+      model: xlogToCard(parseXlogLine(xlog({
+        xl: '27', title: 'Conqueror', place: 'D:1', ktyp: 'winning', urune: '3',
+        tmsg: 'escaped with the Orb and 3 runes!',
+        sc: '1234567', turn: '60000', dur: '18000', end: '20260601120000S',
+      })), null, offlineDoll, ['serpentine', 'decaying', 'silver']) },
     { label: 'Wizmode Orb escape · *WIZ* headline tail, Orb only, 0 runes',
       model: avatarToCard(online({ title: 'the Ruthless', xl: 27,
         outcome: { reason: 'won', message: WIZ_BLURB, endedAt: Date.now() - 600e3 } })) },
@@ -124,28 +141,23 @@ const DEMO_CSS = `
 
 let openView: { view: HTMLElement; close: () => void } | null = null
 
+// With no real avatar to borrow a recipe from, a bare human composed from the
+// local pack's own tileinfo names. Same-origin, so it can never reach a live
+// server — and it keeps the gallery's dolls painting on a fresh profile, which
+// is the only state a Playwright run ever sees.
+async function localHumanRecipe(): Promise<DollRecipe | null> {
+  try {
+    const player = await getTileLoader('', 'local').getModule('player')
+    const t = player['BASE_HUMAN']
+    return typeof t === 'number' ? { httpBase: '', version: 'local', doll: [[t, 0]], mcache: null } : null
+  } catch { return null }
+}
+
 // A doll strip above the cards: the same fixtures as marked dolls at the
 // shelf (2) and crypt-grid (2.5) scales — rune fan, "+N" pip, Orb badge
-// (rune-marks.ts). With no real avatar to borrow, a bare human doll is
-// composed from the local pack's own tileinfo names.
-async function mountDollStrip(host: HTMLElement, base: Avatar | null): Promise<void> {
-  // Strips are placed synchronously so they keep their slot above the cards;
-  // the dolls fill in once the recipe resolves.
-  const strips = [2, 2.5].map((scale) => {
-    const strip = document.createElement('div')
-    strip.className = 'card-demo-dolls'
-    host.append(strip)
-    return { strip, scale }
-  })
-  let recipe: DollRecipe | null = base ? pureRecipe(base) : null
-  if (!recipe) {
-    try {
-      const player = await getTileLoader('', 'local').getModule('player')
-      const t = player['BASE_HUMAN']
-      if (typeof t !== 'number') return
-      recipe = { httpBase: '', version: 'local', doll: [[t, 0]], mcache: null }
-    } catch { return }
-  }
+// (rune-marks.ts).
+function mountDollStrip(host: HTMLElement, recipe: DollRecipe | null): void {
+  if (!recipe) return
   const dolls: MarkedRecipe[] = [
     { ...recipe, runes: ['serpentine'] },
     { ...recipe, runes: ['serpentine', 'decaying', 'silver'] },
@@ -154,7 +166,12 @@ async function mountDollStrip(host: HTMLElement, base: Avatar | null): Promise<v
     { ...recipe, outcome: { reason: 'dead', endedAt: 0 } },
     { ...recipe, orb: true, runes: ['serpentine'] },
   ]
-  for (const { strip, scale } of strips) void paintAvatars(strip, dolls, scale, 'crypt-doll')
+  for (const scale of [2, 2.5]) {
+    const strip = document.createElement('div')
+    strip.className = 'card-demo-dolls'
+    host.append(strip)
+    void paintAvatars(strip, dolls, scale, 'crypt-doll')
+  }
 }
 
 export function toggleCardDemo(): void {
@@ -162,15 +179,22 @@ export function toggleCardDemo(): void {
   if (openView?.view.isConnected) { openView.close(); openView = null; return }
   openView = mountCryptShell('records-view card-demo',
     '<span class="records-morgue-title">Card gallery (dev)</span>', `<style>${DEMO_CSS}</style><div class="records-list"></div>`)
-  const { view } = openView
-  const list = view.querySelector<HTMLElement>('.records-list')!
-  const base = listAllAvatars()[0] ?? null
+  void mountGallery(openView.view.querySelector<HTMLElement>('.records-list')!,
+    listAllAvatars()[0] ?? null)
+}
+
+// The recipe resolves before anything is appended, so the strip keeps its slot
+// above the cards and both paint the same doll — the cards used to skip the
+// fallback the strip had, which is why a fresh profile rendered doll-less
+// cards under a strip of dolls.
+async function mountGallery(list: HTMLElement, base: Avatar | null): Promise<void> {
+  const fallback = base ? null : await localHumanRecipe()
   const cap0 = document.createElement('div')
   cap0.className = 'card-demo-label'
   cap0.textContent = 'Doll marks · 1 rune / 3 runes / 15 + Orb / Orb only / plain / live orb run — shelf and crypt-grid scales'
   list.append(cap0)
-  void mountDollStrip(list, base)
-  for (const { label, model, hero } of buildDemoCards(base)) {
+  mountDollStrip(list, base ? pureRecipe(base) : fallback)
+  for (const { label, model, hero } of buildDemoCards(base, fallback)) {
     const cap = document.createElement('div')
     cap.className = 'card-demo-label'
     cap.textContent = label
