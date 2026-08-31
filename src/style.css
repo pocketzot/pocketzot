@@ -79,6 +79,10 @@ html, body {
   color: var(--text);
   font-family: var(--font-mono);
   overflow: hidden;
+  /* Kill the UA tap overlay app-wide (blue flash on Android Blink; the
+     property is inherited, and Blink kept the -webkit- spelling — there is
+     no unprefixed form). Don't re-add per-element copies. */
+  -webkit-tap-highlight-color: transparent;
 }
 /* Installed-app (home screen) mode with viewport-fit=cover: iOS misreports
    every dynamic viewport measure (100dvh/100svh, innerHeight,
@@ -143,7 +147,6 @@ html, body {
   padding: 0.7rem;
   margin: -0.7rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .login-settings-chip:active { opacity: 0.5; }  /* dim on press */
 
@@ -319,7 +322,6 @@ html, body {
 .crypt-doll {
   cursor: pointer;
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
 .crypt-doll:active { transform: scale(0.92); }
 /* Tap-a-doll card modal: the char-card itself is the dialog, centered over
@@ -1100,7 +1102,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .offline-slot-confirm-del { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
 .offline-slot-confirm-del:disabled { opacity: 0.5; cursor: default; }
@@ -1188,7 +1189,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .offline-device-btn:active { background: var(--surface2); }
 .offline-device-btn:disabled { opacity: 0.5; cursor: default; }
@@ -1251,7 +1251,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 /* The escape glyph is thinner than text at the same size, so bump it to sit
    visually level with the "Save" label beside it (cf. .menu-ctrl-glyph). */
@@ -1333,7 +1332,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .lobby-exit-close:active { background: var(--surface2); }
 
@@ -1383,7 +1381,6 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .doc-close:active { background: var(--surface2); }
 .doc-body {
@@ -2420,7 +2417,6 @@ html.map-hold, html.map-hold * {
   line-height: 1;
   color: var(--text-dim);  /* quiet neutral, not the fg14 yellow of the name line */
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .hud-settings-chip:active { opacity: 0.5; }  /* dim on press */
 
@@ -2998,7 +2994,6 @@ html.map-hold, html.map-hold * {
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .dialog-body .button:active,
 .dialog-body input[type="button"]:active { background: var(--surface2); }
@@ -3032,7 +3027,6 @@ html.map-hold, html.map-hold * {
   border-radius: 4px;
   padding: 0.15rem 0.3rem;
   margin: 0 -0.3rem;
-  -webkit-tap-highlight-color: transparent;
 }
 .overlay-spell:active { background: rgba(255, 255, 255, 0.12); }
 @media (hover: hover) {
@@ -3077,7 +3071,6 @@ html.map-hold, html.map-hold * {
   background: color-mix(in srgb, var(--bg) 70%, transparent);
   border: 0;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .spell-rail-btn:active { background: var(--surface); }
 /* Corner cast-keystroke letter ("za"), shared by the rail and the z-tab grid
@@ -3900,7 +3893,6 @@ html.map-hold, html.map-hold * {
   background: transparent;
   border: 0;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 /* --tc-press (not --tc-fill) so the tap still contrasts against the tray fill. */
@@ -4558,7 +4550,6 @@ html.map-hold, html.map-hold * {
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .reconnect-btn:active { background: var(--surface2); }
 .reconnect-force-yes { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
@@ -4578,7 +4569,6 @@ html.map-hold, html.map-hold * {
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .lobby-notice-actions button:active { background: var(--surface2); }
 
@@ -4627,7 +4617,6 @@ html.map-hold, html.map-hold * {
   font-family: var(--font-mono);
   font-size: 0.85rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 /* Selected = accent border + amber fill, matching the .settings-seg active
    segment so selection reads the same everywhere on the page. */
@@ -4654,7 +4643,6 @@ html.map-hold, html.map-hold * {
   color: var(--text-dim);
   font-size: 1rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .set-row-more:active { background: var(--surface2); }
 .set-row-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0 0 0.25rem; }
@@ -4668,7 +4656,6 @@ html.map-hold, html.map-hold * {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .set-action:active { background: var(--surface2); }
 .set-action-danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
@@ -4686,7 +4673,6 @@ html.map-hold, html.map-hold * {
   font-family: var(--font-mono);
   font-size: 0.85rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .settings-btn:active { background: var(--surface); }
 .settings-btn-primary { border-color: var(--accent); color: var(--accent); }
@@ -4737,7 +4723,6 @@ html.map-hold, html.map-hold * {
   display: flex;
   flex-direction: column;
   align-items: center;
-  -webkit-tap-highlight-color: transparent;
 }
 .set-slider-mark {
   width: 10px;
@@ -4951,7 +4936,6 @@ html.map-hold, html.map-hold * {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 
 /* Fused segmented control (Map display picker, editor's 3×3/3×4 toggle):
@@ -4978,7 +4962,6 @@ html.map-hold, html.map-hold * {
   font-family: var(--font-mono);
   font-size: 0.95rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .ed-slot.empty { color: var(--text-dim); border-style: dashed; background: transparent; }
 .ed-slot.picking { border-color: var(--accent); color: var(--accent); }
@@ -5035,7 +5018,6 @@ html.map-hold, html.map-hold * {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .ed-key:active { background: var(--surface); color: var(--accent); }
 /* current = what the slot holds now; armed = first tap of the two-tap send */
@@ -5064,7 +5046,6 @@ html.map-hold, html.map-hold * {
   border: 1px solid var(--border);
   border-radius: 999px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 #chat-chip .chat-chip-hash { color: var(--accent); font-weight: 600; }
 #chat-chip.chat-chip-open { border-color: var(--accent); }
@@ -5204,7 +5185,6 @@ html.map-hold, html.map-hold * {
   line-height: 1;
   padding: 0.1rem 0.4rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 
 .chat-history {
@@ -5257,7 +5237,6 @@ html.map-hold, html.map-hold * {
   line-height: 1;
   padding: 0 0.8rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .chat-send:active { background: var(--surface); }
 
@@ -5276,7 +5255,7 @@ html.map-hold, html.map-hold * {
   padding: 0.6rem 0.7rem;
   text-align: left;
 }
-.char-card-tappable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.char-card-tappable { cursor: pointer; }
 .char-card-tappable:active { background: var(--surface2); }
 .char-card-doll {
   flex: none;
@@ -5396,7 +5375,6 @@ html.map-hold, html.map-hold * {
   font-size: 0.75rem;
   padding: 0.25rem 0.7rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 .records-sort-btn.is-active { color: var(--accent); border-color: var(--accent); }
 .records-list {
@@ -5439,7 +5417,6 @@ html.map-hold, html.map-hold * {
   color: var(--text-dim);
   font-size: 0.9rem;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 @media (hover: hover) {
   .records-morgue-dl:hover,
