@@ -12,11 +12,10 @@ import { getPref, setPref } from '../prefs'
 const REPO = 'https://github.com/pocketzot/pocketzot'
 
 // ABOUT.md uses repo-relative links (LICENSE, ATTRIBUTION.md) that only resolve
-// on GitHub, and points at the donations page as /support. Rewrite them for web
-// display; leave absolute http/mailto and root-absolute paths untouched.
+// on GitHub. Rewrite them for web display; leave absolute http/mailto and
+// root-absolute paths untouched.
 function resolveAboutLink(href: string): string {
   if (/^(https?:|mailto:)/i.test(href)) return href
-  if (href === '/support') return '/support.html'
   if (href.startsWith('/') || href.startsWith('#')) return href
   return `${REPO}/blob/main/${href}`
 }
@@ -28,14 +27,7 @@ function prep(md: string): string {
 }
 
 export function openAboutDoc(): void {
-  let md = aboutMd
-  // The Support (donations) section points at the operator's wallet via the
-  // gitignored /support page. Drop it from the open-source build so forks don't
-  // surface a dead donation link.
-  if (!import.meta.env.VITE_SITE_PAGES) {
-    md = md.replace(/\n##\s+Support[\s\S]*$/, '\n')
-  }
-  openDocView('About', prep(md), { resolveLink: resolveAboutLink })
+  openDocView('About', prep(aboutMd), { resolveLink: resolveAboutLink })
 }
 
 // Unread "What's new" state: each changelog entry is a dated `## YYYY-MM-DD`

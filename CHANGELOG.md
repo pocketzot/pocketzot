@@ -9,6 +9,10 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-08-31
+
+- Added a Thanks section to the About page.
+
 ## 2026-08-29
 
 - New map touch interactions: while targeting or examining (`x`), tap or
