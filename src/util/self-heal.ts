@@ -1,4 +1,4 @@
-// Stale-shell self-heal: one reload, once per session.
+// Stale-shell self-heal: one reload per stale document, never two in a row.
 //
 // iOS home-screen apps can relaunch from a cached copy of the start document
 // that is many deploys old (observed live 2026-08-17, testproj: a crash
@@ -11,19 +11,27 @@
 // deploy's HTML; offline, the active SW falls back to its own
 // generation-pinned shell (sw.js cachedShell) — self-consistent either way.
 //
-// Once per session: the latch (sessionStorage — survives the reload, dies
-// with the app) makes a reload loop impossible. If the latch can't be
-// written there is no loop guard, so no reload — the caller falls through
-// to its visible-error path instead.
-// Latch values: '1' = a heal reload happened, not yet counted; '2' = the
-// recovered page reported it (consumeStaleShellHeal). ANY value means
-// latched — the SW's rescue script (classify.js) uses the same key and
-// semantics, so keep the two in lockstep.
+// The loop guard is the sessionStorage latch, read as a STATE, not a flag:
+//   absent → no heal yet: reload, write '1'
+//   '1'    → the last heal reload never reached boot: a reload loop, decline
+//   '2'    → the last heal booted (consumeStaleShellHeal): reload again, '1'
+// So automatic reloads are bounded to one per successful boot, and a reload
+// that lands on another dead shell stops there. The state matters because
+// the stale document RECURS within a session: a browser tab keeps
+// sessionStorage across web-process restarts, and iOS restores the same
+// stale start document after every restart no matter how many fresh loads
+// happened in between. Under the earlier "one reload per session" reading,
+// a tab that lived all day got a single heal and then a dead end on every
+// later restart (seen live in the stale-heal-failed counter, 2026-09-01).
+// If the latch can't be written there is no loop guard, so no reload — the
+// caller falls through to its visible-error path instead.
+// The SW's rescue script (classify.js) uses the same key and semantics, so
+// keep the two in lockstep.
 const KEY = 'pocketzot:stale-shell-reloaded'
 
 export function staleShellReloadOnce(params?: Record<string, string>): boolean {
   try {
-    if (sessionStorage.getItem(KEY) !== null) return false
+    if (sessionStorage.getItem(KEY) === '1') return false
     sessionStorage.setItem(KEY, '1')
   } catch {
     return false
@@ -34,13 +42,13 @@ export function staleShellReloadOnce(params?: Record<string, string>): boolean {
   return true
 }
 
-// True exactly once per healed session: the recovered page calls this at
-// boot to learn "this load exists because a stale shell was rescued" and
-// count it (main.ts → count('stale-heal') — the wild-population regression
-// alarm for the rescue, since iOS discards the underlying crash reports and
-// the healed UX is a 2 s flash nobody reports). Flips '1' → '2' so later
-// loads in the session don't recount; the reload guard reads any value as
-// latched, so once-per-session reload semantics are untouched.
+// True exactly once per heal: the recovered page calls this at boot to
+// learn "this load exists because a stale shell was rescued" and count it
+// (main.ts → count('stale-heal') — the wild-population regression alarm for
+// the rescue, since iOS discards the underlying crash reports and the
+// healed UX is a 2 s flash nobody reports). Flips '1' → '2': later loads
+// don't recount, and '2' is what tells the reload guard the heal worked, so
+// the next stale restart may heal again.
 export function consumeStaleShellHeal(): boolean {
   try {
     if (sessionStorage.getItem(KEY) !== '1') return false

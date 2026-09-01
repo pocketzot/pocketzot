@@ -66,13 +66,17 @@ export function isForeignChunk(url, assets) {
 // script and recovers per context:
 // - window (the shell's own <script>/dynamic imports): one reload —
 //   a real navigation fetches the current deploy's HTML (or the active
-//   SW's own generation-pinned shell offline). Latched via the SAME
-//   sessionStorage key as the in-page self-heal (util/self-heal.ts), so a
-//   session performs at most one automatic reload between them. When the
-//   reload is unavailable (already latched, or storage unwritable so no
-//   loop guard exists) the script THROWS: the requester must see a failed
-//   load — a dynamic import rejects into its error path — never a
-//   silently-successful empty module (a bare return resolved
+//   SW's own generation-pinned shell offline). Guarded via the SAME
+//   sessionStorage key and state semantics as the in-page self-heal
+//   (util/self-heal.ts, the canonical explanation): '1' = the last heal
+//   reload never booted → a loop, decline; absent or '2' (the last heal
+//   booted) → reload and write '1'. Not "once per session": the stale
+//   document recurs on every web-process restart of a long-lived tab, and
+//   reading any value as latched dead-ended such tabs on every restart
+//   (seen live 2026-09-01). When the reload is unavailable (loop, or storage
+//   unwritable so no loop guard exists) the script THROWS: the requester
+//   must see a failed load — a dynamic import rejects into its error path
+//   — never a silently-successful empty module (a bare return resolved
 //   import('./offline/boot') with no exports and died as an unhandled
 //   TypeError; review catch, 2026-08-17).
 // - dedicated worker (the engine worker chunk — the case observed live):
@@ -92,19 +96,20 @@ export const STALE_CHUNK_RESCUE_JS = `(() => {
   }
   let latched = true
   try {
-    latched = sessionStorage.getItem('pocketzot:stale-shell-reloaded') !== null
+    latched = sessionStorage.getItem('pocketzot:stale-shell-reloaded') === '1'
     if (!latched) sessionStorage.setItem('pocketzot:stale-shell-reloaded', '1')
   } catch (_e) {
     latched = true
   }
   if (latched) {
-    // Dead end: the one automatic reload is spent (or storage is unwritable,
-    // so none was ever attempted) — the user is stuck until a force-quit.
-    // Report it before failing: this script is the only current code that
-    // ever runs in a stale shell, so this beacon is the only way the outcome
-    // is counted (functions/api/e.js 'stale-heal-failed'). Once per document
-    // via the self guard; offline dead-ends go unreported (the beacon can't
-    // leave the device).
+    // Dead end: the last heal reload landed on another dead shell (or
+    // storage is unwritable, so no reload was ever attempted) — the user is
+    // stuck until a force-quit or a manual reload. Report it before
+    // failing: this script is the only current code that ever runs in a
+    // stale shell, so this beacon is the only way the outcome is counted
+    // (functions/api/e.js 'stale-heal-failed'). Once per document via the
+    // self guard; offline dead-ends go unreported (the beacon can't leave
+    // the device).
     try {
       if (!self.__pzStaleHealFailed) {
         self.__pzStaleHealFailed = 1

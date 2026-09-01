@@ -189,16 +189,25 @@ describe('stale-shell rescue script', () => {
     expect(beacons.urls.length).toBe(1)
   })
 
-  it('window context: a reported latch ("2") also declines and throws', () => {
+  it('window context: a booted heal ("2") heals again; only an unbooted one ("1") dead-ends', () => {
+    // The stale document recurs on every web-process restart of a
+    // long-lived tab (seen live 2026-09-01: a dead end per restart under
+    // the old any-value-is-latched reading).
     const storage = mapStorage()
     storage.setItem('pocketzot:stale-shell-reloaded', '2')
     let reloads = 0
     const beacons = beaconRecorder()
-    expect(() => runRescue({
+    const ctx = {
       document: {}, sessionStorage: storage,
       location: { reload: () => { reloads++ } }, ...beacons, self: {},
-    })).toThrow(/out of date/)
-    expect(reloads).toBe(0)
+    }
+    runRescue(ctx)
+    expect(reloads).toBe(1)
+    expect(storage.getItem('pocketzot:stale-shell-reloaded')).toBe('1')
+    expect(beacons.urls).toEqual([])
+    // That reload landed on another dead shell: loop → dead end.
+    expect(() => runRescue(ctx)).toThrow(/out of date/)
+    expect(reloads).toBe(1)
     expect(beacons.urls).toEqual(['/api/e?e=stale-heal-failed'])
   })
 
@@ -217,7 +226,7 @@ describe('stale-shell rescue script', () => {
 
   it('window context: a broken beacon still fails loudly, never silently succeeds', () => {
     const storage = mapStorage()
-    storage.setItem('pocketzot:stale-shell-reloaded', '2')
+    storage.setItem('pocketzot:stale-shell-reloaded', '1')
     expect(() => runRescue({
       document: {}, sessionStorage: storage, location: {},
       navigator: { sendBeacon: () => { throw new Error('blocked') } }, self: {},

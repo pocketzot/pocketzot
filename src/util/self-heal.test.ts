@@ -24,7 +24,7 @@ describe('staleShellReloadOnce', () => {
     expect(replaced).toEqual(['https://pocketzot.app/'])
   })
 
-  it('is once per session: the second call declines', () => {
+  it('never two in a row: a heal that has not booted yet blocks the next', () => {
     const replaced = stubLocation()
     expect(staleShellReloadOnce()).toBe(true)
     expect(staleShellReloadOnce()).toBe(false)
@@ -37,11 +37,16 @@ describe('staleShellReloadOnce', () => {
     expect(replaced[0]).toBe('https://pocketzot.app/?perf=1&offline=1')
   })
 
-  it('a reported heal (latch "2") still counts as latched for the reload guard', () => {
+  it('a booted heal (latch "2") allows the next stale restart to heal again', () => {
+    // The stale document recurs per web-process restart of a long-lived
+    // tab; only a heal that never booted ("1") is a loop.
     const replaced = stubLocation()
     sessionStorage.setItem('pocketzot:stale-shell-reloaded', '2')
+    expect(staleShellReloadOnce()).toBe(true)
+    expect(replaced).toEqual(['https://pocketzot.app/'])
+    expect(sessionStorage.getItem('pocketzot:stale-shell-reloaded')).toBe('1')
     expect(staleShellReloadOnce()).toBe(false)
-    expect(replaced).toEqual([])
+    expect(replaced).toHaveLength(1)
   })
 
   it('never reloads when the loop guard cannot be written', () => {
@@ -64,13 +69,15 @@ describe('consumeStaleShellHeal', () => {
     vi.unstubAllGlobals()
   })
 
-  it('reports a heal exactly once, then the latch stays for the reload guard', () => {
+  it('reports a heal exactly once, and a reported heal re-arms the reload guard', () => {
     stubLocation()
     expect(consumeStaleShellHeal()).toBe(false) // no heal happened
     expect(staleShellReloadOnce()).toBe(true)   // the heal reload
+    expect(staleShellReloadOnce()).toBe(false)  // not booted yet: a loop
     expect(consumeStaleShellHeal()).toBe(true)  // recovered page reports it
     expect(consumeStaleShellHeal()).toBe(false) // later loads: already reported
-    expect(staleShellReloadOnce()).toBe(false)  // reload guard still latched
+    expect(staleShellReloadOnce()).toBe(true)   // booted: the next restart may heal
+    expect(consumeStaleShellHeal()).toBe(true)  // ...and is counted again
   })
 
   it('never reports without storage', () => {
