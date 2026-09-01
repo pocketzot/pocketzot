@@ -10,12 +10,19 @@ function stubLocation(href = 'https://pocketzot.app/'): string[] {
   return replaced
 }
 
+// The healed-load mark lives on `self` for the SW rescue script's sake;
+// clearing it is "a new page load" in these tests.
+const HEALED = '__pzHealedLoad'
+const newPageLoad = () => { delete (globalThis as unknown as Record<string, unknown>)[HEALED] }
+
 describe('staleShellReloadOnce', () => {
   beforeEach(() => {
     vi.stubGlobal('sessionStorage', fakeStorage())
+    newPageLoad()
   })
   afterEach(() => {
     vi.unstubAllGlobals()
+    newPageLoad()
   })
 
   it('reloads on first call and reports it', () => {
@@ -49,6 +56,15 @@ describe('staleShellReloadOnce', () => {
     expect(replaced).toHaveLength(1)
   })
 
+  it('the healed page itself never reloads again: a failure there was not fixed by the reload', () => {
+    const replaced = stubLocation()
+    sessionStorage.setItem('pocketzot:stale-shell-reloaded', '1')
+    expect(consumeStaleShellHeal()).toBe(true) // this load is the heal
+    expect(staleShellReloadOnce()).toBe(false)  // → caller's visible error
+    expect(replaced).toEqual([])
+    expect(sessionStorage.getItem('pocketzot:stale-shell-reloaded')).toBe('2')
+  })
+
   it('never reloads when the loop guard cannot be written', () => {
     // No sessionStorage latch = no way to stop a reload loop, so no reload.
     vi.stubGlobal('sessionStorage', {
@@ -64,19 +80,26 @@ describe('staleShellReloadOnce', () => {
 describe('consumeStaleShellHeal', () => {
   beforeEach(() => {
     vi.stubGlobal('sessionStorage', fakeStorage())
+    newPageLoad()
   })
   afterEach(() => {
     vi.unstubAllGlobals()
+    newPageLoad()
   })
 
-  it('reports a heal exactly once, and a reported heal re-arms the reload guard', () => {
+  it('walks the whole cycle: heal, boot, play, restart, heal again', () => {
     stubLocation()
-    expect(consumeStaleShellHeal()).toBe(false) // no heal happened
-    expect(staleShellReloadOnce()).toBe(true)   // the heal reload
+    expect(consumeStaleShellHeal()).toBe(false) // fresh tab: no heal happened
+    expect(staleShellReloadOnce()).toBe(true)   // stale doc → the heal reload
     expect(staleShellReloadOnce()).toBe(false)  // not booted yet: a loop
-    expect(consumeStaleShellHeal()).toBe(true)  // recovered page reports it
-    expect(consumeStaleShellHeal()).toBe(false) // later loads: already reported
-    expect(staleShellReloadOnce()).toBe(true)   // booted: the next restart may heal
+    newPageLoad()
+    expect(consumeStaleShellHeal()).toBe(true)  // healed page boots, reports it
+    expect(consumeStaleShellHeal()).toBe(false) // never twice
+    expect(staleShellReloadOnce()).toBe(false)  // same page failing again: not stale
+    newPageLoad()                               // web-process restart → stale doc again
+    expect(consumeStaleShellHeal()).toBe(false) // '2' is not a pending heal
+    expect(staleShellReloadOnce()).toBe(true)   // heals again
+    newPageLoad()
     expect(consumeStaleShellHeal()).toBe(true)  // ...and is counted again
   })
 

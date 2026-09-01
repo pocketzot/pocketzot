@@ -211,6 +211,23 @@ describe('stale-shell rescue script', () => {
     expect(beacons.urls).toEqual(['/api/e?e=stale-heal-failed'])
   })
 
+  it('window context: the healed page itself (self mark) declines even at "2"', () => {
+    // A chunk failing in the page a heal produced was not fixed by the
+    // reload — decline and beacon so the caller shows its error, instead of
+    // reloading on every tap (a fork's CSP, no module workers, ...).
+    const storage = mapStorage()
+    storage.setItem('pocketzot:stale-shell-reloaded', '2')
+    let reloads = 0
+    const beacons = beaconRecorder()
+    expect(() => runRescue({
+      document: {}, sessionStorage: storage,
+      location: { reload: () => { reloads++ } }, ...beacons, self: { __pzHealedLoad: 1 },
+    })).toThrow(/out of date/)
+    expect(reloads).toBe(0)
+    expect(storage.getItem('pocketzot:stale-shell-reloaded')).toBe('2')
+    expect(beacons.urls).toEqual(['/api/e?e=stale-heal-failed'])
+  })
+
   it('window context: no storage means no loop guard — no reload, loud failure', () => {
     let reloads = 0
     const beacons = beaconRecorder()

@@ -94,17 +94,21 @@ export const STALE_CHUNK_RESCUE_JS = `(() => {
     postMessage({ type: 'exit', code: 1 })
     return
   }
-  let latched = true
+  // A page that a heal produced marks itself (self-heal.ts HEALED_LOAD): a
+  // chunk failing in it is one the reload did not fix, so decline.
+  let latched = !!self.__pzHealedLoad
   try {
-    latched = sessionStorage.getItem('pocketzot:stale-shell-reloaded') === '1'
+    latched = latched || sessionStorage.getItem('pocketzot:stale-shell-reloaded') === '1'
     if (!latched) sessionStorage.setItem('pocketzot:stale-shell-reloaded', '1')
   } catch (_e) {
     latched = true
   }
   if (latched) {
-    // Dead end: the last heal reload landed on another dead shell (or
-    // storage is unwritable, so no reload was ever attempted) — the user is
-    // stuck until a force-quit or a manual reload. Report it before
+    // Dead end: the last heal reload landed on another dead shell, or this
+    // page IS that reload and still failed (or storage is unwritable, so no
+    // reload was ever attempted) — the user is stuck until a force-quit or a
+    // manual reload, or falls through to the caller's visible error. Report
+    // it before
     // failing: this script is the only current code that ever runs in a
     // stale shell, so this beacon is the only way the outcome is counted
     // (functions/api/e.js 'stale-heal-failed'). Once per document via the

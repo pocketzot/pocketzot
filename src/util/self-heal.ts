@@ -25,11 +25,25 @@
 // later restart (seen live in the stale-heal-failed counter, 2026-09-01).
 // If the latch can't be written there is no loop guard, so no reload — the
 // caller falls through to its visible-error path instead.
-// The SW's rescue script (classify.js) uses the same key and semantics, so
-// keep the two in lockstep.
+//
+// Second guard, for the callers that run AFTER boot (a dynamic import or
+// the engine worker failing in a page that already runs): the page that a
+// heal reload produced marks itself (HEALED_LOAD, a self global so the SW's
+// inlined rescue script can read it too). A failure in that page is one the
+// reload did not fix — a browser without module workers, a fork's CSP, a
+// worker throwing at startup — so it is not a stale shell and must fall
+// through to the visible error instead of reloading on every tap. A later
+// restart is a new page load without the mark, so the recurring stale
+// document still heals.
+// The SW's rescue script (classify.js) uses the same key, the same global
+// and the same semantics, so keep the two in lockstep.
 const KEY = 'pocketzot:stale-shell-reloaded'
+const HEALED_LOAD = '__pzHealedLoad'
+// globalThis === self in every browser context; the SW script says `self`.
+const globals = globalThis as unknown as Record<string, unknown>
 
 export function staleShellReloadOnce(params?: Record<string, string>): boolean {
+  if (globals[HEALED_LOAD]) return false
   try {
     if (sessionStorage.getItem(KEY) === '1') return false
     sessionStorage.setItem(KEY, '1')
@@ -48,13 +62,16 @@ export function staleShellReloadOnce(params?: Record<string, string>): boolean {
 // the rescue, since iOS discards the underlying crash reports and the
 // healed UX is a 2 s flash nobody reports). Flips '1' → '2': later loads
 // don't recount, and '2' is what tells the reload guard the heal worked, so
-// the next stale restart may heal again.
+// the next stale restart may heal again. Also marks this page load as the
+// healed one (HEALED_LOAD) for the second guard above. Called first thing
+// in main.ts, so "booted" means exactly "the entry chunk ran".
 export function consumeStaleShellHeal(): boolean {
   try {
     if (sessionStorage.getItem(KEY) !== '1') return false
     sessionStorage.setItem(KEY, '2')
-    return true
   } catch {
     return false
   }
+  globals[HEALED_LOAD] = 1
+  return true
 }
