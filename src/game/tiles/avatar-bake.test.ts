@@ -1,11 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeStorage } from '../../test/fake-storage'
-import { bakeDoll, bakedDollUrl, dropBakedDoll, ensureDollBaked, isBakeableLoader, storeBakedDoll } from './avatar-bake'
+import { BAKE_CAP, bakeDoll, bakedDollUrl, dropBakedDoll, ensureDollBaked, isBakeableLoader, storeBakedDoll } from './avatar-bake'
 import type { TileLoader, TileSprite } from './tile-loader'
 import type { TileRef } from './tile-view'
-
-const BAKE_CAP = 160 // mirrors avatar-bake's cap
 
 const spec = (t: number): TileRef[] => [{ t, tex: 3 }]
 

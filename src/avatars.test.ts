@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { listAllAvatars, listAvatars, recordAvatarOutcome, saveAvatar, type Avatar } from './avatars'
+import { STORE_CAP, listAllAvatars, listAvatars, recordAvatarOutcome, saveAvatar, type Avatar } from './avatars'
 
 // avatars.ts reads the global `localStorage`. This env's built-in one (Node's
 // experimental impl, enabled without a valid file) is unusable — and avatars.ts
@@ -152,13 +152,13 @@ describe('avatars store', () => {
     expect(listAvatars().map((a) => a.doll)).toEqual([[[5, 32]], [[4, 32]], [[3, 32]], [[2, 32]]])
   })
 
-  it('caps the history at 20, evicting the oldest', () => {
-    for (let i = 0; i < 21; i++) {
+  it('caps the history at STORE_CAP, evicting the oldest', () => {
+    for (let i = 0; i <= STORE_CAP; i++) {
       saveAvatar(rec({ gameId: `dcss-g${i}`, doll: [[i, 32]] }))
     }
     const dolls = listAllAvatars().map((a) => a.doll)
-    expect(dolls).toHaveLength(20)
-    expect(dolls[0]).toEqual([[20, 32]])  // newest kept
+    expect(dolls).toHaveLength(STORE_CAP)
+    expect(dolls[0]).toEqual([[STORE_CAP, 32]])  // newest kept
     expect(dolls).not.toContainEqual([[0, 32]]) // oldest rolled off
   })
 

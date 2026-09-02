@@ -26,8 +26,9 @@
 const KEY = 'pocketzot:avatars'
 // NUL delimiter — can't appear in URLs, usernames, or DCSS character names.
 const SEP = '\x00'
-// Retained history vs shown on the login row.
-const STORE_CAP = 20
+// Retained history vs shown on the login row. STORE_CAP is exported because
+// the bake LRU (game/tiles/avatar-bake.ts) is sized from it.
+export const STORE_CAP = 32
 const VISIBLE_CAP = 4
 // The reroll rule, in one place: a turn drop is a new character only when it
 // lands at game start (a fresh char's first capture is at ~turn 0; the margin

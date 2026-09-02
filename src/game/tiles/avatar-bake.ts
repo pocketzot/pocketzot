@@ -17,18 +17,19 @@
 // appearance change or a layout shift just misses and re-bakes when a
 // same-origin atlas next resolves.
 
+import { STORE_CAP } from '../../avatars'
 import type { TileLoader } from './tile-loader'
 import { CELL, spritePlacement, type TileRef } from './tile-view'
 
 const BAKE_KEY = 'pocketzot:avatar-bakes'
 // NUL can't appear in a fingerprint (base36) or the numeric spec hash.
 const SEP = '\x00'
-// Sized for the widest consumer: the offline score list shows up to ~100
-// games, plus the crypt's 20-entry history, plus the ~20 fixed rune/Orb
-// sprites rune-sprites.ts bakes under `runes#<build>` — at ~1 KB per bake
-// this is still ~160 KB of localStorage. Insertion-order LRU, oldest-stored
-// evicted.
-const BAKE_CAP = 160
+// Sized for the widest consumers: the offline score list (uncapped; ~100
+// games is a generous bound for one device, budgeted at 128), the crypt's
+// history (STORE_CAP), and the ~20 fixed rune/Orb sprites rune-sprites.ts
+// bakes under `runes#<build>` — at ~1 KB per bake still under 200 KB of
+// localStorage. Insertion-order LRU, oldest-stored evicted.
+export const BAKE_CAP = 128 + STORE_CAP + 20
 
 // Parsed-map memo keyed on the raw stored string (same idiom as
 // offline-state.ts): a paint looks up one bake per doll, and re-parsing a
