@@ -341,7 +341,8 @@ describe('renderCharCard', () => {
     expect(card.querySelector('.char-card-god')?.textContent).toBe('Was a Follower of Trog.')
     expect(card.querySelector('.char-card-stats')?.textContent?.replace(/\u200b/g, ''))
       .toBe('AC:2 EV:11 SH:0·Str:21 Int:4 Dex:9')
-    expect(card.querySelector('.char-card-stats .char-card-st-str')?.textContent).toBe('Str:21')
+    // The tint covers the label only; the value is plain row text.
+    expect(card.querySelector('.char-card-stats .char-card-st-str')?.textContent).toBe('Str:')
     const meta = card.querySelector('.char-card-meta')?.textContent
     expect(meta).toContain('0 pts')
     expect(meta).toContain('00:00:25')

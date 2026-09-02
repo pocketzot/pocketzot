@@ -282,12 +282,15 @@ function joinedLine(
   return el
 }
 
-// Color-coded per stat (à la dcss-stats) — each label+value pair is one
-// tinted span, separators plain. Label casing and group order follow the
-// HUD (and the morgue's char block): AC/EV/SH first, then Str/Int/Dex.
-// Each trio is a nowrap group, so a phone line too narrow for the whole
-// row (seen on-device: iOS metrics run wider than desktop WebKit) breaks
-// at the middot into two aligned halves, never mid-group.
+// Color-coded per stat: the tint sits on the "AC:" label only, the value
+// stays in the HUD's lightgrey. Tinting the whole pair and
+// the HUD's brown caption were both tried and read worse (the first buries
+// the number, the second makes all six pairs identical). Label casing and
+// group order follow the HUD (and the morgue's char block): AC/EV/SH
+// first, then Str/Int/Dex. Each trio is a nowrap group, so a phone line
+// too narrow for the whole row (seen on-device: iOS metrics run wider than
+// desktop WebKit) breaks at the middot into two aligned halves, never
+// mid-group.
 function statsRow(s: NonNullable<CharCardModel['stats']>): HTMLElement {
   const row = document.createElement('div')
   row.className = 'char-card-stats'
@@ -301,10 +304,10 @@ function statsRow(s: NonNullable<CharCardModel['stats']>): HTMLElement {
     grp.className = 'char-card-fact'
     pairs.forEach(([label, v], i) => {
       if (i > 0) grp.append(' ')
-      const span = document.createElement('span')
-      span.className = `char-card-st-${label.toLowerCase()}`
-      span.textContent = `${label}:${v}`
-      grp.append(span)
+      const cap = document.createElement('span')
+      cap.className = `char-card-st-${label.toLowerCase()}`
+      cap.textContent = `${label}:`
+      grp.append(cap, String(v))
     })
     row.append(grp)
   })

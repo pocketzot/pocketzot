@@ -5320,8 +5320,9 @@ html.map-hold, html.map-hold * {
 .char-card-kind-dead { color: var(--danger); }
 .char-card-kind-quit, .char-card-kind-left, .char-card-kind-saved, .char-card-kind-other { color: var(--text-dim); }
 .char-card-god { color: var(--text-dim); font-size: 0.78rem; font-style: italic; }
-.char-card-stats { color: var(--text-dim); font-size: 0.75rem; font-family: var(--font-mono); }
-/* Per-stat tints (à la dcss-stats), muted to sit inside the amber theme. */
+/* Values in the HUD's lightgrey (.fg7, #hud-stats' default). */
+.char-card-stats { color: #babdb6; font-size: 0.75rem; font-family: var(--font-mono); }
+/* Per-stat label tints, muted to sit inside the amber theme. */
 .char-card-st-str { color: #e07070; }
 .char-card-st-int { color: #7d93f0; }
 .char-card-st-dex { color: #8fbf5a; }
