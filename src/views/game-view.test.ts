@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { buildGameView, type SpectateTarget } from './game-view'
 import { ENABLE_SPELL_TAB } from '../game/input/touch'
 import type { WsConnection } from '../ws/connection'
@@ -27,7 +27,7 @@ interface Harness {
   dispatch: (msg: unknown) => void
 }
 
-function setup(spectating?: SpectateTarget): Harness {
+function setup(spectating?: SpectateTarget, gameId = ''): Harness {
   const send = vi.fn()
   const conn = {
     wsUrl: 'wss://test.example/socket',
@@ -39,7 +39,7 @@ function setup(spectating?: SpectateTarget): Harness {
     close: vi.fn(),
   } as unknown as WsConnection
   const onLobby = vi.fn()
-  const view = buildGameView(conn, onLobby, spectating)
+  const view = buildGameView(conn, onLobby, spectating, undefined, '', gameId)
   document.body.appendChild(view)
   return { view, send, onLobby, dispatch: (msg) => conn.onMessage(msg as ServerMsg) }
 }
@@ -2120,5 +2120,54 @@ describe('minimap lens suspend/restore while spectating', () => {
     expect(lens(h)).toBeNull()  // still one overlay up
     h.dispatch({ msg: 'ui-pop' })
     expect(lens(h)).not.toBeNull()
+  })
+})
+
+// The creation counter's consuming frame. A spectator joining while a creation
+// screen is up (watcher bots attach as soon as the lobby lists the game) makes
+// crawl broadcast a cell-less {clear:true} map to the player too — see the
+// 'map' case in game-view.ts for the source path. Counting that would mint
+// characters that were never born, once per abort/reroll attempt.
+describe('newchar counting', () => {
+  const realDev = import.meta.env.DEV
+  let beacons: string[]
+
+  beforeEach(() => {
+    beacons = []
+    // counter.ts no-ops in DEV and posts via sendBeacon otherwise.
+    import.meta.env.DEV = false
+    Object.defineProperty(navigator, 'sendBeacon', {
+      value: (url: string) => { beacons.push(url); return true },
+      configurable: true,
+    })
+  })
+
+  afterEach(() => { import.meta.env.DEV = realDev })
+
+  const chars = (): string[] => beacons.filter((u) => u.includes('newchar'))
+
+  it('ignores a cell-less map arriving while the creation screen is up', () => {
+    const h = setup(undefined, 'dcss-0.34')
+    h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
+    h.dispatch({ msg: 'map', clear: true })
+    expect(chars()).toEqual([])
+  })
+
+  it('counts the character once the starting view arrives', () => {
+    const h = setup(undefined, 'dcss-0.34')
+    h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
+    h.dispatch({ msg: 'map', clear: true })
+    h.dispatch({ msg: 'map', clear: true, cells: [{ x: 5, y: 6, g: '@', col: 7 }] })
+    // The latched 'newchar' twin rides along, but its Set is module state
+    // shared with every other test here — assert the unlatched row, which
+    // can't depend on what ran first.
+    expect(chars().filter((u) => u === '/api/e?e=newchar-each')).toHaveLength(1)
+  })
+
+  it('counts nothing for a spectated game', () => {
+    const h = setup({ username: 'bob' } as SpectateTarget, 'dcss-0.34')
+    h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
+    h.dispatch({ msg: 'map', clear: true, cells: [{ x: 5, y: 6, g: '@', col: 7 }] })
+    expect(chars()).toEqual([])
   })
 })

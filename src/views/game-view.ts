@@ -1527,8 +1527,18 @@ export function buildGameView(
         // version creation guard's "nothing rendered" case can't apply.
         mapSeen = true
         disarmCreationGuard()
-        // A map message after the creation grid = the character exists.
-        if (sawNewgameChoice) {
+        // A map message after the creation grid = the character exists — but
+        // only one carrying cells. A spectator joining while a creation screen
+        // is up (watcher bots attach as soon as the lobby lists the game) makes
+        // crawl broadcast a cell-less {clear:true} map to the PLAYER too:
+        // spectator_joined → _send_everything → _send_map(false), which lacks
+        // the m_view_loaded gate that redraw()'s send has (tileweb.cc:472,
+        // 2227, 2334). Counting that frame invents a character that was never
+        // born — and the abort/reroll loop repeats it per attempt. At most one
+        // per crawl process: that first send also clears m_need_full_map, and
+        // nothing else in the object changes during creation, so a second
+        // joiner's map is empty and json_treat_as_empty drops it unsent.
+        if (sawNewgameChoice && (msg.cells?.length ?? 0) > 0) {
           sawNewgameChoice = false
           if (!spectating && gameId) {
             const offline = gameId === 'offline' ? '-offline' as const : ''
