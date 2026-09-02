@@ -457,6 +457,7 @@ html, body {
 .login-offline-count {
   flex: 0 0 auto;
   font-size: 0.78rem;
+  font-style: italic;
   color: var(--text-dim);
   white-space: nowrap;
 }
