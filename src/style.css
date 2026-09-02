@@ -2417,6 +2417,29 @@ html.map-hold, html.map-hold * {
   line-height: 1;
   color: var(--text-dim);  /* quiet neutral, not the fg14 yellow of the name line */
   cursor: pointer;
+  /* Positioned for the same reason as .hud-place-chip: the padded box must
+     hit-test above the next row's inline text, which otherwise takes the
+     bottom 0.4rem back. */
+  position: relative;
+}
+/* Hit-area extension, inward only. The padded box is ~23×29 css px, and in
+   landscape it is pinned to the screen's top-right: the sidebar starts at
+   the physical top edge (phones report --safe-top 0 there) and its
+   --safe-right inset lands the gear inside the display's rounded corner
+   (measured: iPhone 15 Pro, corner radius ≈ safe-right), where a fingertip's
+   contact centroid gets pushed inward and misses. Growing up/right is
+   impossible (screen edge; #game-hud's landscape overflow clips there), so
+   grow down and left, where the finger lands — layout-free (absolute pseudo
+   takes no row width from #hud-title) and invisible. bottom is sized to
+   stop at the Health line; left to ~44px total width. Nothing under the
+   extension (species line, gold) is tappable. */
+.hud-settings-chip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: -0.7rem;
+  left: -1.3rem;
 }
 .hud-settings-chip:active { opacity: 0.5; }  /* dim on press */
 
