@@ -149,6 +149,21 @@ export function propagateDarkgreyColor(body: string): string {
 // key-help rows) are skipped by the [^<] guard.
 export const HANG_MARK = '\u0001'
 
+// The `label:` + padding prefix of a formatter row: m[1] the label, m[2] the
+// padding, m[0].length the description column. The formatter's `%-*s` pad
+// (MAX_ARTP_NAME_LEN + 1 = 11) pads but never separates, so a label that
+// exactly fills the column arrives with NO space before the text — weapon
+// brands (describe.cc:1641, trunk and 0.34.1 alike) do this for
+// "Foul flame:", whose continuation lines are still indented 11. That
+// zero-pad shape is the fallback, tried only when no padded colon exists,
+// and only unwrapHangingIndents' multi-line branch (continuation lines
+// validating the column) ever acts on it — a lone "Word:text" line stays
+// prose. The row renders verbatim ("Foul flame:It …"), hanging at 11.
+function matchLabel(line: string): RegExpMatchArray | null {
+  return line.match(/^([^\s<][^<]*?:)( +)(?=\S)/)
+    ?? line.match(/^([^\s<][^<]{0,17}?:)()(?=[^\s<])/)
+}
+
 export function unwrapHangingIndents(body: string): string {
   const lines = body.split('\n')
   const out: string[] = []
@@ -168,7 +183,7 @@ export function unwrapHangingIndents(body: string): string {
     const line = lines[i]
     const shielded = activeColor === 'darkgrey'
     trackTags(line)
-    const m = shielded ? null : line.match(/^([^\s<][^<]*?:)( +)(?=\S)/)
+    const m = shielded ? null : matchLabel(line)
     if (m) {
       const col = m[1].length + m[2].length
       const contRe = new RegExp(`^ {${col}}(?=\\S)`)
@@ -255,7 +270,7 @@ export function renderBodyLines(rawBody: string, highlight: string, terminal = f
     let hangStyle = ''
     if (hang) {
       line = line.replace(HANG_MARK, '')
-      const pm = line.match(/^[^\s<][^<]*?:( +)(?=\S)/)
+      const pm = matchLabel(line)
       const col = pm ? pm[0].length : 0
       // Hang wrapped text at the description column so the block stays aligned.
       // Exception: the mundane-ego run-in form `'Of X': ` hangs at a compact

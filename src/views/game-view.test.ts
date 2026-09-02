@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { buildGameView, type SpectateTarget } from './game-view'
+import { unwrapHangingIndents } from './overlay-body'
 import { ENABLE_SPELL_TAB } from '../game/input/touch'
 import type { WsConnection } from '../ws/connection'
 import type { ServerMsg, ClientMsg, GameExit } from '../ws/types'
@@ -674,6 +675,37 @@ describe('ui-push / ui-pop overlay stack', () => {
     expect(radiusLine?.classList.contains('overlay-line--hang')).toBe(false)
     expect(radiusLine?.textContent).toBe('Mesmerism radius: 2 (max 4)')
     expect(lines.some(el => el.textContent?.includes('\u0001'))).toBe(false)
+  })
+
+  it('unwraps a zero-padded brand block whose label exactly fills the 11 column', () => {
+    const h = setup()
+    // describe.cc:1641 pads weapon-brand labels with %-11s: "Foul flame:" is
+    // 11 chars, so line 1 has no space before the text while continuation
+    // lines still carry the 11-space column indent.
+    const body = [
+      'Damage rating: 45 (Base 15 x 140% (Str)).',
+      '',
+      'Foul flame:It has been infused with foul flame, dealing an additional',
+      '           three-quarters damage to holy beings, an additional one-quarter',
+      '           damage to undead and demons, and an additional half damage to all',
+      '           others, so long as it pierces armour.',
+      '',
+      'Umbra:     It surrounds you with an aura of shadow.',
+    ].join('\n')
+    h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'E - the +1 eveningstar', body })
+    const hangEls = [...overlay(h).querySelectorAll<HTMLElement>('.overlay-line--hang')]
+    // Wire text stays verbatim (no space inserted); both rows hang at the
+    // formatter's 11 column.
+    expect(hangEls.map(el => el.textContent)).toEqual([
+      'Foul flame:It has been infused with foul flame, dealing an additional '
+        + 'three-quarters damage to holy beings, an additional one-quarter '
+        + 'damage to undead and demons, and an additional half damage to all '
+        + 'others, so long as it pierces armour.',
+      'Umbra:     It surrounds you with an aura of shadow.',
+    ])
+    expect(hangEls.map(el => el.style.getPropertyValue('--hang-col'))).toEqual(['11ch', '11ch'])
+    // A single "Word:text" line with no continuation is left as prose.
+    expect(unwrapHangingIndents('Note:this is prose\nnext line')).toBe('Note:this is prose\nnext line')
   })
 
   it('routes the other server table shapes correctly (no hanging-indent marks)', () => {

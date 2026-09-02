@@ -185,9 +185,21 @@ function buildCases(): Case[] {
   for (const { key, desc } of parseEgosTxt()) {
     const unwrapped = unwrapDesc(desc).trim()
     if (!unwrapped) continue
-    // Only armour egos go through _format_prop_desc (describe.cc:2338 mundane
-    // `'Of X': ` form, describe.cc:2335 artefact 11-pad form). Weapon and
-    // missile ego strings are emitted as plain paragraphs.
+    // Armour egos go through _format_prop_desc (describe.cc:2338 mundane
+    // `'Of X': ` form, describe.cc:2335 artefact 11-pad form); weapon brands
+    // through the same formatter behind `Terse:` padded to 11
+    // (describe.cc:1633 "Hack to match artefact prop formatting") — a terse
+    // name that fills the column ("Foul flame:") gets NO separating space.
+    // Missile ego strings are emitted as plain paragraphs.
+    // (`{{ lua }}` templates are evaluated server-side before formatting —
+    // not replicated here, so those entries are skipped.)
+    const brand = key.match(/^[^(]+\(([^)]+)\) weapon ego$/)
+    if (brand && !desc.includes('{{')) {
+      const terse = brand[1]
+      const label = (terse[0].toUpperCase() + terse.slice(1) + ':').padEnd(MAX_ARTP_NAME_LEN + 1)
+      cases.push({ source: `brand:${key}`, label: label.trim(), desc: unwrapped,
+        wire: formatPropDesc(label, unwrapped) })
+    }
     if (key.endsWith('armour ego')) {
       const name = key.split(' (')[0]
       const label = `'Of ${name}': `
@@ -285,8 +297,10 @@ describe.skipIf(!hasRef)('unwrapHangingIndents vs real DCSS strings', () => {
       if (isMulti) joined++
       else collapsed++
       // fidelity: marked text must contain exactly label + desc, word for word
+      // (a label that fills its column has no separating space on the wire —
+      // "Foul flame:It …" — and is kept verbatim, so it joins the first word)
       const got = words(result.replaceAll(HANG_MARK, ''))
-      const want = words(c.label + ' ' + c.desc)
+      const want = words(c.label + (c.wire.startsWith(c.label + ' ') ? ' ' : '') + c.desc)
       if (JSON.stringify(got) !== JSON.stringify(want)) {
         anomalies.push(`${c.source}: word mismatch\n got: ${got.join(' ')}\nwant: ${want.join(' ')}`)
       }
@@ -298,7 +312,7 @@ describe.skipIf(!hasRef)('unwrapHangingIndents vs real DCSS strings', () => {
     }
     const bySource = (p: string) => cases.filter(c => c.source.startsWith(p)).length
     writeFileSync('/tmp/hang-sweep-stats.txt', [
-      `cases: ${cases.length} (armour-ego: ${bySource('ego:')}, ego-pad: ${bySource('ego-pad:')}, dbrand/descrip: ${bySource('DBRAND') + bySource('DESCRIP')}, artp: ${bySource('artp:')})`,
+      `cases: ${cases.length} (armour-ego: ${bySource('ego:')}, ego-pad: ${bySource('ego-pad:')}, brand: ${bySource('brand:')}, dbrand/descrip: ${bySource('DBRAND') + bySource('DESCRIP')}, artp: ${bySource('artp:')})`,
       `multi-line joined: ${joined}`,
       `single-line collapsed: ${collapsed}`,
       `untouched prose: ${untouched}`,
