@@ -13,8 +13,7 @@ Notable changes to PocketZot, newest first.
 
 - In `X` mode, you can now drag to pan the level map. Tapping it still
   places the cursor at that location.
-- Fixed the description layout for a brand whose label leaves no space
-  before the text.
+- Other minor improvements.
 
 ## 2026-08-31
 
