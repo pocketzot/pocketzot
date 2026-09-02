@@ -9,6 +9,11 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-01
+
+- In `X` mode, you can now drag to pan the level map. Tapping it still
+  places the cursor at that location.
+
 ## 2026-08-31
 
 - Added a Thanks section to the About page.
@@ -17,7 +22,7 @@ Notable changes to PocketZot, newest first.
 
 - New map touch interactions: while targeting or examining (`x`), tap or
   drag to move the cursor. In `X` mode, tap a location to send the cursor
-  there. Long press any map cell to see what's there.
+  there. Long press any map cell to inspect it.
 
 ## 2026-08-28
 
