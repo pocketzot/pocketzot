@@ -74,6 +74,7 @@ My thanks to the following people, whose feedback, feature requests, and bug rep
 - Tanach
 - yfiyjf
 - Tremis
+- AscendedTourist
 - AllRuneOrDeath
 - Ralph Hayward
 - MudToeberg
