@@ -62,6 +62,7 @@ export class MapView {
     this.viewCenter = { ...c }
     return changed
   }
+  getViewCenter(): { x: number; y: number } { return { ...this.viewCenter } }
 
   // No-op in ASCII mode: HP/MP live in the HUD, not under the player glyph.
   // Present so callers can treat MapView and TileMapView uniformly (the tile

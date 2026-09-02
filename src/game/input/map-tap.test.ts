@@ -32,14 +32,16 @@ function setup(cellAt?: (x: number, y: number) => { x: number; y: number } | nul
   const hovers: { x: number; y: number }[] = []
   const presses: { x: number; y: number }[] = []
   const taps: { x: number; y: number }[] = []
+  const pans: { x: number; y: number }[] = []
   attachMapGestures(wrap, {
     // Default fake geometry: 10px cells, dungeon origin at the screen origin.
     hitTester: () => cellAt ?? ((x, y) => ({ x: Math.floor(x / 10), y: Math.floor(y / 10) })),
     onHover: (c) => hovers.push(c),
     onLongPress: (c) => presses.push(c),
     onTap: (c) => taps.push(c),
+    onPan: (d) => pans.push(d),
   })
-  return { wrap, grid, hovers, presses, taps }
+  return { wrap, grid, hovers, presses, taps, pans }
 }
 
 describe('attachMapGestures', () => {
@@ -83,6 +85,66 @@ describe('attachMapGestures', () => {
     fire(grid, 'pointermove', 25, 15)  // cell (2,1)
     fire(grid, 'pointerup', 25, 15)
     expect(hovers).toEqual([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 1 }])
+  })
+
+  it('a drag reports the shift that puts the touch-down cell back under the finger', () => {
+    const { grid, pans } = setup()
+    fire(grid, 'pointerdown', 5, 5)     // anchor (0,0)
+    fire(grid, 'pointermove', 6, 5)     // within slop — no pan yet
+    fire(grid, 'pointermove', 25, 15)   // finger over (2,1): view must move by (-2,-1)
+    fire(grid, 'pointermove', 26, 16)   // still (2,1); the fixed fake grid didn't
+                                        // follow, so the same shift is re-reported
+    fire(grid, 'pointermove', 35, 15)   // (3,1)
+    fire(grid, 'pointerup', 35, 15)
+    expect(pans).toEqual([{ x: -2, y: -1 }, { x: -2, y: -1 }, { x: -3, y: -1 }])
+  })
+
+  it('a drag settles once the caller has moved the view (live-offset tester)', () => {
+    // A tester that models the caller shifting its origin by each pan
+    // (registered after the recognizer on the same element, so it runs
+    // after each pan is reported).
+    let off = { x: 0, y: 0 }
+    const { grid, pans } = setup((x, y) => ({ x: off.x + Math.floor(x / 10), y: off.y + Math.floor(y / 10) }))
+    grid.parentElement!.addEventListener('pointermove', () => {
+      const last = pans[pans.length - 1]
+      if (last) off = { x: off.x + last.x, y: off.y + last.y }
+      pans.length = 0
+    })
+    fire(grid, 'pointerdown', 5, 5)
+    fire(grid, 'pointermove', 25, 15)
+    expect(off).toEqual({ x: -2, y: -1 })
+    fire(grid, 'pointermove', 26, 16)   // anchor is under the finger again — quiet
+    expect(off).toEqual({ x: -2, y: -1 })
+    fire(grid, 'pointermove', 15, 16)   // back one cell
+    expect(off).toEqual({ x: -1, y: -1 })
+  })
+
+  it('no pan from a still hold or a tap, and none when touch-down was off-grid', () => {
+    const { grid, pans } = setup()
+    fire(grid, 'pointerdown', 25, 35)
+    vi.advanceTimersByTime(LONG_PRESS_MS + 50)
+    fire(grid, 'pointerup', 25, 35)
+    fire(grid, 'pointerdown', 25, 35)
+    fire(grid, 'pointerup', 25, 35)
+    expect(pans).toEqual([])
+    const nulls = setup(() => null)
+    fire(nulls.grid, 'pointerdown', 5, 5)
+    fire(nulls.grid, 'pointermove', 45, 45)
+    expect(nulls.pans).toEqual([])
+  })
+
+  it('pointercancel ends the gesture: no tap, and later moves neither hover nor pan', () => {
+    const { grid, hovers, taps, pans } = setup()
+    fire(grid, 'pointerdown', 5, 5)
+    fire(grid, 'pointermove', 25, 15)
+    fire(grid, 'pointercancel', 25, 15)
+    const seen = { hovers: hovers.length, pans: pans.length }
+    fire(grid, 'pointermove', 45, 45)
+    fire(grid, 'pointerup', 45, 45)
+    vi.advanceTimersByTime(LONG_PRESS_MS + 50)
+    expect(hovers.length).toBe(seen.hovers)
+    expect(pans.length).toBe(seen.pans)
+    expect(taps).toEqual([])
   })
 
   it('a still hold fires long-press at the start cell', () => {

@@ -245,6 +245,7 @@ export class TileMapView {
     this.viewCenter = { ...c }
     return changed
   }
+  getViewCenter(): { x: number; y: number } { return { ...this.viewCenter } }
   // Mirrors MapView.setFontScale. Stored as a multiplier on cellPx, applied
   // in fitToContainer. X-mode calls this with 0.7 to zoom out (smaller cells
   // ⇒ more of them fit, courtesy of the full-bleed fill); back to 1.0

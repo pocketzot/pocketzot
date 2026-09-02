@@ -222,6 +222,18 @@ describe('MapStore.mfBounds', () => {
     expect(store.mfBounds()).toBeNull()
   })
 
+  it('memo tracks interleaved reads: mf writes widen it, mf-less merges leave it', () => {
+    const store = new MapStore()
+    store.merge([{ x: 5, y: 5, g: '.', mf: 1 }])
+    expect(store.mfBounds()).toEqual({ left: 5, top: 5, right: 5, bottom: 5 })
+    store.merge([{ x: 9, y: 1, g: '#' }])            // no mf: not minimap-worthy, box unchanged
+    expect(store.mfBounds()).toEqual({ left: 5, top: 5, right: 5, bottom: 5 })
+    store.merge([{ x: 9, y: 1, mf: 3 }])             // mf lands later: box widens
+    expect(store.mfBounds()).toEqual({ left: 5, top: 1, right: 9, bottom: 5 })
+    store.merge([{ x: 9, y: 1, mf: 0 }])             // back to MF_UNSEEN: box shrinks
+    expect(store.mfBounds()).toEqual({ left: 5, top: 5, right: 5, bottom: 5 })
+  })
+
   it('excludes mf-less and MF_UNSEEN (mf:0) cells', () => {
     const store = new MapStore()
     store.merge([

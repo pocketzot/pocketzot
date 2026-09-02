@@ -121,5 +121,16 @@ describe('MapJumper', () => {
       j.tap({ x: 4, y: 0 }, { x: 5, y: 0 })
       expect(sent[1]).toBe('l')
     })
+
+    it('exposes the (clamped) destination while in flight, null once landed', () => {
+      const { j } = make({ left: 0, top: 0, right: 6, bottom: 6 })
+      expect(j.destination()).toBeNull()
+      j.tap({ x: 0, y: 0 }, { x: 9, y: 0 })
+      expect(j.destination()).toEqual({ x: 6, y: 0 })
+      for (let x = 1; x <= 5; x++) j.onCursor({ x, y: 0 })
+      expect(j.destination()).toEqual({ x: 6, y: 0 })
+      j.onCursor({ x: 6, y: 0 })
+      expect(j.destination()).toBeNull()
+    })
   })
 })

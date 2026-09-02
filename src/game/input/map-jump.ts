@@ -114,6 +114,14 @@ export class MapJumper {
     if (this.pending > 0 && --this.pending === 0) this.reset()
   }
 
+  // Where the in-flight walk lands, null when nothing is in flight. The
+  // view-center policy reads it (map-pan.ts): a walk reports the cursor at
+  // every intermediate cell, and one flying in from off-screen must not
+  // drag the view along — the destination is the tapped, on-screen cell.
+  destination(): Pt | null {
+    return this.expected
+  }
+
   // Leaving X mode (or any cursor clear) forgets the in-flight landing.
   reset(): void {
     this.expected = null

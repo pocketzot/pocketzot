@@ -4,7 +4,9 @@
 // and moves the examine cursor in `x` mode — and a still long-press is a
 // right-click — `click_cell` button 3, describe. There is deliberately no
 // left-click mapping: movement stays on the d-pad, so a stray map tap can
-// never move the character or fire.
+// never move the character or fire. In the `X` level map, where the engine
+// ignores hover, the drag instead pans the view locally (onPan; policy in
+// map-pan.ts) and a tap walks the cursor there (map-jump.ts).
 
 // Hold duration. Under the platform long-press defaults (iOS 500,
 // Android 400): those guard costly or modal actions, while describe is
@@ -52,6 +54,15 @@ export interface MapGestureOpts {
   // engine ignores hover and a tap becomes a synthesized cursor jump
   // (map-jump.ts). Fires at the touch-down cell, not the lift point.
   onTap?(cell: { x: number; y: number }): void
+  // Drag as a grab: the cell under the finger at touch-down is the anchor,
+  // and each move past SLOP_PX reports how far the view must shift to put
+  // the anchor back under the finger (anchor − cell now under it). The
+  // caller applies it to its view center and repaints; the hit tester reads
+  // offsets live, so the next event sees the anchor under the finger again
+  // and reports nothing until the finger crosses another cell. Optional —
+  // the X level map pans locally on it (map-pan.ts); in TARGET modes the
+  // drag is the hover stream and the caller ignores this.
+  onPan?(delta: { x: number; y: number }): void
 }
 
 // Binds to a stable ancestor of #map-grid (mapWrap in game-view, like the
@@ -65,6 +76,9 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
   let timer: number | null = null
   let lastHover: { x: number; y: number } | null = null
   let hit: CellHitTester | null = null
+  // The grab anchor for onPan, set at touch-down; null once the slop is
+  // crossed with nothing under the finger, or when there's no onPan.
+  let anchor: { x: number; y: number } | null = null
 
   // Set from the moment the long-press fires until the finger lifts. The
   // describe overlay opens UNDER the still-held finger, and iOS's native
@@ -79,11 +93,11 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
     activePointer = null
     lastHover = null
     hit = null
+    anchor = null
     release()
   }
 
-  const hoverAt = (clientX: number, clientY: number): void => {
-    const cell = hit?.(clientX, clientY)
+  const hoverCell = (cell: { x: number; y: number } | null): void => {
     if (!cell) return
     // Per-gesture dedupe, like the reference renderer's last_sent_cursor —
     // a drag re-fires only when the finger crosses into a new cell.
@@ -102,12 +116,18 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
     // Test events are MouseEvent-shaped (happy-dom has no PointerEvent
     // constructor with pointerId); missing ids collapse to 0 consistently.
     activePointer = e.pointerId ?? 0
+    // Touch gets implicit capture, a mouse doesn't: a drag lifted outside
+    // the element would never end the gesture, and the next stray move
+    // would pan (seen in desktop WebKit). Capture makes both deliver here.
+    try { el.setPointerCapture(e.pointerId) } catch { /* test MouseEvent (no id) or detached */ }
     hit = opts.hitTester()
     startX = e.clientX
     startY = e.clientY
+    const cell = hit?.(startX, startY) ?? null
+    anchor = opts.onPan ? cell : null
     // Hover fires immediately on touch — instant aim feedback, and a
     // harmless prefix to a long-press (the reference's hover-precedes-click).
-    hoverAt(e.clientX, e.clientY)
+    hoverCell(cell)
     timer = window.setTimeout(() => {
       timer = null
       activePointer = null
@@ -127,7 +147,13 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
       window.clearTimeout(timer)
       timer = null
     }
-    hoverAt(e.clientX, e.clientY)
+    const now = hit?.(e.clientX, e.clientY) ?? null
+    hoverCell(now)
+    // Past the slop (timer gone) the drag is also a grab — see onPan
+    // (anchor is set only when the caller passed one).
+    if (timer == null && anchor && now && (now.x !== anchor.x || now.y !== anchor.y)) {
+      opts.onPan!({ x: anchor.x - now.x, y: anchor.y - now.y })
+    }
   })
 
   el.addEventListener('pointerup', (e) => {

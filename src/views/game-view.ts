@@ -18,7 +18,8 @@ import { isOverlayOpen, closeTopOverlay } from './overlay'
 import { handleKeydown, CK_UP, CK_DOWN, CK_PGUP, CK_PGDN, CK_HOME, CK_END } from '../game/input/keyboard'
 import { createShiftToggle } from '../game/input/shift-state'
 import { attachMapGestures, canDescribe, canHover } from '../game/input/map-tap'
-import { MapJumper } from '../game/input/map-jump'
+import { MapJumper, clampToBox } from '../game/input/map-jump'
+import { keepLocalCenter } from '../game/input/map-pan'
 import { uiColor, escHtml, dcssToHtml } from '../game/dcss-colors'
 import { htmlToRuns, exportScreenPng, screenSlug, type DcssRun } from './screen-export'
 import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
@@ -170,6 +171,10 @@ export function buildGameView(
   // where the loader lands when it wasn't forwarded from the lobby.
   if (import.meta.env.DEV && loader) (window as unknown as { __dcssLoader: TileLoader }).__dcssLoader = loader
   let mapView: MapView | TileMapView = new MapView(store)
+  // Live view for console poking (it's swapped by setRenderMode, hence a getter).
+  if (import.meta.env.DEV) {
+    Object.defineProperty(window, '__dcssMapView', { configurable: true, get: () => mapView })
+  }
   // Map rendering is synchronous per message, mirroring the reference client
   // (display.js handle_map_message): the view center moves ONLY on map.vgrdc
   // — never on player.pos — and the pan-blit + dirty repaint happen right in
@@ -488,6 +493,9 @@ export function buildGameView(
   let pendingDumpUrl: string | null = null
   let inXMode = false
   let exitedXModeForInput = false
+  // The server's last vgrdc. In X mode the view center may deliberately
+  // differ from it (local drag-pan, map-pan.ts); exitXMode restores it.
+  let serverCenter: { x: number; y: number } | null = null
   // Menu filter input (Ctrl-F → "Search for what? (regex)"). Server sends a
   // title_prompt to start one — and an init_input/close_input pair right
   // alongside, because the resumable_line_reader inherits line_reader's
@@ -772,6 +780,18 @@ export function buildGameView(
     onTap: (cell) => {
       if (spectating || !inXMode || !cursorLoc) return
       mapJumper.tap(cursorLoc, cell)
+    },
+    // X level map only: drag pans the view locally (wire-silent, so
+    // spectators too). The center is clamped to the known-cell box so the
+    // map can't be dragged out of sight; the map handler decides whether
+    // the pan survives the server's re-centering (map-pan.ts).
+    onPan: (delta) => {
+      if (!inXMode) return
+      const c = mapView.getViewCenter()
+      const next = clampToBox({ x: c.x + delta.x, y: c.y + delta.y }, store.mfBounds())
+      if (!mapView.setViewCenter(next)) return
+      mapView.panRender()
+      scheduleMinimapRepaint()
     },
   })
 
@@ -1070,7 +1090,7 @@ export function buildGameView(
     // CSS hook for mode-dependent chrome (e.g. the floating log's scrim
     // lightens over tiles — see --msglog-bg in style.css).
     view.classList.toggle('tiles-mode', mode === 'tiles')
-    const center = { x: store.playerPos.x, y: store.playerPos.y }
+    const center = mapView.getViewCenter()  // survives an X-mode drag-pan
     fontScaleObserver.unobserve(mapView.element)
     const oldEl = mapView.element
     const next: MapView | TileMapView = mode === 'tiles' ? new TileMapView(store) : new MapView(store)
@@ -1551,8 +1571,15 @@ export function buildGameView(
         // map message whenever it matters — roughly half of them in
         // practice); setViewCenter returns true only on a real pan. The
         // player handler never pans — reference parity (its player.js has no
-        // view-center writes at all).
-        const panned = msg.vgrdc ? mapView.setViewCenter(msg.vgrdc) : false
+        // view-center writes at all). In X mode vgrdc is pinned to the
+        // cursor every redraw, so a local drag-pan decides whether to honor
+        // it — policy in map-pan.ts.
+        let panned = false
+        if (msg.vgrdc) {
+          serverCenter = msg.vgrdc
+          const keep = inXMode && keepLocalCenter(msg.vgrdc, mapJumper.destination(), mapView.viewRect())
+          if (!keep) panned = mapView.setViewCenter(msg.vgrdc)
+        }
         // Sticky like the reference's inv_mons_msg: only a present key
         // changes it ('' clears); store.clear() above also resets it.
         if (msg.invis_mon_desc !== undefined) store.invisMonDesc = msg.invis_mon_desc
@@ -2306,6 +2333,9 @@ export function buildGameView(
   function exitXMode(): void {
     inXMode = false
     mapJumper.reset()  // an in-flight walk can't be confirmed now
+    // Drop any local drag-pan: back to the server's last (cursor-pinned)
+    // vgrdc; a real exit's redraw then re-centers on the player.
+    if (serverCenter && mapView.setViewCenter(serverCenter)) mapView.fullRender()
     view.classList.remove('x-mode')
     syncMoreDisplay()  // a pending --more-- returns to the inline log row
     xdescReset()

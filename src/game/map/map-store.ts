@@ -87,6 +87,9 @@ export function parseCellKey(key: string): { x: number; y: number } {
 // and x/y coordinates carry forward (if x omitted, use prev x+1; if y omitted use prev y).
 export class MapStore {
   private cells = new Map<string, Cell>()
+  // mfBounds memo: undefined = stale (an mf write or clear happened since),
+  // null = computed, no minimap-worthy cells yet.
+  private mfBox: { left: number; top: number; right: number; bottom: number } | null | undefined
   private monsterMap = new Map<string, MonsterCell>()
   // Keyed by monster id; accumulates partial updates across turns (mirrors reference monster_table)
   private monsterTable = new Map<number, MonsterInfo>()
@@ -145,6 +148,7 @@ export class MapStore {
       // 0/false/null → overwrite" — same pattern the reference shallow
       // merge_objects uses in game_data/static/map_knowledge.js.
       const t = u.t
+      if (u.mf !== undefined) this.mfBox = undefined
       const cell: Cell = {
         g: u.g ?? existing?.g ?? ' ',
         col: u.col ?? existing?.col ?? 7,
@@ -326,11 +330,12 @@ export class MapStore {
   // cells are excluded), or null before any are known. Matches the engine's
   // known_map_bounds() (map-knowledge.cc), which the level map clamps its
   // cursor to — map-jump.ts relies on that equality (verified live: the
-  // store's edge and the engine's clamp agreed). Computed on demand in one
-  // pass: readers are the minimap (already re-scanning the store to draw)
-  // and a per-tap jump, so keeping merge (the hot path) free of per-cell
-  // bbox bookkeeping is the better trade.
+  // store's edge and the engine's clamp agreed). One pass over the store,
+  // memoized until the next mf write or clear: merge (the hot path) stays
+  // free of per-cell bbox bookkeeping, while the X-map drag-pan clamp
+  // (game-view onPan) can read it per cell crossing without a rescan.
   mfBounds(): { left: number; top: number; right: number; bottom: number } | null {
+    if (this.mfBox !== undefined) return this.mfBox
     let box: { left: number; top: number; right: number; bottom: number } | null = null
     this.forEachCell((x, y, cell) => {
       if (!cell.mf) return
@@ -343,6 +348,7 @@ export class MapStore {
         if (y > box.bottom) box.bottom = y
       }
     })
+    this.mfBox = box
     return box
   }
 
@@ -352,6 +358,7 @@ export class MapStore {
 
   clear(): void {
     this.cells.clear()
+    this.mfBox = undefined
     this.monsterMap.clear()
     this.monsterTable.clear()
     this.monsterGlyphs.clear()
