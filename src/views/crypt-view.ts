@@ -15,8 +15,8 @@ import { count } from '../counter'
 // strip. The grid mirrors the strip's newest-first order (newest top-left), so the
 // strip reads as the crypt's top row.
 //
-// Heading: a random thematic line (./crypt-flavor) shown on each open, in the
-// smaller flavor style (it's prose, not a wordmark).
+// Heading: a thematic line chosen from the history's state (./crypt-flavor),
+// in the smaller flavor style (it's prose, not a wordmark).
 export function openCrypt(): void {
   if (document.querySelector('.crypt-view')) return // already open — ignore re-taps
   count('crypt')
@@ -24,13 +24,13 @@ export function openCrypt(): void {
       <p class="crypt-flavor"></p>
       <div class="crypt-grid"></div>
   `)
+  const avatars = listAllAvatars()
   // Set via textContent (the flavor lines are author-written plain text).
-  view.querySelector<HTMLElement>('.crypt-flavor')!.textContent = pickCryptLine()
+  view.querySelector<HTMLElement>('.crypt-flavor')!.textContent = pickCryptLine(avatars)
   // Scale 2.5 (80px): bigger than the login strip's 64px teaser, but small enough
   // that four fit per row on a phone (the .crypt-grid wraps at 4-ish, centered).
   // Each doll is a tap target: dolls are otherwise unlabeled, so the card modal
   // (openAvatarCard) is what answers "who was this?".
-  const avatars = listAllAvatars()
   void paintAvatars(view.querySelector<HTMLElement>('.crypt-grid')!, avatars, 2.5, 'crypt-doll', {
     decorate: (el, i) => {
       const a = avatars[i]
