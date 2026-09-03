@@ -51,7 +51,7 @@ export interface AvatarMeta {
   title?: string    // XL-scaled job title ("Slayer") — the closest thing to a
                     // background the player message carries (no job field)
   background?: string // full job name ("Berserker"), parsed from the game-start
-                      // welcome line (char-label.ts welcomeBackground) — the
+                      // welcome line (char-label.ts parseWelcome) — the
                       // wire's only statement of it
   god?: string      // empty string while godless
   xl?: number

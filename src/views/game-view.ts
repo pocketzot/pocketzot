@@ -35,7 +35,7 @@ import { recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
 import { count, countEach } from '../counter'
 import { downloadPackFile } from '../offline/save-transfer'
 import { hasOrbLight, parseRunePickup, parseWinRuneCount } from '../game/rune-messages'
-import { looksLikeWelcome, welcomeBackground } from '../game/char-label'
+import { looksLikeWelcome, parseWelcome } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
 import {
   renderBodyLines, propagateDarkgreyColor, unwrapHangingIndents, joinIndentedRuns,
@@ -206,21 +206,43 @@ export function buildGameView(
   // ../avatars). Delta-encoded after the game-start snapshot, so hold the last seen.
   let lastTurn: number | undefined
   // The game-start "Welcome[ back], <name> the <Species> <Job>." line — the
-  // wire's only statement of the background (no player-message job field).
-  // Held raw until name AND species are known (msgs-vs-player order varies),
-  // then parsed ONCE: name and species never change after that point, so a
-  // failed parse can never succeed later. The settled latch ends both the
-  // per-line welcome scan and the per-player-message resolve work — without
-  // it a failed parse would recompile the regex every frame forever.
+  // wire's only statement of the background (no player-message job field)
+  // AND of whether this process created the character or restored a save
+  // (wire facts in char-label.ts parseWelcome). Held raw until name AND
+  // species are known (msgs-vs-player order varies) and parsed against
+  // each DISTINCT (name, species) pair, not just once: the creation-time
+  // player frame carries the SP_UNKNOWN placeholder species "Yak"
+  // (player-save-info.h; see 06-newgame-choice-flow.golden.json), so a
+  // welcome line that lands before the frame with the real species must
+  // get a retry when that frame arrives; retries are keyed on identity so a
+  // parse that fails for good never recompiles per frame.
+  //
+  // The 'newchar' counter keys on the same parse. Never arm it on the
+  // newgame-choice ui-push: an RC `species`/`background`/`combo` preset
+  // makes _choose_species_job (newgame.cc) skip _prompt_choice, so those
+  // creations show no screen. Nor on the first map frame — see the 'map'
+  // case. No fallback key: a drifted welcome line fails by dropping the
+  // count to zero. A resumed save counts nothing, including one
+  // resurrected after death (failed final IDBFS flush, or a backup import).
   let welcomeLine: string | null = null
   let welcomeSettled = false
+  let welcomeTried = ''  // (name, species) of the last failed parse
   function tryResolveBackground(): void {
     if (welcomeSettled || welcomeLine == null) return
     if (!charName || !charMeta.species) return
-    const bg = welcomeBackground(welcomeLine, charName, charMeta.species)
-    if (bg !== undefined) charMeta.background = bg
+    const identity = `${charName}\0${charMeta.species}`
+    if (identity === welcomeTried) return
+    welcomeTried = identity
+    const welcome = parseWelcome(welcomeLine, charName, charMeta.species)
+    if (!welcome) return
     welcomeSettled = true
     welcomeLine = null
+    charMeta.background = welcome.background
+    if (!welcome.resumed && !spectating && gameId) {
+      const offline = gameId === 'offline' ? '-offline' as const : ''
+      count(`newchar${offline}`)
+      countEach(`newchar-each${offline}`)
+    }
   }
   const inventoryStore = new InventoryStore()
   const statsView = new StatsView(inventoryStore)
@@ -339,11 +361,6 @@ export function buildGameView(
   // paths not traced, not a known dup. Names are unique per game, so it can
   // never suppress a legitimate second rune.
   const runesCounted = new Set<string>()
-  // Creation flow seen this view (armed by the newgame-choice ui-push,
-  // consumed by the first `map` message → one 'newchar' count). Spectators
-  // can receive a watched player's creation screens via the attach handshake's
-  // menu-stack replay, hence the gate at the count site.
-  let sawNewgameChoice = false
 
   // Rune pickup line → (1) the character's persisted collection (charMeta
   // .runes: the next map capture / the outcome stamp writes it to the crypt
@@ -1547,25 +1564,12 @@ export function buildGameView(
         // version creation guard's "nothing rendered" case can't apply.
         mapSeen = true
         disarmCreationGuard()
-        // A map message after the creation grid = the character exists — but
-        // only one carrying cells. A spectator joining while a creation screen
-        // is up (watcher bots attach as soon as the lobby lists the game) makes
-        // crawl broadcast a cell-less {clear:true} map to the PLAYER too:
-        // spectator_joined → _send_everything → _send_map(false), which lacks
-        // the m_view_loaded gate that redraw()'s send has (tileweb.cc:472,
-        // 2227, 2334). Counting that frame invents a character that was never
-        // born — and the abort/reroll loop repeats it per attempt. At most one
-        // per crawl process: that first send also clears m_need_full_map, and
-        // nothing else in the object changes during creation, so a second
-        // joiner's map is empty and json_treat_as_empty drops it unsent.
-        if (sawNewgameChoice && (msg.cells?.length ?? 0) > 0) {
-          sawNewgameChoice = false
-          if (!spectating && gameId) {
-            const offline = gameId === 'offline' ? '-offline' as const : ''
-            count(`newchar${offline}`)
-            countEach(`newchar-each${offline}`)
-          }
-        }
+        // Not a creation signal: a spectator joining while a creation screen
+        // is up makes crawl broadcast a cell-less {clear:true} map to the
+        // PLAYER too (spectator_joined → _send_everything → _send_map(false),
+        // which lacks redraw()'s m_view_loaded gate — tileweb.cc). The
+        // 'newchar' counter keys on the welcome line instead; see
+        // tryResolveBackground.
         if (msg.clear) store.clear()
         // vgrdc is the server's complete view-centering signal (present on a
         // map message whenever it matters — roughly half of them in
@@ -2101,6 +2105,7 @@ export function buildGameView(
           // welcomeLine decl); resolves now if name+species already arrived.
           if (!welcomeSettled && looksLikeWelcome(m.text)) {
             welcomeLine = m.text
+            welcomeTried = ''  // a new candidate line earns a fresh parse
             tryResolveBackground()
           }
           // Mirror into the X-mode describe strip; the line ALSO takes the
@@ -2389,11 +2394,6 @@ export function buildGameView(
     // Standalone screens (game-overlays.ts) own their ui-push type wholesale;
     // everything after this block shares the title/body/actions frame below.
     if (msg.type === 'newgame-choice') {
-      // Arms the newchar counter; the count waits for the first `map` (world
-      // exists = creation completed), so an aborted creation never counts.
-      // Re-arming on a resumed mid-creation flow is correct — it still ends
-      // in a new character.
-      sawNewgameChoice = true
       // The screen's own enterLayout call has already nulled the previous
       // handler; store the new render's.
       newgameFocus = showNewgameChoice(overlayCtx, msg)

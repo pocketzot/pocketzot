@@ -2155,11 +2155,11 @@ describe('minimap lens suspend/restore while spectating', () => {
   })
 })
 
-// The creation counter's consuming frame. A spectator joining while a creation
-// screen is up (watcher bots attach as soon as the lobby lists the game) makes
-// crawl broadcast a cell-less {clear:true} map to the player too — see the
-// 'map' case in game-view.ts for the source path. Counting that would mint
-// characters that were never born, once per abort/reroll attempt.
+// The creation counter keys on crawl's game-start welcome line (" back" =
+// a restored save), parsed once name and species are known — see
+// tryResolveBackground in game-view.ts. Neither the creation screens nor
+// the first map frame are signals: an RC-preset combo shows no screens, and
+// a spectator joining mid-creation makes crawl broadcast a cell-less map.
 describe('newchar counting', () => {
   const realDev = import.meta.env.DEV
   let beacons: string[]
@@ -2176,30 +2176,71 @@ describe('newchar counting', () => {
 
   afterEach(() => { import.meta.env.DEV = realDev })
 
+  // The latched 'newchar' twin rides along, but its Set is module state
+  // shared with every other test here — assert the unlatched row, which
+  // can't depend on what ran first.
+  const each = (suffix = ''): string[] =>
+    beacons.filter((u) => u === `/api/e?e=newchar-each${suffix}`)
   const chars = (): string[] => beacons.filter((u) => u.includes('newchar'))
+  const welcome = (text: string) =>
+    ({ msg: 'msgs', messages: [{ text, turn: 0, channel: 0 }] })
+  const identity = { msg: 'player', name: 'bram', species: 'Minotaur' }
 
-  it('ignores a cell-less map arriving while the creation screen is up', () => {
+  it('counts a fresh character on the welcome line, with no creation screen shown', () => {
     const h = setup(undefined, 'dcss-0.34')
-    h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
-    h.dispatch({ msg: 'map', clear: true })
+    h.dispatch(identity)
+    h.dispatch(welcome('<yellow>Welcome, bram the Minotaur Berserker.</yellow>'))
+    expect(each()).toHaveLength(1)
+  })
+
+  it('resolves in either wire order (welcome before the player message)', () => {
+    const h = setup(undefined, 'dcss-0.34')
+    h.dispatch(welcome('<yellow>Welcome, bram the Minotaur Berserker.</yellow>'))
+    expect(chars()).toEqual([])  // name/species not yet known
+    h.dispatch(identity)
+    expect(each()).toHaveLength(1)
+  })
+
+  it('retries once the placeholder species from the creation frame is replaced', () => {
+    const h = setup(undefined, 'dcss-0.34')
+    // Creation-time player frame: SP_UNKNOWN reads "Yak" (player-save-info.h).
+    h.dispatch({ msg: 'player', name: 'bram', species: 'Yak' })
+    h.dispatch(welcome('<yellow>Welcome, bram the Minotaur Berserker.</yellow>'))
+    expect(chars()).toEqual([])  // anchored parse misses on the placeholder
+    h.dispatch({ msg: 'player', species: 'Minotaur' })
+    expect(each()).toHaveLength(1)
+    h.dispatch({ msg: 'player', species: 'Minotaur', xl: 2 })
+    expect(each()).toHaveLength(1)  // settled: no second count
+  })
+
+  it('counts nothing on a resumed save', () => {
+    const h = setup(undefined, 'dcss-0.34')
+    h.dispatch(identity)
+    h.dispatch(welcome('<yellow>Welcome back, bram the Minotaur Berserker.</yellow>'))
+    h.dispatch({ msg: 'map', clear: true, cells: [{ x: 5, y: 6, g: '@', col: 7 }] })
     expect(chars()).toEqual([])
   })
 
-  it('counts the character once the starting view arrives', () => {
+  it('treats creation screens and map frames as no signal at all', () => {
     const h = setup(undefined, 'dcss-0.34')
     h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
     h.dispatch({ msg: 'map', clear: true })
     h.dispatch({ msg: 'map', clear: true, cells: [{ x: 5, y: 6, g: '@', col: 7 }] })
-    // The latched 'newchar' twin rides along, but its Set is module state
-    // shared with every other test here — assert the unlatched row, which
-    // can't depend on what ran first.
-    expect(chars().filter((u) => u === '/api/e?e=newchar-each')).toHaveLength(1)
+    expect(chars()).toEqual([])
+  })
+
+  it('splits the offline stack', () => {
+    const h = setup(undefined, 'offline')
+    h.dispatch(identity)
+    h.dispatch(welcome('<yellow>Welcome, bram the Minotaur Berserker.</yellow>'))
+    expect(each('-offline')).toHaveLength(1)
+    expect(each()).toHaveLength(0)
   })
 
   it('counts nothing for a spectated game', () => {
     const h = setup({ username: 'bob' } as SpectateTarget, 'dcss-0.34')
-    h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
-    h.dispatch({ msg: 'map', clear: true, cells: [{ x: 5, y: 6, g: '@', col: 7 }] })
+    h.dispatch(identity)
+    h.dispatch(welcome('<yellow>Welcome, bram the Minotaur Berserker.</yellow>'))
     expect(chars()).toEqual([])
   })
 })

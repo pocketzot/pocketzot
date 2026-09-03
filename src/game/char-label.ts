@@ -24,25 +24,36 @@ const reEscape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // Cheap per-line gate for holding welcome-line candidates, kept next to the
 // parser so the wire format lives in one module. Matches both forms
-// welcomeBackground accepts; the comma excludes "Welcome back to level N!"
+// parseWelcome accepts; the comma excludes "Welcome back to level N!"
 // (XP regain) and "Welcome back to <branch>!" (stairs).
 export function looksLikeWelcome(line: string): boolean {
   return line.includes('Welcome, ') || line.includes('Welcome back, ')
 }
 
-// Extract the background ("Berserker") from the game-start welcome line —
-// the ONE place the wire states it: the player message carries no job field
-// (trunk tileweb.cc _send_player), while main.cc:441 prints
-// "Welcome[ back], <name> the <Species> <Job>." on every start/resume.
+export interface WelcomeFacts {
+  background: string   // "Berserker"
+  resumed: boolean     // "Welcome back," (save restored) vs "Welcome," (just created)
+}
+
+// Parse the game-start welcome line — the ONE place the wire states the
+// background (the player message carries no job field, trunk tileweb.cc
+// _send_player) and crawl's own start-vs-resume bit: main.cc:441 (same line
+// in 0.34.1) prints "Welcome[ back], <name> the <Species> <Job>." once per
+// process, " back" iff startup_step restored a save. A resume can't leak the
+// original "Welcome," line from saved history: load_messages stores it via
+// store_msg, and only flush_prev bumps the `unsent` count that
+// message_store::send reads (message.cc), so restored lines never hit the
+// wire. Nothing else in crawl's source or speech database prints "Welcome, ".
 // Anchoring on the known name AND species (both from the player message)
 // makes the parse unambiguous even though names may contain spaces (offline
 // allows them) and species names are multi-word ("Vine Stalker"): only the
 // job is left to capture. Substring match — msgs lines carry color markup
 // and same-turn messages arrive joined.
-export function welcomeBackground(line: string, name: string, species: string): string | undefined {
+export function parseWelcome(line: string, name: string, species: string): WelcomeFacts | undefined {
   if (!name || !species) return undefined
   const re = new RegExp(
-    `Welcome(?: back)?, ${reEscape(name)} the ${reEscape(species)} ([A-Za-z' -]+)\\.`,
+    `Welcome( back)?, ${reEscape(name)} the ${reEscape(species)} ([A-Za-z' -]+)\\.`,
   )
-  return re.exec(line)?.[1]
+  const m = re.exec(line)
+  return m ? { background: m[2], resumed: m[1] !== undefined } : undefined
 }
