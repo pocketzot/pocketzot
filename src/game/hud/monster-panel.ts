@@ -42,7 +42,11 @@ export class MonsterPanelView {
     if (list.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'mp-empty'
-      empty.textContent = 'No monsters in view.'
+      // Reachable with the floating list non-empty: a sensed-but-unlocated
+      // invisible monster (store.invisMonDesc) shows there but has no
+      // coordinate to describe, so it gets no row here. The wording must
+      // stay true next to that list entry — "no monsters" wouldn't be.
+      empty.textContent = 'Nothing in view to examine.'
       this.element.appendChild(empty)
       return
     }
