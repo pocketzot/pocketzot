@@ -9,6 +9,10 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-03
+
+- Crypt inscriptions now vary by character outcome.
+
 ## 2026-09-01
 
 - In `X` mode, you can now drag to pan the level map. Tapping it still
