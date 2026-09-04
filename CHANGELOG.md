@@ -9,6 +9,12 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-04
+
+- Runes collected outside the app are now synced when you open the
+  character overview (`%`).
+- Online and Offline play sections are now collapsible.
+
 ## 2026-09-03
 
 - Crypt inscriptions now vary by character outcome.
