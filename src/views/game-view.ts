@@ -2782,9 +2782,13 @@ export function buildGameView(
     const btn = menuControls.querySelector<HTMLButtonElement>('[data-dynamic="accept"]')
     if (!btn) return
     const acceptMatch = footerText.match(/accept\s*(\(\d+ chosen\))/i)
-    const buyMatch = /\[Enter\]\s+buy\s+marked\s+items/i.test(footerText)
+    // Shop (shopping.cc ShopMenu::update_help): the [Enter] slot cycles
+    // blank / describe / "buy shopping list" / "buy marked items". Keep the
+    // labels a word or two — the bar has five buttons across the phone
+    // width (see the accept rule in style.css).
+    const buyMatch = footerText.match(/\[Enter\]\s+buy\s+(marked\s+items|shopping\s+list)/i)
     if (acceptMatch) btn.innerHTML = glyphHtml(`⏎ Accept ${acceptMatch[1]}`)
-    else if (buyMatch) btn.innerHTML = glyphHtml('⏎ Buy marked items')
+    else if (buyMatch) btn.innerHTML = glyphHtml(/list/i.test(buyMatch[1]) ? '⏎ Buy list' : '⏎ Buy')
     else btn.innerHTML = glyphHtml('⏎')
   }
 

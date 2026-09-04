@@ -3626,6 +3626,10 @@ html.map-hold, html.map-hold * {
   -webkit-user-select: none;
   padding: 0.3rem 0.5rem;
   text-align: center;
+  /* Glyph + word labels ("⏎ Buy"): the HTML space between the glyph span
+     and the text is leading whitespace of an anonymous flex item, which
+     flex strips — the gap is the visible space. */
+  column-gap: 0.35em;
 }
 .menu-ctrl-btn:active,
 .menu-ctrl-btn.pressed { background: var(--press); color: var(--accent); }
@@ -3655,6 +3659,12 @@ html.map-hold, html.map-hold * {
   background: var(--accent);
   color: var(--bg);
   font-weight: bold;
+  /* The label is dynamic (syncAcceptBtn). A wrapped label makes the button
+     taller and the whole bar with it, so keep it on one line: the button
+     widens at its siblings' expense instead (flex min-content). The cap
+     fits the longest label, "⏎ Accept (NN chosen)" (~221px). */
+  white-space: nowrap;
+  max-width: 15rem;
 }
 /* Accent-filled like .numpad-primary: can't lighten to --press, brighten
    instead. Same (0,2,0) specificity as .menu-ctrl-btn.pressed, later in
