@@ -17,6 +17,8 @@ describe('prefs defaults', () => {
   it('serves defaults on an empty store', () => {
     expect(getPref('monsterListMode')).toBe('full')
     expect(getPref('loginSprites')).toBe(true)
+    expect(getPref('loginOnlineOpen')).toBeNull()
+    expect(getPref('loginOfflineOpen')).toBeNull()
   })
 })
 

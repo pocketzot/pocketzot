@@ -9,7 +9,7 @@ import { OFFLINE_GAME_ID } from './offline/offline-state'
 import { attemptResume, clearGameStart, loadPersistedResume, markProactiveClose } from './reconnect'
 import { count, type CountFlags } from './counter'
 import { getActiveControlSet } from './game/input/control-sets'
-import { getPref } from './prefs'
+import { getPref, setPref } from './prefs'
 import { loadSession } from './auth/session'
 import { staleShellReloadOnce } from './util/self-heal'
 
@@ -131,7 +131,10 @@ async function showOfflineGame(name: string): Promise<void> {
   // same reason boot.ts excludes them from the slot-record tracker: a golden
   // capture's character isn't yours and must not mint a phantom shelf entry.
   const gameId = params.get('engine') === 'fake' ? '' : OFFLINE_GAME_ID
-  if (gameId) count('play-offline', gameStartFlags())
+  if (gameId) {
+    count('play-offline', gameStartFlags())
+    setPref('loginOfflineOpen', null)  // playing offline outranks an old collapse; back to auto
+  }
   state = 'game'
   conn = boot.conn
   currentUsername = name

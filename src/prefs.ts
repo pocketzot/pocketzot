@@ -52,6 +52,14 @@ export interface Prefs {
   dpadSize: number     // rem; --tc-dpad via --pz-dpad
   msglogLines: number  // visible message-log lines; --msglog-h via --pz-msglog-lines
   msglogFont: number   // rem; --msglog-font via --pz-msglog-font
+  // The login screen's "Play online" / "Play offline" disclosures. null =
+  // auto: a group collapses only when the other one alone shows use — online
+  // collapses for no saved sessions + ≥1 offline character, offline for ≥1
+  // saved session + no offline character; both open otherwise (login.ts).
+  // A toggle pins a group; actually using it clears the pin back to auto (a
+  // password login for online, an offline game boot in app.ts for offline).
+  loginOnlineOpen: boolean | null
+  loginOfflineOpen: boolean | null
 }
 
 const DEFAULTS: Prefs = {
@@ -64,6 +72,8 @@ const DEFAULTS: Prefs = {
   dpadSize: 3.5,
   msglogLines: 5,
   msglogFont: 0.75,
+  loginOnlineOpen: null,
+  loginOfflineOpen: null,
 }
 
 function load(): Prefs {

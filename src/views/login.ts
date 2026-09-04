@@ -3,7 +3,7 @@ import type { ServerMsg } from '../ws/types'
 import { listSessions, saveSession, type StoredSession } from '../auth/session'
 import { SESSION_EXPIRED_NOTICE, tokenLogin } from '../auth/token-login'
 import { findServer, KNOWN_SERVERS, SPECTATE_SERVERS, labelFor } from '../servers'
-import { getLastSpectateServer, getPref, setLastSpectateServer, LOGIN_SPRITES_CHANGED_EVENT } from '../prefs'
+import { getLastSpectateServer, getPref, setPref, setLastSpectateServer, LOGIN_SPRITES_CHANGED_EVENT } from '../prefs'
 import { openAboutDoc, openChangelogDoc, unreadDotHtml } from './docs'
 import { openSettings } from './settings-view'
 import { decorateLogo } from '../logo'
@@ -97,13 +97,26 @@ export function buildLoginView(
   // and "Play offline" (the offline WASM engine) — so the two ways to play
   // read at a glance. Everything online-only must live inside the first
   // group; keep the offline group last and lean.
+  //
+  // Both groups are <details> disclosures so a player who uses only one
+  // isn't scrolled past the other every launch. Group order never changes
+  // with the state — collapsed, a group is one label line. Open/closed per
+  // group: its pref when the user has toggled it (loginOnlineOpen /
+  // loginOfflineOpen, see prefs.ts for the auto rule and the resets), else
+  // auto — collapsed only when the other group alone shows use. A mount
+  // notice always opens online: the notice slot lives inside it.
+  const hasOfflineChars = !!onOffline && Object.keys(getOfflineChars()).length > 0
+  const onlineOpen = !!notice || (getPref('loginOnlineOpen') ?? !(hasOfflineChars && !hasSessions))
+  const offlineOpen = getPref('loginOfflineOpen') ?? !(hasSessions && !hasOfflineChars)
+
   view.innerHTML = `
     <div class="login-card">
       <h1 class="login-title">PocketZot</h1>
       <div id="login-avatars" class="login-avatars"></div>
 
       <section class="login-group">
-        <div class="login-group-label">Play online</div>
+        <details id="online-group" class="login-group-toggle"${onlineOpen ? ' open' : ''}>
+        <summary class="login-group-label">Play online<span class="login-disclosure-hit"></span></summary>
 
         ${hasSessions ? `
         <div id="resume-section" class="login-subsection">
@@ -123,11 +136,13 @@ export function buildLoginView(
           </div>
           <div id="spectate-error" class="login-error" style="display:none" role="alert"></div>
         </div>
+        </details>
       </section>
 
       ${onOffline ? `
       <section id="offline-section" class="login-group">
-        <div class="login-group-label">Play offline</div>
+        <details id="offline-group" class="login-group-toggle"${offlineOpen ? ' open' : ''}>
+        <summary class="login-group-label">Play offline<span class="login-disclosure-hit"></span></summary>
         <button type="button" id="offline-card" class="login-account-card login-offline-card">
           <span class="login-account-tag">⌂</span>
           <span class="login-offline-lines">
@@ -138,6 +153,7 @@ export function buildLoginView(
             </span>
           </span>
         </button>
+        </details>
       </section>
       ` : ''}
 
@@ -218,6 +234,24 @@ export function buildLoginView(
     view.querySelector('#login-changelog .unread-dot')?.remove()
   })
   view.querySelector('#login-settings')!.addEventListener('click', () => openSettings())
+
+  // Browsers queue a `toggle` for a parsed-open <details> too, so only a
+  // change from the mounted state is a user choice worth pinning. Returns a
+  // programmatic opener that moves the baseline with it, so a forced open
+  // (below) is never mistaken for a choice.
+  const wireDisclosure = (id: string, mountedOpen: boolean, pref: 'loginOnlineOpen' | 'loginOfflineOpen'): (() => void) => {
+    const group = view.querySelector<HTMLDetailsElement>(`#${id}`)
+    if (!group) return () => {}
+    let seen = mountedOpen
+    group.addEventListener('toggle', () => {
+      if (group.open === seen) return
+      seen = group.open
+      setPref(pref, seen)
+    })
+    return () => { seen = true; group.open = true }
+  }
+  const forceOnlineOpen = wireDisclosure('online-group', onlineOpen, 'loginOnlineOpen')
+  wireDisclosure('offline-group', offlineOpen, 'loginOfflineOpen')
 
   renderResumeButtons()
   renderOfflineCard()
@@ -379,6 +413,9 @@ export function buildLoginView(
       if (!view.isConnected) return
       if (r.state === 'undeployed') {
         view.querySelector('#offline-section')?.remove()
+        // Offline records with no offline offering (a build without the
+        // engine) would otherwise leave a lone collapsed "Play online" line.
+        forceOnlineOpen()
         return
       }
       readiness = r
@@ -469,6 +506,7 @@ export function buildLoginView(
 
     listenOnce(conn, (msg: ServerMsg) => {
       if (msg.msg === 'login_success') {
+        setPref('loginOnlineOpen', null)  // a login outranks an old collapse; back to auto
         conn.onLoginCookie = (cookie, expiresDays) => {
           saveSession(wsUrl, msg.username, cookie, expiresDays)
         }

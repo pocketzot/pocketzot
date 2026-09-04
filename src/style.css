@@ -124,6 +124,10 @@ html, body {
 }
 
 .login-card {
+  /* The card's two vertical gaps, shared with the disclosure headers' tap
+     overlays (see .login-group-toggle), which may extend only into them. */
+  --login-head-gap: 1.25rem;  /* title / avatar shelf → first group */
+  --login-group-gap: 1.6rem;  /* group → group */
   width: 100%;
   max-width: 360px;
   background: var(--surface);
@@ -195,7 +199,7 @@ html, body {
   font-size: 1.4rem;
   color: var(--accent);
   text-align: center;
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--login-head-gap);
   letter-spacing: 0.1em;
 }
 
@@ -263,7 +267,7 @@ html, body {
   justify-content: center;
   align-items: flex-end;
   gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--login-head-gap);
   min-height: 64px;
   cursor: pointer;            /* the row taps through to the crypt (full history) */
   touch-action: manipulation; /* no iOS double-tap zoom on the tap target */
@@ -344,7 +348,7 @@ html, body {
    group label's trailing hairline makes the mode split structural without
    boxing the groups; sub-labels inside a group are normal-case and dimmer,
    one clear level below. */
-.login-group { margin-bottom: 1.6rem; }
+.login-group { margin-bottom: var(--login-group-gap); }
 .login-group:last-of-type { margin-bottom: 0; }
 
 .login-group-label {
@@ -362,6 +366,59 @@ html, body {
   flex: 1;
   border-top: 1px solid var(--border);
 }
+/* The two mode groups as iOS-style disclosure sections (HIG DisclosureGroup:
+   Notes/Files/Reminders section headers): the header row is the control, a
+   trailing chevron points right collapsed / down open (no rotation animation
+   — by choice).
+   The chevron is the ::before pseudo pushed to the end via flex `order`, since
+   ::after is already the rule line. The tap target is widened by an
+   absolutely positioned child (.login-disclosure-hit; a click on it toggles
+   the details like any summary content) rather than padding + negative
+   margins: margins collapse through <details>/<section> engine-dependently,
+   and a measured WebKit build summed them so two collapsed headers' boxes
+   overlapped and the lower one stole the upper one's taps. The overlay is
+   bounded to the gap on each side — the whole head gap above the first
+   header, HALF the group gap between headers (each neighbour takes its half,
+   so two collapsed rows can never meet), the label's own 0.7rem below an
+   open header (empty space above its content). Portrait: 44px on the first
+   row, ~38px on the second; landscape's tighter gaps yield less, by design.
+   No other tap target lies inside those gaps. */
+.login-group-toggle > summary {
+  --hit-up: calc(var(--login-group-gap) / 2);
+  --hit-down: 0.7rem;
+  position: relative;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.login-group-toggle > summary::-webkit-details-marker { display: none; }
+.login-group:first-of-type > .login-group-toggle > summary { --hit-up: var(--login-head-gap); }
+.login-group-toggle:not([open]) > summary {
+  --hit-down: calc(var(--login-group-gap) / 2);
+  margin-bottom: 0;
+}
+.login-disclosure-hit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(-1 * var(--hit-up));
+  bottom: calc(-1 * var(--hit-down));
+}
+.login-group-toggle > summary::before {
+  content: "";
+  order: 2;
+  flex: none;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: 0.3em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+/* Pointing down, the V's optical centre sits below the box centre — lift it. */
+.login-group-toggle[open] > summary::before { transform: translateY(-0.15em) rotate(45deg); }
 
 .login-subsection { margin-bottom: 1.1rem; }
 .login-subsection:last-child { margin-bottom: 0; }
@@ -465,19 +522,25 @@ html, body {
 
 .login-add-section > summary {
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.85rem;  /* same scale as .login-sub-label; the chevron marks it as the action */
   color: var(--text-dim);
   list-style: none;
 }
 .login-add-section > summary::-webkit-details-marker { display: none; }
+/* Leading disclosure chevron, same right/down state pair (and the same
+   border-drawn glyph) as the section headers above it — one grammar per page. */
 .login-add-section > summary::before {
-  content: "+";
+  content: "";
   display: inline-block;
-  width: 1ch;
-  margin-right: 0.5ch;
-  text-align: center;
+  width: 0.5em;
+  height: 0.5em;
+  margin: 0 0.9ch 0 0.1em;
+  vertical-align: 0.05em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
 }
-.login-add-section[open] > summary::before { content: "−"; }
+.login-add-section[open] > summary::before { transform: translateY(-0.2em) rotate(45deg); }
 .login-add-section[open] > summary { margin-bottom: 0.6rem; }
 
 .login-spectate-select {
@@ -4501,8 +4564,8 @@ html.map-hold, html.map-hold * {
    without scrolling on a phone in landscape (≤500px tall). */
 @media (orientation: landscape) and (max-height: 500px) {
   .login-card { padding: 1rem 1.25rem; max-width: 380px; }
-  .login-title { font-size: 1.2rem; margin-bottom: 0.6rem; }
-  .login-group { margin-bottom: 0.85rem; }
+  .login-card { --login-head-gap: 0.6rem; --login-group-gap: 0.85rem; }
+  .login-title { font-size: 1.2rem; }
   .login-subsection { margin-bottom: 0.7rem; }
   .login-label { margin-bottom: 0.5rem; font-size: 0.8rem; }
   .login-label input,
