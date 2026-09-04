@@ -84,4 +84,4 @@ My thanks to the following people, whose feedback, feature requests, and bug rep
 - aeshna-cyanea
 - Caeous
 
-And thanks to everyone else who has sent a kind word. Your messages are the best part of doing this.
+And thanks to everyone else who has sent a kind word. I always appreciate your messages.
