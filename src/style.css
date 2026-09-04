@@ -415,6 +415,9 @@ html, body {
   margin-right: 0.3em;
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
+  /* A tier below the account cards' → (full --text-dim): ~3.3:1 over the
+     card surface, the non-text-control floor, about iOS tertiaryLabel. */
+  opacity: 0.6;
   transform: rotate(-45deg);
 }
 /* Pointing down, the V's optical centre sits below the box centre — lift it. */
@@ -538,6 +541,7 @@ html, body {
   vertical-align: 0.05em;
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
+  opacity: 0.6;  /* same tier as the section-header chevrons */
   transform: rotate(-45deg);
 }
 .login-add-section[open] > summary::before { transform: translateY(-0.2em) rotate(45deg); }
