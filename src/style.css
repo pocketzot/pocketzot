@@ -5493,11 +5493,12 @@ html.map-hold, html.map-hold * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The header's two icon buttons: 36px transparent squares, chrome shared by
-   the grouped selector the way .offline-slot-confirm-* share theirs. Both stay
+/* The header's three icon buttons: 36px transparent squares, chrome shared by
+   the grouped selector the way .offline-slot-confirm-* share theirs. All stay
    text-dim — red on a resting header shouts at someone who came to read a
    morgue; the danger colour belongs to the confirm's Delete, at the moment of
    consequence (.offline-slot-confirm-del). */
+.records-morgue-zoom,
 .records-morgue-dl,
 .records-morgue-del {
   flex: 0 0 auto;
@@ -5511,18 +5512,20 @@ html.map-hold, html.map-hold * {
   cursor: pointer;
 }
 @media (hover: hover) {
+  .records-morgue-zoom:hover,
   .records-morgue-dl:hover,
   .records-morgue-del:hover { border-color: var(--border); }
 }
+.records-morgue-zoom:active,
 .records-morgue-dl:active,
 .records-morgue-del:active { background: var(--surface2); }
 /* Only ↓ ever disables (a record whose morgue file was never written), and it
    sits beside a live ⌧ — without this it reads as tappable and does nothing. */
 .records-morgue-dl:disabled { opacity: 0.5; cursor: default; }
-/* The pair sits at the header's right edge and reads as one group: the boxes
+/* The trio sits at the header's right edge and reads as one group: the boxes
    abut (their 36px tap areas already hold the glyphs ~22px apart), with the
    gap that separates them from the title larger than the gap between them. */
-.records-morgue-dl { margin-left: 1.25rem; }
+.records-morgue-zoom { margin-left: 1.25rem; }
 /* Delete confirm swapped into the header's right side (openMorgue owns the
    swap); reuses the shared confirm-button styles. */
 .records-morgue-confirm {
@@ -5538,7 +5541,9 @@ html.map-hold, html.map-hold * {
 }
 /* Normal reading size (same as the % / inventory overlays); the 80-col dump
    overflows sideways and .crypt-scroll pans both axes (overflow-y:auto forces
-   overflow-x to auto). pre keeps the column alignment. */
+   overflow-x to auto). pre keeps the column alignment. The header's ⊖ swaps
+   in an inline fitToWidth font-size (records-view.ts applyZoom); line-height
+   stays unitless so the fit keeps the aspect ratio. */
 .records-morgue-pre {
   font-family: var(--font-mono);
   font-size: var(--fs-overlay);
