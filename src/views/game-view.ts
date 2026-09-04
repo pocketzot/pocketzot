@@ -31,10 +31,10 @@ import { formatDcssVersion, isBelowSupportCutoff, parseDcssVersion } from '../ut
 import { renderTiles, appendIconOverlays, dollTileSpec, monsterTileSpec, prependDngnLayer, type TileRef } from '../game/tiles/tile-view'
 import { cachedFingerprint, primeFingerprint } from '../game/tiles/atlas-dedup'
 import { ensureDollBaked, isBakeableLoader } from '../game/tiles/avatar-bake'
-import { recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
+import { mergeRunes, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
 import { count, countEach } from '../counter'
 import { downloadPackFile } from '../offline/save-transfer'
-import { hasOrbLight, parseRunePickup, parseWinRuneCount } from '../game/rune-messages'
+import { hasOrbLight, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from '../game/rune-messages'
 import { looksLikeWelcome, parseWelcome } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
 import {
@@ -1686,6 +1686,14 @@ export function buildGameView(
         disarmCreationGuard()  // an overlay rendered — see the 'txt' case
         const pushMsg = msg as unknown as UiPushMsg
         if (pushMsg.type === 'game-over') gameOverSeen = true
+        // The `%` overview lists every rune the character holds — the only
+        // online source for runes picked up on another client (the pickup
+        // line reaches a client once; see onRunePickup). Any scroller push
+        // is tried: the `}: N/15 runes:` line shape can't occur elsewhere.
+        if (!spectating && pushMsg.type === 'formatted-scroller' && pushMsg.text) {
+          const runes = mergeRunes(charMeta.runes, parseMorgueRunes(pushMsg.text))
+          if (runes) charMeta.runes = runes
+        }
         // A server overlay supersedes our client-side monster panel and
         // minimap lens; clear/close so subsequent map updates don't rewrite
         // the overlay body or repaint a stale lens.

@@ -58,9 +58,11 @@ export interface AvatarMeta {
   place?: string    // branch name as sent ("Dungeon"); depth is separate
   depth?: number
   runes?: string[]  // rune adjectives ("golden") in pickup order, from the
-                    // "You pick up the X rune" message (rune-messages.ts) —
-                    // the only source that works online (morgues are
-                    // cross-origin). Accumulates across sessions via
+                    // "You pick up the X rune" message (rune-messages.ts),
+                    // plus the `%` overview's rune line whenever the player
+                    // opens it (morgues are cross-origin online, so that
+                    // screen is the only catch-up for runes picked up on
+                    // another client). Accumulates across sessions via
                     // mergeRunes: a resume's capture sees no pickup lines,
                     // so a plain overwrite would wipe them. Absent = none
                     // seen since this field shipped, NOT "none collected".

@@ -44,6 +44,10 @@ export function hasOrbLight(status: readonly { light: string; col?: number }[] |
 // The morgue's rune line (output.cc _status_mut_rune_list):
 //   }: 15/15 runes: decaying, slimy, silver, golden, iron, obsidian, icy, bone,
 //   abyssal, demonic, glowing, magical, fiery, dark, gossamer
+// The same function feeds the `%` character overview, which reaches the
+// client as a formatted-scroller ui-push with colour tags intact
+// (`<w>}:</w> 3/15 runes: …`, scroller.cc to_colour_string) — tags are
+// stripped first so one parser serves both.
 // linebreak_string wraps it at 80 cols — only at spaces, and the list's
 // spaces all follow commas, so a wrapped chunk always ends with ',' and the
 // next line is its continuation. The list is comma_separated_line(…, ", ",
@@ -55,7 +59,7 @@ export function hasOrbLight(status: readonly { light: string; col?: number }[] |
 // order (the morgue lists them by enum, not by pickup); an empty list means
 // no rune line.
 export function parseMorgueRunes(text: string): string[] {
-  const lines = text.split('\n')
+  const lines = text.replace(/<\/?[a-z][^>]*>/gi, '').split('\n')
   const i = lines.findIndex((l) => /^\S{1,3}: \d+\/\d+ runes?: /.test(l))
   if (i < 0) return []
   let list = lines[i].replace(/^\S{1,3}: \d+\/\d+ runes?: /, '').trimEnd()

@@ -81,6 +81,16 @@ describe('parseMorgueRunes', () => {
     ])
   })
 
+  it('reads the colour-tagged `%` overview form (scroller.cc to_colour_string)', () => {
+    const text = [
+      '<white>A:</white><lightgrey> no mutations',
+      '</lightgrey><white>0:</white><lightgrey> Orb of Zot',
+      '</lightgrey><white>}:</white><lightgrey> 4/15 runes: barnacled, slimy, silver,',
+      'golden</lightgrey>',
+    ].join('\n')
+    expect(parseMorgueRunes(text)).toEqual(['barnacled', 'slimy', 'silver', 'golden'])
+  })
+
   it('reads the singular one-obtainable form and a remapped command key', () => {
     expect(parseMorgueRunes('R: 1/1 rune: slimy\n')).toEqual(['slimy'])
   })
