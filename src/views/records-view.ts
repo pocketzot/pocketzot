@@ -123,7 +123,8 @@ function openMorgue(model: CharCardModel, rec: XlogRecord, onDeleted: () => void
       <button type="button" class="records-morgue-zoom"></button>
       <button type="button" class="records-morgue-dl" aria-label="Download morgue file" disabled>↓</button>
       <button type="button" class="records-morgue-del" aria-label="Delete this record">⌧</button>`,
-    '<pre class="records-morgue-pre">Loading…</pre>')
+    '<pre class="records-morgue-pre">Loading…</pre>',
+    () => window.removeEventListener('resize', onResize))
   view.querySelector<HTMLElement>('.records-morgue-title')!.textContent = cardHeadline(model)
   const pre = view.querySelector<HTMLElement>('.records-morgue-pre')!
   const dlBtn = view.querySelector<HTMLButtonElement>('.records-morgue-dl')!
@@ -144,8 +145,11 @@ function openMorgue(model: CharCardModel, rec: XlogRecord, onDeleted: () => void
     morgueFitToWidth = !morgueFitToWidth
     applyZoom()
   })
-  const onResize = (): void => {
-    if (!view.isConnected) { window.removeEventListener('resize', onResize); return }
+  // Released by the shell's onClose — every dismissal route (Escape, Back,
+  // Android back, delete) funnels through it. Don't self-remove on the next
+  // resize instead: a portrait-only PWA session never fires one, so each
+  // closed morgue (dump text included) would stay reachable until relaunch.
+  function onResize(): void {
     if (morgueFitToWidth) applyZoom()
   }
   window.addEventListener('resize', onResize)

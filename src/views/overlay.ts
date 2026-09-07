@@ -29,7 +29,10 @@ export function isOverlayOpen(): boolean {
   return stack.length > 0
 }
 
-export function mountOverlay(el: HTMLElement): () => void {
+// `onClose` runs once on whichever trigger closes the overlay (Escape, the
+// caller's own buttons, closeTopOverlay) — the place to release listeners
+// the overlay registered on window/document, which `el.remove()` can't.
+export function mountOverlay(el: HTMLElement, onClose?: () => void): () => void {
   document.body.appendChild(el)
   let closed = false
   function close(): void {
@@ -39,6 +42,7 @@ export function mountOverlay(el: HTMLElement): () => void {
     const i = stack.indexOf(close)
     if (i !== -1) stack.splice(i, 1)
     if (stack.length === 0) document.removeEventListener('keydown', onKey)
+    onClose?.()
   }
   if (stack.length === 0) document.addEventListener('keydown', onKey)
   stack.push(close)

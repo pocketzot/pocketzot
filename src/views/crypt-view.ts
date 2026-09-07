@@ -85,6 +85,7 @@ export function mountCryptShell(
   extraClass: string,
   headerHtml: string,
   bodyHtml: string,
+  onClose?: () => void,
 ): { view: HTMLElement; close: () => void } {
   const view = document.createElement('div')
   view.className = extraClass ? `crypt-view ${extraClass}` : 'crypt-view'
@@ -99,7 +100,7 @@ export function mountCryptShell(
     view.querySelector<HTMLElement>('.crypt-header')!,
     view.querySelector<HTMLElement>('.crypt-scroll')!,
   )
-  const close = mountOverlay(view) // body-mount + Escape-to-close
+  const close = mountOverlay(view, onClose) // body-mount + Escape-to-close
   const backBtn = view.querySelector<HTMLElement>('.crypt-back')!
   backBtn.addEventListener('click', close)
   // Move focus off the trigger into the dialog, so an Esc dismiss doesn't
