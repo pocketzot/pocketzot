@@ -8,7 +8,10 @@
 // or build tag) as untouched plain text.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { decorateLogo, rollLogoChar, LOGO_WORD, LOGO_CONFIG } from './logo'
+import {
+  decorateLogo, forgetSessionRoll, rollLogoChar, scoreRoll, setTierDecor, swapTier,
+  LOGO_WORD, LOGO_CONFIG, type Roll,
+} from './logo'
 
 // Letters that have NO lookalike swap (must never change glyph), vs. the rest.
 const NO_SWAP = ['k']
@@ -69,12 +72,43 @@ describe('rollLogoChar', () => {
   })
 })
 
+describe('rarity tiers', () => {
+  it('one rung per swap count from 3 up; 0-2 collapse into mundane', () => {
+    expect([0, 1, 2].map(swapTier)).toEqual(['mundane', 'mundane', 'mundane'])
+    expect([3, 4, 5, 6, 7, 8].map(swapTier))
+      .toEqual(['glowing', 'shimmering', 'ornate', 'magnificent', 'artifact', 'mythical'])
+  })
+
+  it('scoreRoll counts only swapped glyphs', () => {
+    const plain: Roll = { ch: 'o', fg: 4, swapped: false }
+    const swap: Roll = { ch: '○', fg: 4, swapped: true }
+    expect(scoreRoll([plain, plain, plain])).toBe('mundane')
+    expect(scoreRoll([swap, swap, swap, swap, swap, plain])).toBe('ornate')
+  })
+
+  it('setTierDecor decorates ornate and above, swaps cleanly, clears below the floor', () => {
+    const el = document.createElement('div')
+    setTierDecor(el, 'ornate')
+    expect(el.classList.contains('decor-ornate')).toBe(true)
+    setTierDecor(el, 'mythical')
+    expect(el.classList.contains('decor-mythical')).toBe(true)
+    expect(el.classList.contains('decor-ornate')).toBe(false)
+    setTierDecor(el, 'glowing')
+    expect([...el.classList].some((c) => c.startsWith('decor-'))).toBe(false)
+    setTierDecor(el, 'mythical')
+    setTierDecor(el, null)
+    expect([...el.classList].some((c) => c.startsWith('decor-'))).toBe(false)
+  })
+})
+
 describe('decorateLogo', () => {
   // pDecorate = 0 suppresses the on-load decoration so each test controls when the
   // roll happens: the split tests get a synchronous plain structure, and the tap
   // test can prove the tap (not the gate) is what lights the wordmark.
+  // The page's roll sticks in module memory (see logo.ts header); forget it so
+  // each test starts undecided instead of replaying the previous test's roll.
   const savedDecorate = LOGO_CONFIG.pDecorate
-  beforeEach(() => { LOGO_CONFIG.pDecorate = 0 })
+  beforeEach(() => { LOGO_CONFIG.pDecorate = 0; forgetSessionRoll() })
   afterEach(() => { LOGO_CONFIG.pDecorate = savedDecorate })
 
   const makeTitle = (text: string): HTMLElement => {
@@ -152,23 +186,117 @@ describe('decorateLogo', () => {
 
   it('a tap cancels the pending on-load reveal instead of stacking timers', () => {
     // Motion on (matches:false) so the on-load reveal is delayed via timers; fake
-    // timers let us count what's pending without waiting.
+    // timers let us count what's pending without waiting. pGlyphShift 0 keeps the
+    // roll mundane so no tell timers appear (they'd make the count random).
     const savedMM = window.matchMedia
     window.matchMedia = (() => ({ matches: false })) as unknown as typeof window.matchMedia
     vi.useFakeTimers()
     try {
       LOGO_CONFIG.pDecorate = 1                          // force the delayed on-load decoration
+      LOGO_CONFIG.pGlyphShift = 0
+      const pending = LOGO_WORD.length + 1               // one timer/char + the settle timer
       const el = makeTitle(LOGO_WORD)
       decorateLogo(el)
-      expect(vi.getTimerCount()).toBe(LOGO_WORD.length)  // on-load reveal pending, one timer/char
+      expect(vi.getTimerCount()).toBe(pending)           // on-load reveal pending
       el.click()                                         // tap re-roll
-      expect(vi.getTimerCount()).toBe(LOGO_WORD.length)  // cancelled + rescheduled, NOT doubled
+      expect(vi.getTimerCount()).toBe(pending)           // cancelled + rescheduled, NOT doubled
       vi.runAllTimers()                                  // tap reveal completes; no stale on-load fire
       const lit = (s: Element) => [...s.classList].some((c) => /^fg\d+$/.test(c))
       expect([...wordmarkSpans(el)].every(lit)).toBe(true)
+      expect([...el.classList].some((c) => c.startsWith('decor-'))).toBe(false) // mundane: bare
     } finally {
       vi.useRealTimers()
       window.matchMedia = savedMM
     }
+  })
+
+  it('a rare roll decorates the title at settle and shows a one-word tell that fades', () => {
+    // pGlyphShift 1 swaps all 8 swap-capable letters → mythical, deterministically.
+    // Reduced motion settles synchronously; the tell still rides its own timers.
+    const savedMM = window.matchMedia
+    window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia
+    vi.useFakeTimers()
+    try {
+      LOGO_CONFIG.pGlyphShift = 1
+      const el = makeTitle('PocketZot (fork)')
+      decorateLogo(el)
+      el.click()
+      expect(el.classList.contains('decor-mythical')).toBe(true)
+      const tell = el.querySelector<HTMLElement>('.logo-tell')!
+      expect(tell.classList.contains('logo-tell--show')).toBe(false) // not before the pause
+      vi.advanceTimersByTime(400)
+      expect(tell.classList.contains('logo-tell--show')).toBe(true)
+      expect(tell.textContent).toBe('mythical')
+      expect(tell.classList.contains('tier-mythical')).toBe(true)
+      expect(el.lastChild?.textContent).toBe(' (fork)')               // tail still last
+      vi.runAllTimers()
+      expect(tell.classList.contains('logo-tell--show')).toBe(false) // hidden again
+      expect(el.classList.contains('decor-mythical')).toBe(true)     // decoration persists
+
+      // A mundane re-roll clears the decoration (the hidden caption keeps its text).
+      LOGO_CONFIG.pGlyphShift = 0
+      el.click()
+      expect([...el.classList].some((c) => c.startsWith('decor-'))).toBe(false)
+
+      // Re-decorating the same element must not read that stale caption as
+      // tail text (canonical letters, so LOGO_WORD is findable again).
+      decorateLogo(el)
+      expect(el.querySelectorAll('.logo-tell')).toHaveLength(1)
+      expect(el.textContent).toBe('PocketZot (fork)')
+    } finally {
+      vi.useRealTimers()
+      window.matchMedia = savedMM
+    }
+  })
+
+  it('the page\'s roll sticks: a rebuilt title replays it instantly, decorated, without a tell', () => {
+    // Motion ON so the replay's instant-ness is observable: a fresh roll would
+    // leave stagger timers pending; a replay leaves none.
+    const savedMM = window.matchMedia
+    window.matchMedia = (() => ({ matches: false })) as unknown as typeof window.matchMedia
+    vi.useFakeTimers()
+    try {
+      LOGO_CONFIG.pGlyphShift = 1 // mythical, so the decoration is part of what must stick
+      const first = makeTitle(LOGO_WORD)
+      decorateLogo(first)
+      first.click()
+      vi.runAllTimers()
+      const glyphs = (el: HTMLElement) => [...wordmarkSpans(el)].map((s) => s.textContent).join('')
+      const colours = (el: HTMLElement) =>
+        [...wordmarkSpans(el)].map((s) => [...s.classList].find((c) => /^fg\d+$/.test(c)))
+      expect(first.classList.contains('decor-mythical')).toBe(true)
+
+      // The view is rebuilt (return from spectate): same roll, at once.
+      LOGO_CONFIG.pDecorate = 1 // the gate must not even be consulted
+      const again = makeTitle(LOGO_WORD)
+      decorateLogo(again)
+      expect(vi.getTimerCount()).toBe(0)                       // no morph, no tell timers
+      expect(glyphs(again)).toBe(glyphs(first))
+      expect(colours(again)).toEqual(colours(first))
+      expect(again.classList.contains('decor-mythical')).toBe(true)
+      expect(again.querySelector('.logo-tell')?.classList.contains('logo-tell--show')).toBe(false)
+
+      // A tap on the rebuilt title still rolls fresh and becomes the new sticky roll.
+      LOGO_CONFIG.pGlyphShift = 0
+      again.click()
+      vi.runAllTimers()
+      const third = makeTitle(LOGO_WORD)
+      decorateLogo(third)
+      expect(glyphs(third)).toBe(LOGO_WORD)
+      expect([...third.classList].some((c) => c.startsWith('decor-'))).toBe(false)
+    } finally {
+      vi.useRealTimers()
+      window.matchMedia = savedMM
+    }
+  })
+
+  it('a plain gate outcome sticks too: later rebuilds stay plain until a tap', () => {
+    const el = makeTitle(LOGO_WORD)
+    decorateLogo(el) // pDecorate = 0 → decided plain
+    LOGO_CONFIG.pDecorate = 1
+    const again = makeTitle(LOGO_WORD)
+    decorateLogo(again)
+    const lit = (s: Element) => [...s.classList].some((c) => /^fg\d+$/.test(c))
+    expect([...wordmarkSpans(again)].some(lit)).toBe(false)
   })
 })

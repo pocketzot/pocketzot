@@ -209,6 +209,7 @@ html, body {
    the block's box (and thus the hit area) to the wordmark itself rather than the
    full card width; margin-inline:auto re-centers the now-narrow box. */
 .logo-tappable {
+  position: relative; /* anchors the .logo-tell caption */
   cursor: pointer;
   touch-action: manipulation;
   -webkit-user-select: none;
@@ -232,12 +233,14 @@ html, body {
   will-change: transform;
 }
 /* Lookalike-glyph swaps (○ • ☼ © φ ß § † …): normalise size/baseline so they sit
-   on the line like the letters rather than ballooning in fallback fonts. */
+   on the line like the letters rather than ballooning in fallback fonts. The
+   font-size lives on the inner ink, NOT the span: em-based metrics on a resized
+   span would step the rarity rules at every swapped glyph. */
 .login-title .logo-ch--swap {
-  font-size: 0.9em;
   vertical-align: baseline;
   line-height: 1;
 }
+.login-title .logo-ch--swap .logo-ink { font-size: 0.9em; }
 /* One-shot reveal pop as each letter morphs in (skipped under reduced motion —
    logo.ts applies the roll without re-triggering this animation). */
 .login-title .logo-ch--lit {
@@ -252,6 +255,81 @@ html, body {
   .login-title .logo-ch { transition: none; }
   .login-title .logo-ch--lit { animation: none; }
 }
+
+/* Rare-roll tier caption (src/logo.ts), absolutely positioned into the title's
+   bottom margin so showing it never shifts the card. */
+.logo-tell {
+  position: absolute;
+  top: calc(100% + 0.22em); /* clear of the thickest rarity rule (0.06 + 0.13em) */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+.logo-tell--show { animation: logo-tell 2.6s ease both; }
+@keyframes logo-tell {
+  0%        { opacity: 0; transform: translate(-50%, -0.25em); }
+  15%, 75%  { opacity: 1; transform: translate(-50%, 0); }
+  100%      { opacity: 0; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No fade: shown statically; logo.ts removes the class on a timer. */
+  .logo-tell--show { animation: none; opacity: 1; }
+}
+
+/* Tier colours: CRT lightgreen(10) → lightmagenta(13) → white(15) → yellow(14). */
+.tier-ornate      { color: #8ae234; }
+.tier-magnificent { color: #fd59fa; }
+.tier-artifact    { color: #eeeeec; }
+.tier-mythical    { color: #fce94f; }
+
+/* Rarity decoration (setTierDecor in src/logo.ts): underlines of rising weight,
+   artifact adds a hard offset shadow, mythical a frame. Rules are pseudo-
+   elements on the title box, not text-decoration: the lookalike glyphs live in
+   fallback fonts, and per-glyph underlines stepped at every font boundary
+   (seen live). Not borders either: those grew the box 1–5px at settle and
+   nudged the whole card. Tall glyphs (╬ ‡ Þ) crossing the rules is intended.
+   The shadow is a ::before clone of the glyph (attr(data-ch)) rather than
+   text-shadow, which would also shadow any propagated decoration. */
+.decor-ornate::after,
+.decor-magnificent::after,
+.decor-artifact::after,
+.decor-mythical::before,
+.decor-mythical::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+/* Outside the box: inside its edge the rules ride up into the glyphs. */
+.decor-ornate::after,
+.decor-magnificent::after,
+.decor-artifact::after,
+.decor-mythical::after    { top: calc(100% + 0.06em); }
+.decor-mythical::before   { bottom: calc(100% + 0.06em); }
+.decor-ornate::after      { height: 0.055em; background: #8ae234; }
+.decor-magnificent::after { height: 0.13em;  background: #fd59fa; }
+.decor-artifact::after    { height: 0.13em;  background: #eeeeec; }
+.decor-mythical::before,
+.decor-mythical::after    { height: 0.08em;  background: #fce94f; }
+.decor-artifact .logo-ch,
+.decor-mythical .logo-ch { position: relative; z-index: 0; } /* clone behind glyph, above backgrounds */
+.decor-artifact .logo-ink,
+.decor-mythical .logo-ink { position: relative; }
+.decor-artifact .logo-ink::before,
+.decor-mythical .logo-ink::before {
+  content: attr(data-ch);
+  position: absolute;
+  left: 0.055em;
+  top: 0.055em;
+  z-index: -1;
+}
+.decor-artifact .logo-ink::before { color: #eeeeec; }
+.decor-mythical .logo-ink::before { color: #fce94f; }
 
 /* Recently-played character dolls (see src/avatars.ts): a bare, centered row of
    doll sprites under the title, painted as DOM tile-stacks (.tile-stack). No
