@@ -92,6 +92,14 @@ export class MapJumper {
   // whenever a chained walk doubles back across its own endpoint.
   private pending = 0
   private timer: ReturnType<typeof setTimeout> | null = null
+  // Where the last walk landed, held until the next NON-walk cursor report.
+  // The view-center policy needs it (map-pan.ts): the engine sends the
+  // `cursor` for a redraw BEFORE the `map` carrying its vgrdc (tileweb.cc
+  // load_dungeon → place_cursor sends at once; the map goes out at flush),
+  // so the walk's last cursor report retires `expected` and THEN the vgrdc
+  // pinned to the landing arrives — with nothing in flight it would snap
+  // the view onto the cell the player just tapped.
+  private landed: Pt | null = null
 
   constructor(private readonly opts: MapJumperOpts) {}
 
@@ -101,29 +109,41 @@ export class MapJumper {
     const from = this.expected ?? at
     if (same(from, target)) return
     const keys = walkKeys(from, target)
-    this.opts.send(keys)
+    // State before send: the fixture replay engine answers inside send().
     this.expected = target
     this.pending += keys.length
     this.disarm()
-    this.timer = setTimeout(() => { this.timer = null; this.reset() },
+    this.timer = setTimeout(() => { this.timer = null; this.land() },
       SETTLE_BASE_MS + SETTLE_PER_KEY_MS * this.pending)
+    this.opts.send(keys)
   }
 
   // Every level-map cursor position the server reports (cursor id 2, loc).
   onCursor(_loc: Pt): void {
-    if (this.pending > 0 && --this.pending === 0) this.reset()
+    if (this.pending > 0) {
+      if (--this.pending === 0) this.land()
+    } else {
+      this.landed = null  // a key moved the cursor: the landing is history
+    }
   }
 
-  // Where the in-flight walk lands, null when nothing is in flight. The
-  // view-center policy reads it (map-pan.ts): a walk reports the cursor at
-  // every intermediate cell, and one flying in from off-screen must not
-  // drag the view along — the destination is the tapped, on-screen cell.
+  // The cell the view-center policy holds for (map-pan.ts): the walk's
+  // destination while in flight, then its landing until a key moves the
+  // cursor; null otherwise.
   destination(): Pt | null {
-    return this.expected
+    return this.expected ?? this.landed
   }
 
-  // Leaving X mode (or any cursor clear) forgets the in-flight landing.
+  // Leaving X mode (or any cursor clear) forgets the walk entirely.
   reset(): void {
+    this.expected = null
+    this.landed = null
+    this.pending = 0
+    this.disarm()
+  }
+
+  private land(): void {
+    this.landed = this.expected
     this.expected = null
     this.pending = 0
     this.disarm()

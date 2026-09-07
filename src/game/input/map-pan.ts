@@ -10,11 +10,17 @@
 // Why a policy is needed: on every level-map redraw the engine pins vgrdc
 // to the cursor (viewmap.cc UIMapView::_render → tiles.load_dungeon(lpos),
 // which unwinds crawl_view.vgrdc onto that cell — tileweb.cc). Honoring
-// that literally would snap a pan back the moment the cursor moved, so in X
-// mode a vgrdc is applied only when the cursor it names has left the view
-// (curses' level map scrolls the same way — the map stays put until the
-// cursor reaches the edge). game-view's map handler owns the state (X mode,
-// the in-flight walk, the view); this file holds the pure rule.
+// that literally would drag the view along a tap-walk (map-jump.ts): the
+// player pans, taps a cell they can see, and the cursor flies in from
+// off-screen reporting every intermediate cell — each one a vgrdc that
+// would snap the view onto the flight. So a vgrdc is held off only while
+// a walk is bound for (or just landed on) an on-screen cell; every other
+// cursor move re-centers, as the reference client does. Deliberately NOT
+// "hold while the cursor is in view": that kept `<`/`>` stair cycling from
+// re-centering when the stair fell under the phone's Dynamic Island (the
+// map full-bleeds under it), leaving the cursor rendered but invisible.
+// game-view's map handler owns the state (X mode, the walk, the view);
+// this file holds the pure rule.
 
 import type { Pt } from './map-jump'
 import type { ViewRect } from '../map/minimap-view'
@@ -24,19 +30,17 @@ import type { ViewRect } from '../map/minimap-view'
 // clipped sliver, and a cursor sitting in one reads as "off the map".
 export const EDGE_INSET = 1
 
-// True while the cursor is comfortably inside the viewport `view` (its
+// True while `cell` is comfortably inside the viewport `view` (its
 // dungeon-coord footprint, MapView/TileMapView.viewRect()).
-export function cursorInView(cursor: Pt, view: ViewRect): boolean {
-  return cursor.x >= view.x + EDGE_INSET && cursor.x < view.x + view.w - EDGE_INSET
-    && cursor.y >= view.y + EDGE_INSET && cursor.y < view.y + view.h - EDGE_INSET
+export function cursorInView(cell: Pt, view: ViewRect): boolean {
+  return cell.x >= view.x + EDGE_INSET && cell.x < view.x + view.w - EDGE_INSET
+    && cell.y >= view.y + EDGE_INSET && cell.y < view.y + view.h - EDGE_INSET
 }
 
 // The X-mode decision for a server `vgrdc`: true when the view stays where
-// it is (a local pan survives), false when the vgrdc is applied. A tap-walk
-// in flight (`destination`, MapJumper.destination()) counts by where it
-// lands, not by the cursor: the engine reports every intermediate cell, and
-// a walk flying in from off-screen toward the tapped, on-screen cell must
-// not drag the view along.
-export function keepLocalCenter(vgrdc: Pt, destination: Pt | null, view: ViewRect): boolean {
-  return cursorInView(vgrdc, view) || (destination !== null && cursorInView(destination, view))
+// it is (a local pan survives), false when the vgrdc is applied.
+// `destination` is MapJumper.destination(); the on-screen test is there
+// because a tap clamped to the level's known box can land off-view.
+export function keepLocalCenter(destination: Pt | null, view: ViewRect): boolean {
+  return destination !== null && cursorInView(destination, view)
 }

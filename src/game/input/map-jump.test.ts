@@ -122,14 +122,37 @@ describe('MapJumper', () => {
       expect(sent[1]).toBe('l')
     })
 
-    it('exposes the (clamped) destination while in flight, null once landed', () => {
+    it('exposes the (clamped) destination while in flight and after landing', () => {
       const { j } = make({ left: 0, top: 0, right: 6, bottom: 6 })
       expect(j.destination()).toBeNull()
       j.tap({ x: 0, y: 0 }, { x: 9, y: 0 })
       expect(j.destination()).toEqual({ x: 6, y: 0 })
       for (let x = 1; x <= 5; x++) j.onCursor({ x, y: 0 })
       expect(j.destination()).toEqual({ x: 6, y: 0 })
+      // The landing report itself: the vgrdc for it is still to come (the
+      // engine sends cursor before map), so the landing stays exposed.
       j.onCursor({ x: 6, y: 0 })
+      expect(j.destination()).toEqual({ x: 6, y: 0 })
+      // A key moved the cursor (nothing pending): the walk is history.
+      j.onCursor({ x: 6, y: 1 })
+      expect(j.destination()).toBeNull()
+    })
+
+    it('the settle timer lands the route too, without chaining from it', () => {
+      const { j, sent } = make()
+      j.tap({ x: 0, y: 0 }, { x: 3, y: 0 })
+      vi.advanceTimersByTime(SETTLE_BASE_MS + SETTLE_PER_KEY_MS * 3 + 1)
+      expect(j.destination()).toEqual({ x: 3, y: 0 })
+      j.tap({ x: 1, y: 0 }, { x: 2, y: 0 })  // origin is the reported cursor
+      expect(sent[1]).toBe('l')
+    })
+
+    it('reset forgets the landing as well', () => {
+      const { j } = make()
+      j.tap({ x: 0, y: 0 }, { x: 1, y: 0 })
+      j.onCursor({ x: 1, y: 0 })
+      expect(j.destination()).toEqual({ x: 1, y: 0 })
+      j.reset()
       expect(j.destination()).toBeNull()
     })
   })

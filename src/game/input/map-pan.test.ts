@@ -26,17 +26,15 @@ describe('keepLocalCenter', () => {
   const inside = { x: 25, y: 33 }
   const outside = { x: 5, y: 5 }
 
-  it('holds the pan while the cursor is in view, applies the vgrdc once it left', () => {
-    expect(keepLocalCenter(inside, null, view)).toBe(true)
-    expect(keepLocalCenter(outside, null, view)).toBe(false)
+  it('applies every vgrdc that is not a tap-walk — a key move always re-centers', () => {
+    // Even one that lands on-screen: `<`/`>` cycling under the Dynamic
+    // Island is why (the map full-bleeds under it — see the file header).
+    expect(keepLocalCenter(null, view)).toBe(false)
   })
 
-  it('an in-flight walk counts by its destination, not the cursor', () => {
-    // Cursor still off-screen, walking toward a tapped on-screen cell: hold.
-    expect(keepLocalCenter(outside, inside, view)).toBe(true)
-    // Cursor in view but walking out: the vgrdc pinned to it still holds
-    // until the cursor itself leaves (each redraw re-asks).
-    expect(keepLocalCenter(inside, outside, view)).toBe(true)
-    expect(keepLocalCenter(outside, outside, view)).toBe(false)
+  it('holds the view for a walk bound for (or landed on) an on-screen cell', () => {
+    expect(keepLocalCenter(inside, view)).toBe(true)
+    // A tap clamped to the known-map box can land off-view: follow it.
+    expect(keepLocalCenter(outside, view)).toBe(false)
   })
 })

@@ -1576,12 +1576,12 @@ export function buildGameView(
         // practice); setViewCenter returns true only on a real pan. The
         // player handler never pans — reference parity (its player.js has no
         // view-center writes at all). In X mode vgrdc is pinned to the
-        // cursor every redraw, so a local drag-pan decides whether to honor
-        // it — policy in map-pan.ts.
+        // cursor every redraw; a tap-walk toward an on-screen cell holds
+        // the (possibly drag-panned) view instead — policy in map-pan.ts.
         let panned = false
         if (msg.vgrdc) {
           serverCenter = msg.vgrdc
-          const keep = inXMode && keepLocalCenter(msg.vgrdc, mapJumper.destination(), mapView.viewRect())
+          const keep = inXMode && keepLocalCenter(mapJumper.destination(), mapView.viewRect())
           if (!keep) panned = mapView.setViewCenter(msg.vgrdc)
         }
         // Sticky like the reference's inv_mons_msg: only a present key
