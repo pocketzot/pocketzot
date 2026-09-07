@@ -1,7 +1,9 @@
 // Decorated "PocketZot" wordmark for the login screen.
 //
-// With probability LOGO_CONFIG.pDecorate the flat title morphs — after a short
-// delay, so the page never looks broken on load — into a per-character roll of
+// With probability LOGO_CONFIG.pDecorate the flat title morphs — after a beat
+// of plain title, so the change registers as a change and doesn't start
+// mid-animation under the first paint; not longer, or a saved-session user has
+// tapped through before it lands — into a per-character roll of
 // DCSS-authentic monster colours and lookalike glyph swaps: other DCSS glyphs
 // (clouds, runes, items) that still read as the letter. Each visit is a fresh
 // roll, so the wordmark is unique per load. The morph plays once and settles.
@@ -19,7 +21,7 @@
 export const LOGO_CONFIG = {
   pDecorate: 0.30,     // probability of decorating at all
   pGlyphShift: 0.20,   // per-character chance of a lookalike glyph swap
-  revealDelayMs: 1500, // normal logo holds this long, then morphs
+  revealDelayMs: 400,  // normal logo holds this long, then morphs
   staggerMs: 150,      // per-character delay across the reveal
 }
 
@@ -220,8 +222,8 @@ export function decorateLogo(titleEl: HTMLElement): void {
     tell.classList.add('logo-tell--show')
   }
 
-  // Re-roll every span. `delayMs` defers the whole morph (the on-load "don't look
-  // broken" pause); a tap passes 0 for an immediate reveal. Each call first cancels
+  // Re-roll every span. `delayMs` defers the whole morph (the on-load beat of
+  // plain title, see the file header); a tap passes 0 for an immediate reveal. Each call first cancels
   // the previous roll's pending timers, so a tap can't be overwritten by an earlier
   // delayed reveal and rapid taps don't pile up. Reduced motion settles instantly,
   // ignoring delayMs and the per-character stagger. Decoration and tell land
