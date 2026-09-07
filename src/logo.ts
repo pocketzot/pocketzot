@@ -22,7 +22,7 @@ export const LOGO_CONFIG = {
   pDecorate: 0.30,     // probability of decorating at all
   pGlyphShift: 0.20,   // per-character chance of a lookalike glyph swap
   revealDelayMs: 400,  // normal logo holds this long, then morphs
-  staggerMs: 150,      // per-character delay across the reveal
+  staggerMs: 90,       // per-character delay across the reveal
 }
 
 export const LOGO_WORD = 'PocketZot'

@@ -221,10 +221,11 @@ html, body {
 
 /* Decorated wordmark (src/logo.ts). Each letter is its own span: it inherits the
    title's accent colour until a roll adds an `fgN` class, then `transition`
-   fades to the DCSS colour. No base `color` here, so inheritance holds pre-roll. */
+   fades to the DCSS colour. No base `color` here, so inheritance holds pre-roll.
+   Keep the fade shorter than the reveal pop below, so glyph and colour land together. */
 .login-title .logo-ch {
   display: inline-block;
-  transition: color 0.7s ease;
+  transition: color 0.4s ease;
   /* Tall fallback glyphs (box-drawing ╬, daggers †‡, ξ/ž descenders) paint
      outside the span's border box; the transform animation makes each span its
      own layer, but WebKit invalidates only the border box on a re-roll, leaving
