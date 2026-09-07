@@ -271,6 +271,9 @@ describe('decorateLogo', () => {
       const again = makeTitle(LOGO_WORD)
       decorateLogo(again)
       expect(vi.getTimerCount()).toBe(0)                       // no morph, no tell timers
+      // No reveal class either: a new span mounted with it would pop on insertion (the throb).
+      expect([...wordmarkSpans(again)].some((s) => s.classList.contains('logo-ch--lit'))).toBe(false)
+      expect([...wordmarkSpans(first)].every((s) => s.classList.contains('logo-ch--lit'))).toBe(true)
       expect(glyphs(again)).toBe(glyphs(first))
       expect(colours(again)).toEqual(colours(first))
       expect(again.classList.contains('decor-mythical')).toBe(true)

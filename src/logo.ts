@@ -159,11 +159,13 @@ function applyRoll(span: HTMLElement, roll: Roll, animate: boolean): void {
   ink.dataset.ch = ch
   span.classList.toggle('logo-ch--swap', swapped)
   setFg(span, fg)
+  // Only an animated apply sets `logo-ch--lit`: a fresh span mounted with it
+  // pops on insertion (a replayed title throbbed, all letters at once).
   if (animate) {
     span.classList.remove('logo-ch--lit')
     void span.offsetWidth // reflow so the animation restarts
+    span.classList.add('logo-ch--lit')
   }
-  span.classList.add('logo-ch--lit')
 }
 
 // Each decorated title's tap handler, so re-decorating the same element removes

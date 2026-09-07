@@ -242,8 +242,8 @@ html, body {
   line-height: 1;
 }
 .login-title .logo-ch--swap .logo-ink { font-size: 0.9em; }
-/* One-shot reveal pop as each letter morphs in (skipped under reduced motion —
-   logo.ts applies the roll without re-triggering this animation). */
+/* One-shot reveal pop as each letter morphs in. logo.ts sets the class only for
+   an animated apply, so reduced motion and replays never carry it. */
 .login-title .logo-ch--lit {
   animation: logo-reveal 0.5s ease both;
 }
@@ -254,7 +254,6 @@ html, body {
 }
 @media (prefers-reduced-motion: reduce) {
   .login-title .logo-ch { transition: none; }
-  .login-title .logo-ch--lit { animation: none; }
 }
 
 /* Rare-roll tier caption (src/logo.ts), absolutely positioned into the title's
