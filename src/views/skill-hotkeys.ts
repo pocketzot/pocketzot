@@ -16,9 +16,14 @@
 // unselectable. (skill-reflow.ts once shared this pattern to find the column
 // split; it now measures the grid's fixed geometry instead, and needs no anchor.)
 //
+// The sign may also be a blank: in `?` description mode every skill becomes
+// selectable (skill-menu.cc SkillMenuEntry::is_selectable, SKMF_HELP), but
+// get_prefix still blanks the sign for mastered skills, so a level-27 row
+// renders as `a   Fighting` — letter, three spaces, name.
+//
 // Global (for matchAll); derive a non-global copy via `new RegExp(.source)` for
 // any single `.test()` call, since a global regex is stateful under `.test()`.
-const SKILL_HOTKEY_RE = /([a-z0-9]) [+\-*] [A-Z]/g
+const SKILL_HOTKEY_RE = /([a-z0-9]) [+\-* ] [A-Z]/g
 
 export function extractSkillHotkeys(lines: Iterable<string>): string[] {
   const seen = new Set<string>()
