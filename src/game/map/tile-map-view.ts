@@ -10,6 +10,7 @@ import type { CellHitTester } from '../input/map-tap'
 import { parseCellKey } from './map-store'
 import { decodeColor, DEFAULT_FG, flashColor } from './colors'
 import { TEX, type TileLoader, type TileSprite } from '../tiles/tile-loader'
+import { WATER_LINE } from '../tiles/tile-view'
 import { fgFlags, bgFlags } from './flag-decode'
 import { getStatusIconSizer, type StatusIconSizer } from './icon-sizes'
 import { buildStatusOverlays, fgHaloDngnName, fgThreatDngnName, resolveOverlayId } from '../hud/monster-style'
@@ -1035,11 +1036,10 @@ export class TileMapView {
   }
 
   // Render `fn` twice with the canvas clipped above/below the cell's water
-  // line: once at `topAlpha` for the non-submerged half, once at `botAlpha`
-  // for the submerged half. The reference uses water_level=20 in atlas-pixel
-  // units (out of 32) — i.e. roughly the lower 12 px are "underwater".
-  // When `split` is false this collapses to a single full-cell paint at the
-  // top alpha — useful for cloud rendering above land.
+  // line (WATER_LINE, tile-view.ts): once at `topAlpha` for the non-submerged
+  // half, once at `botAlpha` for the submerged half. When `split` is false
+  // this collapses to a single full-cell paint at the top alpha — useful for
+  // cloud rendering above land.
   private withWaterSplit(
     split: boolean,
     py: number,
@@ -1052,9 +1052,8 @@ export class TileMapView {
       return
     }
     // All drawing happens in atlas-pixel space (1 cell = ATLAS_CELL px on the
-    // backing canvas); CSS scales the whole canvas. water_level = 20 of 32 in
-    // the reference, so the clip line sits 20 px down from the cell top.
-    const waterPx = 20
+    // backing canvas); CSS scales the whole canvas.
+    const waterPx = WATER_LINE
     const cssW = this.viewportW * ATLAS_CELL
     const cssH = this.viewportH * ATLAS_CELL
     // non-submerged half (above the water line)

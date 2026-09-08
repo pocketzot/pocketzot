@@ -2962,6 +2962,14 @@ html.map-hold, html.map-hold * {
   background-repeat: no-repeat;
 }
 
+/* Alpha/clip group around an actor's layers (appendMonsterActor): covers the
+   cell so the tiles inside keep their cell-relative placement; opacity and
+   clip-path are set inline per group. */
+.tile-stack .tile-split {
+  position: absolute;
+  inset: 0;
+}
+
 /* Baked doll thumbnail (src/game/tiles/avatar-bake.ts): a native-32px PNG
    standing in for a .tile-stack in the login strip / crypt grid. Same
    pixelated upscale as the live tiles; block display so it sizes like the

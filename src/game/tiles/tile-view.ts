@@ -5,8 +5,9 @@
 // AGPL-3.0-or-later work. See ATTRIBUTION.md and LICENSE.
 
 import { TEX, type TileLoader, type TileSprite } from './tile-loader'
-import { buildStatusOverlays, mayHaveStatusOverlays, resolveOverlayId, type StatusOverlayOpts } from '../hud/monster-style'
+import { buildStatusOverlays, fgTileIndex, mayHaveStatusOverlays, resolveOverlayId, type StatusOverlayOpts } from '../hud/monster-style'
 import { getStatusIconSizer } from '../map/icon-sizes'
+import { bgFlags, fgFlags } from '../map/flag-decode'
 
 // Native cell size used by all DCSS sprite atlases. Each tile occupies a
 // 32x32 logical cell; the actual sprite within is positioned via per-tile
@@ -18,6 +19,13 @@ import { getStatusIconSizer } from '../map/icon-sizes'
 // bottom-aligned and horizontally centred on the cell, which is what makes
 // 32×48 sprites (pan lords, bosses) poke above the cell.
 export const CELL = 32
+
+// The water line, in atlas px from the cell top: the reference's
+// water_level=20 (cell_renderer.js, every set_submerged_clip caller), so the
+// lower 12 px of a cell are "underwater". Shared by the canvas map
+// (tile-map-view withWaterSplit) and the DOM actor path below so the two
+// renderers cut at the same row.
+export const WATER_LINE = 20
 
 // Rendering options threaded from appendTiles down to paintSprite.
 export interface TileDrawOpts {
@@ -182,6 +190,59 @@ export function appendTiles(loader: TileLoader | null, wrap: HTMLElement, tiles:
     wrap.appendChild(child)
     paintSprite(loader, child, t.tex, t.t, scale, t.xofs ?? 0, t.yofs ?? 0, t.ymax ?? 0, opts)
   }
+}
+
+// The cell fields the monster actor draws from — a structural subset of
+// map-store's Cell so the list and panel pass their Cell straight through.
+export interface ActorCell {
+  fg?: number | number[]
+  t_bg?: number | number[]
+  doll?: Array<[number, number]> | null
+  mcache?: Array<[number, number, number]> | null
+  trans?: boolean | number
+}
+
+// The monster sprite for the list and panel, at the reference-map placement
+// (centre + fit: oversized 32×48 pan lord/boss sprites shrink into the cell
+// instead of the reference monster list's head-clipping one-cell canvas),
+// under the alpha/clip policy of cell_renderer.js draw_dolls +
+// draw_submerged_tile — the one tile-map-view's drawCell applies through
+// withWaterSplit/withAlpha, expressed here as `.tile-split` groups. Two
+// reference details to keep: FLYING exempts a monster over water, and the
+// dry-land trans dim is for dolls/mcache only — a plain main-atlas fg (an
+// item mimic) stays opaque (draw_foreground vs draw_dolls). A group covers
+// the whole cell so the layers keep their spritePlacement geometry, and fit
+// keeps every layer inside the cell box, so the box-edge clip loses nothing.
+export function appendMonsterActor(loader: TileLoader | null, wrap: HTMLElement, cell: ActorCell | undefined, scale = 1): void {
+  if (!loader) return
+  const spec = monsterTileSpec({ fg_idx: fgTileIndex(cell?.fg), doll: cell?.doll, mcache: cell?.mcache })
+  if (spec.length === 0) return
+  const opts: TileDrawOpts = { centre: true, fit: true }
+  const trans = !!cell?.trans
+  const inWater = bgFlags(cell?.t_bg).WATER && !fgFlags(cell?.fg).FLYING
+  if (inWater) {
+    // Snap the line to the device pixel grid: the two clip edges meet there,
+    // and a fractional edge (list scale 0.625 → 12.5 css px, a half pixel on
+    // 3× phones) would anti-alias both halves short of full coverage — a
+    // hairline seam through the legs.
+    const dpr = window.devicePixelRatio || 1
+    const line = Math.round(WATER_LINE * scale * dpr) / dpr
+    appendTiles(loader, splitGroup(wrap, trans ? 0.5 : 1.0, `inset(0 0 ${CELL * scale - line}px 0)`), spec, scale, opts)
+    appendTiles(loader, splitGroup(wrap, trans ? 0.1 : 0.3, `inset(${line}px 0 0 0)`), spec, scale, opts)
+  } else if (trans && ((cell?.doll?.length ?? 0) > 0 || (cell?.mcache?.length ?? 0) > 0)) {
+    appendTiles(loader, splitGroup(wrap, 0.55), spec, scale, opts)
+  } else {
+    appendTiles(loader, wrap, spec, scale, opts)
+  }
+}
+
+function splitGroup(wrap: HTMLElement, opacity: number, clipPath?: string): HTMLElement {
+  const group = document.createElement('div')
+  group.className = 'tile-split'
+  if (opacity !== 1) group.style.opacity = String(opacity)
+  if (clipPath) group.style.clipPath = clipPath
+  wrap.appendChild(group)
+  return group
 }
 
 // Inserts a dngn-atlas tile (e.g. HALO_FRIENDLY) at the bottom of the stack,

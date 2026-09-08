@@ -9,11 +9,11 @@ import { DCSS_COLOR_MAP, escHtml } from '../dcss-colors'
 import { decodeColor } from '../map/colors'
 import {
   ATTITUDE_CLASSES, MDAM_COLORS, UNUSUAL_COLOR, decodeFgThreatTier, decodeMdam,
-  fgHaloDngnName, fgThreatDngnName, fgTileIndex,
+  fgHaloDngnName, fgThreatDngnName,
   filterAndSortMonsters, monsterSort, nameColor, threatColor,
 } from './monster-style'
 import {
-  appendIconOverlays, appendTiles, monsterTileSpec,
+  appendIconOverlays, appendMonsterActor, appendTiles,
   prependDngnIndex, prependDngnLayer,
 } from '../tiles/tile-view'
 import { TEX, type TileLoader } from '../tiles/tile-loader'
@@ -498,7 +498,7 @@ export class MonsterListView {
         // changed hidden-monster count must rebuild that row.
         // (No d.hpColor term: tile rows draw damage from each member's fg,
         // already covered by memberSig; the chip is ASCII-only.)
-        const memberSig = d.memberCells.map((c) => [c?.fg ?? 0, c?.t_bg ?? 0, c?.doll ?? null, c?.mcache ?? null, c?.icons ?? null, c?.highlighted_summoner ?? false])
+        const memberSig = d.memberCells.map((c) => [c?.fg ?? 0, c?.t_bg ?? 0, c?.doll ?? null, c?.mcache ?? null, c?.icons ?? null, c?.highlighted_summoner ?? false, !!c?.trans])
         sig = JSON.stringify([d.hasBar, d.barColor, d.color, d.label, rowSuffix ?? null, memberSig])
         build = () => this.buildTileRow({ ...d, suffix: rowSuffix })
       }
@@ -537,15 +537,7 @@ export class MonsterListView {
       // top, summoner ring below it, threat wash below that, halo below that,
       // floor at the bottom. prependDngn* slots in at index 0 of the DOM, so
       // prepend calls run in reverse of bottom-up paint order.
-      const baseSpec = monsterTileSpec({
-        fg_idx: fgTileIndex(cell?.fg),
-        doll: cell?.doll,
-        mcache: cell?.mcache,
-      })
-      // centre + fit: reference-map placement, with oversized 32×48 sprites
-      // (pan lords, bosses) shrunk to the cell instead of the reference
-      // monster list's head-clipping canvas (see monster-panel.ts).
-      if (baseSpec.length > 0) appendTiles(this.loader, stack, baseSpec, TILE_SCALE, { centre: true, fit: true })
+      appendMonsterActor(this.loader, stack, cell, TILE_SCALE)
       if (cell?.highlighted_summoner) prependDngnLayer(this.loader, stack, 'HALO_SUMMONER', TILE_SCALE)
       const threat = fgThreatDngnName(cell?.fg)
       if (threat) prependDngnLayer(this.loader, stack, threat, TILE_SCALE)

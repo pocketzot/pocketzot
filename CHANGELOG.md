@@ -9,6 +9,10 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-08
+
+- Improved monster list rendering.
+
 ## 2026-09-07
 
 - Monster spell lists now render color markup when present, e.g. for

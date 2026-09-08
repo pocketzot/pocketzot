@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 
 import { describe, it, expect } from 'vitest'
-import { appendTiles } from './tile-view'
+import { appendMonsterActor, appendTiles, type ActorCell } from './tile-view'
 import { TEX, type TileLoader, type TileSprite } from './tile-loader'
+import { BG_WATER, FG_FLYING } from '../map/cell-flags'
 
 // Sprite-positioning math in paintSprite, exercised through appendTiles with
 // a stub loader whose getAsync resolves immediately. The interesting cases
@@ -74,5 +75,77 @@ describe('paintSprite placement', () => {
     expect(tile.style.top).toBe('5px')
     expect(tile.style.height).toBe('32px')
     expect(tile.style.backgroundSize).toBe('')
+  })
+})
+
+// The alpha/clip policy around a monster's layers: the reference's
+// draw_dolls / draw_submerged_tile alphas, expressed as `.tile-split` groups.
+// Flag words use the bundled cell-flags layout (no enums module loaded in
+// tests), which is the flag-decode fallback.
+describe('appendMonsterActor', () => {
+  const loader = stubLoader({})
+  const groups = (wrap: HTMLElement): HTMLElement[] => Array.from(wrap.querySelectorAll<HTMLElement>(':scope > .tile-split'))
+  const tilesIn = (el: HTMLElement): number => el.querySelectorAll('.tile').length
+  const mount = (cell: ActorCell, scale = 1): HTMLElement => {
+    const wrap = document.createElement('div')
+    appendMonsterActor(loader, wrap, cell, scale)
+    return wrap
+  }
+  const doll: ActorCell['doll'] = [[10, 0], [11, 0]]
+
+  it('paints flat layers for a dry, opaque monster', () => {
+    const wrap = mount({ fg: 5, t_bg: 3 })
+    expect(groups(wrap)).toHaveLength(0)
+    expect(tilesIn(wrap)).toBe(1)
+  })
+
+  it('splits a monster in water at the water line, dry half opaque, submerged half at 0.3', () => {
+    const wrap = mount({ fg: 5, t_bg: 3 | BG_WATER }, 2)
+    const [top, bot] = groups(wrap)
+    expect(groups(wrap)).toHaveLength(2)
+    // Scale 2: cell 64 px, line at 40 px → top group hides the bottom 24 px.
+    expect(top.style.clipPath).toBe('inset(0 0 24px 0)')
+    expect(top.style.opacity).toBe('')
+    expect(bot.style.clipPath).toBe('inset(40px 0 0 0)')
+    expect(bot.style.opacity).toBe('0.3')
+    expect(tilesIn(top)).toBe(1)
+    expect(tilesIn(bot)).toBe(1)
+    // No stray layers outside the groups.
+    expect(tilesIn(wrap)).toBe(2)
+  })
+
+  it('uses the translucent alphas for a trans monster in water', () => {
+    const wrap = mount({ fg: 5, t_bg: BG_WATER, trans: 1 })
+    const [top, bot] = groups(wrap)
+    expect(top.style.opacity).toBe('0.5')
+    expect(bot.style.opacity).toBe('0.1')
+  })
+
+  it('does not split a flying monster over water', () => {
+    const wrap = mount({ fg: 5 | FG_FLYING, t_bg: BG_WATER })
+    expect(groups(wrap)).toHaveLength(0)
+    expect(tilesIn(wrap)).toBe(1)
+  })
+
+  it('dims a translucent doll on land to 0.55', () => {
+    const wrap = mount({ fg: 5, t_bg: 3, doll, trans: 1 })
+    const [g] = groups(wrap)
+    expect(groups(wrap)).toHaveLength(1)
+    expect(g.style.opacity).toBe('0.55')
+    expect(g.style.clipPath).toBe('')
+    expect(tilesIn(g)).toBe(doll.length)
+  })
+
+  it('leaves a translucent plain-fg monster on land opaque (draw_foreground, not draw_dolls)', () => {
+    const wrap = mount({ fg: 5, t_bg: 3, trans: 1 })
+    expect(groups(wrap)).toHaveLength(0)
+    expect(tilesIn(wrap)).toBe(1)
+  })
+
+  it('splits every doll layer when a doll stands in water', () => {
+    const wrap = mount({ fg: 5, t_bg: BG_WATER, doll })
+    const [top, bot] = groups(wrap)
+    expect(tilesIn(top)).toBe(doll.length)
+    expect(tilesIn(bot)).toBe(doll.length)
   })
 })
