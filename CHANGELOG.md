@@ -9,6 +9,14 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-07
+
+- Monster spell lists now render color markup when present, e.g. for
+  Dithmenos marionnette markers.
+- Mastered skill buttons now appear when reading skill descriptions
+  with the `?` toggle.
+- Other improvements.
+
 ## 2026-09-04
 
 - Runes collected outside the app are now synced when you open the
