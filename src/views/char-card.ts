@@ -261,7 +261,7 @@ function sepSpan(): HTMLElement {
 }
 
 // Each fact rides in its own nowrap span (.char-card-fact) so it wraps to
-// the next line whole — "the Shining One", "7 days ago", "0.35-a0" never
+// the next line whole — "the Shining One", "7d ago", "0.35-a0" never
 // break mid-fact (NBSP joins can't do this: hyphens stay legal break
 // points). softIdx marks the one part allowed to wrap internally instead.
 function joinedLine(
@@ -323,9 +323,9 @@ export function agoLabel(endedAt: number, now = Date.now()): string {
   const min = Math.round(s / 60)
   if (min < 90) return `${min} min ago`
   const h = Math.round(min / 60)
-  if (h < 36) return `${h} h ago`
+  if (h < 36) return `${h}h ago`
   const d = Math.round(h / 24)
-  if (d < 45) return `${d} days ago`
+  if (d < 45) return `${d}d ago`
   const mo = Math.round(d / 30)
   if (mo <= 12) return `${mo} months ago`
   return ''
@@ -509,7 +509,7 @@ export function avatarToCard(a: Avatar): CharCardModel {
     place: a.place ? compactPlace(a.place, a.depth) : undefined,
     endedAt: o?.endedAt ?? a.seenAt,
     // A live save's card is a snapshot of the last capture, not an ending —
-    // qualify its age so "16 days ago" doesn't read as when the run ended.
+    // qualify its age so "16d ago" doesn't read as when the run ended.
     dateQualifier: o ? undefined : 'Last seen',
     // The offline sentinel gameId is pure noise next to origin "Local";
     // real ids ("dcss-0.34") are the closest thing to a version the store

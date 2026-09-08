@@ -88,8 +88,8 @@ describe('agoLabel', () => {
   it('scales through the units and yields to the date past a year', () => {
     expect(ago(30_000)).toBe('just now')
     expect(ago(20 * 60_000)).toBe('20 min ago')
-    expect(ago(5 * 3600_000)).toBe('5 h ago')
-    expect(ago(3 * 86400_000)).toBe('3 days ago')
+    expect(ago(5 * 3600_000)).toBe('5h ago')
+    expect(ago(3 * 86400_000)).toBe('3d ago')
     expect(ago(90 * 86400_000)).toBe('3 months ago')
     expect(ago(400 * 86400_000)).toBe('')
     expect(agoLabel(NOW + 60_000, NOW)).toBe('') // clock skew — say nothing
@@ -403,7 +403,7 @@ describe('renderCharCard', () => {
     const m = avatarToCard(makeAvatar({ seenAt: Date.now() - 3 * 86400_000 }))
     const meta = renderCharCard(m).querySelector('.char-card-meta')!
       .textContent!.replace(/\u200b/g, '')
-    expect(meta).toContain('Last seen 3 days ago·')
+    expect(meta).toContain('Last seen 3d ago·')
   })
 
   it('wires onOpen through tap and keyboard with the dump ref', () => {

@@ -5466,10 +5466,13 @@ html.map-hold, html.map-hold * {
 /* Fact-separator middot (char-card.ts joinedLine/sepSpan): margins set the
    gap — a text ' · ' join costs three full mono cells, too wide at phone
    width (thin/hair spaces fall back to the full space advance in this
-   stack, so spacing must come from CSS, not characters). */
+   stack, so spacing must come from CSS, not characters). The dot's gaps
+   sit at ~60% of a word space (measured on iOS and desktop WebKit);
+   matching a space needs ~0.8ch and costs a wrapped meta line per card,
+   so the tighter gap is the deliberate trade. */
 .char-card-sep { margin: 0 0.18em; opacity: 0.8; }
 /* One fact = one unbreakable run (joinedLine / statsRow groups): lines wrap
-   at the separators, never inside "the Shining One" / "7 days ago" /
+   at the separators, never inside "the Shining One" / "7d ago" /
    "0.35-a0" (hyphens are otherwise legal break points). */
 .char-card-fact { white-space: nowrap; }
 .char-card-result {
