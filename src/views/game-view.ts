@@ -4,6 +4,7 @@ import { fitToWidth } from './fit-terminal'
 import { MapStore } from '../game/map/map-store'
 import { MapView } from '../game/map/map-view'
 import { TileMapView } from '../game/map/tile-map-view'
+import type { SightFacts } from '../game/map/los'
 import { StatsView } from '../game/hud/stats-view'
 import { StatusView } from '../game/hud/status-view'
 import { MonsterListView } from '../game/hud/monster-list'
@@ -201,6 +202,8 @@ export function buildGameView(
   // crypt can label entries. Also merged at game_ended so the stamped outcome
   // carries the *final* XL/place, not those of the last capture.
   const charMeta: AvatarMeta = {}
+  // Perception facts driving the zoom floor; see los.ts SightFacts.
+  const sight: SightFacts = {}
   // Most recent player.turn, handed to saveAvatar so the shelf can tell a reroll
   // from the same character continuing (the turn count resets for a new char — see
   // ../avatars). Delta-encoded after the game-start snapshot, so hold the last seen.
@@ -1112,9 +1115,10 @@ export function buildGameView(
     const oldEl = mapView.element
     const next: MapView | TileMapView = mode === 'tiles' ? new TileMapView(store) : new MapView(store)
     next.setViewCenter(center)
-    // Default tile mode to zoom-on. Apply unconditionally — tile X-mode 
-    // uses the zoom-on (17-floor) base shrunk by X_MODE_SCALE.
+    // Default tile mode to zoom-on. Apply unconditionally — tile X-mode
+    // uses the zoom-on (LoS-floor) base shrunk by X_MODE_SCALE.
     if (mode === 'tiles') next.setZoomMode(true)
+    next.setSight(sight)
     // Carry the X-mode scale across the swap: the new view starts at 1.0
     // by default, which would visibly un-zoom the map mid-X-mode. inXMode
     // is the source of truth (global flag), so re-apply directly.
@@ -1610,6 +1614,12 @@ export function buildGameView(
         if (msg.species !== undefined) charMeta.species = msg.species
         if (msg.title !== undefined) charMeta.title = msg.title
         if (msg.god !== undefined) charMeta.god = msg.god
+        // Zoom floor follows what the character can perceive (los.ts).
+        if (msg.species !== undefined) sight.species = msg.species
+        if (msg.god !== undefined) sight.god = msg.god
+        if (msg.piety_rank !== undefined) sight.pietyRank = msg.piety_rank
+        if (msg.penance !== undefined) sight.penance = !!msg.penance
+        if (mapView.setSight(sight)) scheduleFit()
         if (msg.xl !== undefined) charMeta.xl = msg.xl
         if (msg.place !== undefined) charMeta.place = msg.place
         if (msg.depth !== undefined) charMeta.depth = msg.depth

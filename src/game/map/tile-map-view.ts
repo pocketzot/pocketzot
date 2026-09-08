@@ -12,6 +12,7 @@ import { decodeColor, DEFAULT_FG, flashColor } from './colors'
 import { TEX, type TileLoader, type TileSprite } from '../tiles/tile-loader'
 import { WATER_LINE } from '../tiles/tile-view'
 import { fgFlags, bgFlags } from './flag-decode'
+import { viewFloorDiameter, type SightFacts } from './los'
 import { getStatusIconSizer, type StatusIconSizer } from './icon-sizes'
 import { buildStatusOverlays, fgHaloDngnName, fgThreatDngnName, resolveOverlayId } from '../hud/monster-style'
 
@@ -22,10 +23,16 @@ import { buildStatusOverlays, fgHaloDngnName, fgThreatDngnName, resolveOverlayId
 // edge cells clip at the viewport boundary, the natural tile-game look —
 // with centerCol/centerRow pinning the player.
 const NORMAL_AXIS = 21
-// Square zoom viewport. DCSS LOS radius is 7, so 15×15 covers all visible
-// cells; 17×17 adds a one-cell border. The same full-bleed fill applies on
-// top, so zoom still uses freed space — just with a smaller floor.
-const ZOOM_AXIS = 17
+// Square zoom viewport: the character's own perception diameter
+// (viewFloorDiameter — 15 by default, 17 for Barachi sight or Ashenzari
+// six-star detection; see los.ts for why nothing narrower is safe and why
+// 17 is the max rather than a margin). The same full-bleed
+// fill applies on top, so zoom still uses freed space — just with the
+// smallest floor that keeps every actionable cell on screen. X-mode (the
+// level map, renderScale<1) is not about LoS: it keeps the reference's
+// fixed 17 base shrunk by X_MODE_SCALE, so how much level fits on screen
+// never depends on species or on the in-play floor.
+const X_MODE_BASE_AXIS = 17
 
 // Authored cell size of every DCSS sprite atlas. Per-tile {ox,oy,w,h} positions
 // the sprite inside this 32×32 logical box; we scale the whole box to cellPx.
@@ -69,11 +76,12 @@ const HALO_UMBRA_LAST = 5
 
 // Tile renderer. Same public API as MapView, but each cell is a stack of
 // sprites drawn to a single <canvas>. Viewport floors at 21×21 (non-zoom)
-// or 17×17 (zoom) and full-bleeds the container on both axes — partial
-// cells clip at the edges, with centerCol/centerRow pinning the player
-// (NOT the middle cell; see those fields). X-mode hides the HUD/log to
-// give the map more room and shrinks cells via setFontScale(0.7), the
-// full-bleed fill turning the freed area into more cells.
+// or the LoS diameter (zoom; 15×15 by default) and full-bleeds the
+// container on both axes — partial cells clip at the edges, with
+// centerCol/centerRow pinning the player (NOT the middle cell; see those
+// fields). X-mode hides the HUD/log to give the map more room and shrinks
+// cells via setFontScale(0.7), the full-bleed fill turning the freed area
+// into more cells.
 // Falls back to ASCII glyphs (also drawn on the canvas) until the tile
 // atlases finish loading.
 export class TileMapView {
@@ -95,6 +103,7 @@ export class TileMapView {
   // setViewportSize early-exit (see the comment there).
   private lastCssW = 0
   private zoomMode = false
+  private zoomAxis = viewFloorDiameter({})
   // Multiplier on cellPx — mirrors MapView.fontScale. X-mode sets this to
   // <1 to shrink cells and let the full-bleed fill add more of them.
   // Named `renderScale` internally; setFontScale() stores into it for API
@@ -254,6 +263,21 @@ export class TileMapView {
   setFontScale(scale: number): void { this.renderScale = scale }
   setZoomMode(on: boolean): void { this.zoomMode = on }
   isZoomMode(): boolean { return this.zoomMode }
+  // Wire `player` facts → zoom floor (viewFloorDiameter). Returns whether
+  // the floor changed, so the caller knows to re-fit. The creation-time
+  // frame carries the "Yak" placeholder species; the real one follows and
+  // lands here the same way, as does every later god/piety change.
+  setSight(facts: SightFacts): boolean {
+    const axis = viewFloorDiameter(facts)
+    if (axis === this.zoomAxis) return false
+    this.zoomAxis = axis
+    return true
+  }
+  // The square viewport floor: see NORMAL_AXIS / X_MODE_BASE_AXIS.
+  private floorAxis(): number {
+    if (!this.zoomMode) return NORMAL_AXIS
+    return this.renderScale === 1 ? this.zoomAxis : X_MODE_BASE_AXIS
+  }
 
   fitToContainer(): void {
     const rect = this.container.getBoundingClientRect()
@@ -272,14 +296,14 @@ export class TileMapView {
     const availH = rect.height - padTop - padBottom - occl
     if (availW <= 0 || availH <= 0) return
 
-    // Minimum viewport floor: 21×21 normal, 17×17 zoom. Cell size is picked
+    // Minimum viewport floor (floorAxis, squared). Cell size is picked
     // so this floor fits the binding axis of the CLEAR area (availH excludes
     // the asymmetric bottom padding — portrait's floating-log reserve — so
     // the player's surroundings stay above the log). X-mode flows through
     // the same code: HUD/log are hidden by game-view, availH grows, and the
     // renderScale<1 (set via setFontScale) shrinks each cell so the
     // full-bleed fill turns the freed area into still more cells.
-    const baseAxis = this.zoomMode ? ZOOM_AXIS : NORMAL_AXIS
+    const baseAxis = this.floorAxis()
 
     // Float cell size — fills the binding axis exactly. The backing canvas
     // renders at ATLAS_CELL per cell and CSS scales to this size, so we don't
@@ -348,7 +372,7 @@ export class TileMapView {
   }
 
   resetViewportSize(): void {
-    const axis = this.zoomMode ? ZOOM_AXIS : NORMAL_AXIS
+    const axis = this.floorAxis()
     this.centerCol = Math.floor(axis / 2)
     this.centerRow = Math.floor(axis / 2)
     this.setViewportSize(axis, axis)

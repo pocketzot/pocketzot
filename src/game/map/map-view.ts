@@ -2,11 +2,13 @@ import type { MapStore } from './map-store'
 import type { CellHitTester } from '../input/map-tap'
 import { parseCellKey } from './map-store'
 import { decodeColor, DEFAULT_BG, flashColor } from './colors'
+import { viewFloorDiameter, type SightFacts } from './los'
 
 const NORMAL_W = 33
 const NORMAL_H = 21
 // Zoom mode shrinks the binding-axis minimum so the font has to grow to fit
-// fewer cells. 17 keeps LOS (radius 7 ⇒ 15 cells) plus a one-cell border.
+// fewer cells. 17 is the max LoS diameter (los.ts); the floor is raised to
+// the character's own diameter should that ever exceed it (setSight).
 const ZOOM_MIN_AXIS = 17
 const ZOOM_REDUCTION = 8
 
@@ -30,6 +32,7 @@ export class MapView {
   private centerRow = Math.floor(NORMAL_H / 2)
   private fontScale = 1.0
   private zoomMode = false
+  private zoomAxis = ZOOM_MIN_AXIS
   // Absolute viewport center (matches vgrdc from server). In normal play equals playerPos.
   private viewCenter = { x: 0, y: 0 }
   private cursorLoc: { x: number; y: number } | null = null
@@ -87,6 +90,16 @@ export class MapView {
 
   isZoomMode(): boolean {
     return this.zoomMode
+  }
+
+  // Twin of TileMapView.setSight. ZOOM_MIN_AXIS already covers every
+  // perception range today, so this only moves the floor if crawl's max
+  // ever outgrows it — the los.ts prohibition, enforced rather than assumed.
+  setSight(facts: SightFacts): boolean {
+    const axis = Math.max(ZOOM_MIN_AXIS, viewFloorDiameter(facts))
+    if (axis === this.zoomAxis) return false
+    this.zoomAxis = axis
+    return true
   }
 
   // Pick font size + viewport dimensions together to fill the container.
@@ -157,11 +170,12 @@ export class MapView {
     // the in-game numpad + HUD + log squeeze the map so heightFsBase exceeds
     // the normal 36px cap, leaving font and viewport unchanged across modes);
     // we also need a higher cap so the font can actually grow past 36.
-    // ZOOM_MIN_AXIS=17 still fits LOS (radius 7 ⇒ 15 cells) plus a one-cell
-    // border on both axes.
+    // zoomAxis (≥ ZOOM_MIN_AXIS=17, the max LoS diameter — los.ts): a
+    // default-vision character (radius 7 ⇒ 15 cells) gets a one-cell border
+    // on both axes.
     const isZoom = this.zoomMode && this.fontScale === 1.0
-    const minW = isZoom ? Math.max(ZOOM_MIN_AXIS, NORMAL_W - ZOOM_REDUCTION) : NORMAL_W
-    const minH = isZoom ? Math.max(ZOOM_MIN_AXIS, NORMAL_H - ZOOM_REDUCTION) : NORMAL_H
+    const minW = isZoom ? Math.max(this.zoomAxis, NORMAL_W - ZOOM_REDUCTION) : NORMAL_W
+    const minH = isZoom ? Math.max(this.zoomAxis, NORMAL_H - ZOOM_REDUCTION) : NORMAL_H
     const widthFs = availW / (minW * charWPerFs)
     const heightFs = availH / (minH * lineHPerFs)
     const maxFs = isZoom ? 64 : 36
