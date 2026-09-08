@@ -45,7 +45,10 @@ export function renderSpellbook(loader: TileLoader | null, book: SpellBook, colo
     item.appendChild(renderTiles(loader, [{ t: spell.tile, tex: TEX.GUI }], 1))
     const text = document.createElement('span')
     text.className = 'overlay-spell-name'
-    text.textContent = ` ${spell.letter} - ${spell.title}`
+    // `title` can carry markup: Dithmenos worshippers get a marionette marker
+    // prefix, `<magenta>!</magenta>` / `<lightmagenta>*</lightmagenta>`
+    // (describe-spells.cc _write_book, dith_marker).
+    text.innerHTML = dcssToHtml(` ${spell.letter} - ${spell.title}`)
     item.appendChild(text)
     if (spell.effect) {
       const eff = document.createElement('span')

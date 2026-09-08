@@ -843,6 +843,30 @@ describe('ui-push / ui-pop overlay stack', () => {
     expect(flat('Asleep:')?.classList.contains('overlay-line--hang')).toBe(false)
   })
 
+  it('renders markup in spellset titles (Dithmenos marionette markers) as colour, not raw tags', () => {
+    const h = setup()
+    // Under Dithmenos, trunk prefixes each monster spell title with a
+    // colour-tagged marionette marker (describe-spells.cc _write_book).
+    const spellset = [{
+      label: 'It has mastered the following spells:',
+      spells: [
+        { letter: 'a', title: 'Shadow Creatures', colour: 7, tile: 1 },
+        { letter: 'b', title: '<lightmagenta>*</lightmagenta>Invisibility', colour: 7, tile: 2 },
+        { letter: 'c', title: '<magenta>!</magenta>Blink', colour: 7, tile: 3 },
+      ],
+    }]
+    h.dispatch({
+      msg: 'ui-push', type: 'describe-monster', title: 'A boggart.',
+      body: 'A boggart.\n\nSPELLSET_PLACEHOLDER\n\nTo read a description, press the key listed above.', spellset,
+    })
+    const names = [...overlay(h).querySelectorAll<HTMLElement>('.overlay-spell-name')]
+    expect(names.map(el => el.textContent)).toEqual([
+      ' a - Shadow Creatures', ' b - *Invisibility', ' c - !Blink',
+    ])
+    expect(names[1].querySelector('span')?.style.color).toBeTruthy()
+    expect(names[1].innerHTML).not.toContain('&lt;')
+  })
+
   it('ui-stack re-dispatches each nested item back through the handler (spectator join)', () => {
     const h = setup()
     h.dispatch({ msg: 'ui-stack', items: [{ msg: 'ui-push', type: 'describe-item', title: 'SNAP', body: 'b' }] })
