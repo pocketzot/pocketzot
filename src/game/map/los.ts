@@ -13,9 +13,22 @@
 // Detection — out-of-LoS monster markers (MONS_SENSED, drawn through
 // walls): player_monster_detect_radius (player.cc) is the max of Antennae
 // level×2 (≤6), the assassin's hood (4) and Ashenzari piety/20, capped at
-// LOS_MAX_RANGE 8. Only Ash at piety ≥160 reaches 8: that is piety_rank 6
-// (piety_breakpoint(5) = 160, religion.cc), and the passive is suspended
-// under penance (god-passive.cc have_passive).
+// LOS_MAX_RANGE 8. Only Ash reaches 8, at piety ≥160 = piety_rank 6
+// (piety_breakpoint(5), religion.cc); the radius sits at 7, inside default
+// sight, through the whole 5★ band (120–159), so the floor moves exactly
+// when the ring gains information.
+//
+// That move is player-caused, not a tick: Ash piety is set from the
+// fraction of equipment slots cursed (ash_check_bondage → set_piety,
+// god-passive.cc), recomputed on binding/shattering a curse or wearing/
+// removing a cursed item — each with its own message, and the 6th star
+// appears in the HUD at the same moment. No god-power line marks the
+// crossing (the Ash table in religion.cc ends at rank 4); the star is the
+// cue. Keying on god identity instead (17 for any Ash) was tried and
+// reverted: it only costs 0–5★ Ash the 15 floor. The wire `penance` flag
+// is not an input: it is player_under_penance() for the CURRENT god
+// (tileweb.cc, religion.h default arg) and Ash has no conducts to break
+// (god-conduct.cc), so it is never true while god is Ashenzari.
 //
 // LoS is symmetric, so a view floored at the sight diameter shows every
 // cell a monster can act from; the detection ring adds the only live
@@ -26,12 +39,11 @@ export const LOS_DEFAULT_RANGE = 7
 
 // Wire `player` facts the floor depends on: `species` and `god` are
 // species::name() / god_name() strings ("Barachi", "Ashenzari"),
-// `pietyRank` the 0–6 star count, `penance` the under-wrath flag.
+// `pietyRank` the 0–6 star count.
 export interface SightFacts {
   species?: string
   god?: string
   pietyRank?: number
-  penance?: boolean
 }
 
 export function losRange(species: string | undefined): number {
@@ -44,7 +56,7 @@ export function losDiameter(species: string | undefined): number {
 
 // Detection radius that can exceed default sight; 0 when nothing does.
 export function detectRange(f: SightFacts): number {
-  return f.god === 'Ashenzari' && (f.pietyRank ?? 0) >= 6 && !f.penance ? 8 : 0
+  return f.god === 'Ashenzari' && (f.pietyRank ?? 0) >= 6 ? 8 : 0
 }
 
 export function viewFloorDiameter(f: SightFacts): number {

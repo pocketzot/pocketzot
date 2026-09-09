@@ -1618,7 +1618,6 @@ export function buildGameView(
         if (msg.species !== undefined) sight.species = msg.species
         if (msg.god !== undefined) sight.god = msg.god
         if (msg.piety_rank !== undefined) sight.pietyRank = msg.piety_rank
-        if (msg.penance !== undefined) sight.penance = !!msg.penance
         if (mapView.setSight(sight)) scheduleFit()
         if (msg.xl !== undefined) charMeta.xl = msg.xl
         if (msg.place !== undefined) charMeta.place = msg.place

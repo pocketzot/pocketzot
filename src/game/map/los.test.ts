@@ -25,7 +25,7 @@ describe('viewFloorDiameter', () => {
   it('widens to 17 for Ashenzari at six stars (detect radius 8)', () => {
     expect(viewFloorDiameter({ god: 'Ashenzari', pietyRank: 6 })).toBe(17)
     expect(viewFloorDiameter({ god: 'Ashenzari', pietyRank: 5 })).toBe(15)
-    expect(viewFloorDiameter({ god: 'Ashenzari', pietyRank: 6, penance: true })).toBe(15)
     expect(viewFloorDiameter({ god: 'Ashenzari' })).toBe(15)
+    expect(viewFloorDiameter({ species: 'Barachi', god: 'Ashenzari', pietyRank: 2 })).toBe(17)
   })
 })
