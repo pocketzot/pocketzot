@@ -2511,6 +2511,9 @@ export function buildGameView(
       if (rawBody) {
         const bodyEl = document.createElement('div')
         bodyEl.className = 'overlay-body fg7'
+        // Scroller bodies take the smaller font + tighter pitch (style.css
+        // .overlay-body--scroller); describe-* panels stay at prose size.
+        if (msg.type === 'formatted-scroller') bodyEl.classList.add('overlay-body--scroller')
         // The end-of-game screen (the "Goodbye, …" character summary + the
         // server's high-score table) is a single fixed-width terminal block,
         // not a prose panel: every line shares one 80-column coordinate
