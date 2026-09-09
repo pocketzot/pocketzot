@@ -56,6 +56,14 @@ describe('extractSkillHotkeys', () => {
     expect(extractSkillHotkeys([line])).toEqual([])
   })
 
+  // Regression: "Cost" is padded to the 6-wide progress slot, so the header
+  // carries "t   A" — a blank-sign match unless the hotkey is boundary-anchored.
+  // This was the lone phantom `t` button in a gnoll's menu (opens in cost view).
+  it('ignores the cost-view column-header row', () => {
+    const line = '      Skill           Level Cost   Apt       Skill           Level Cost   Apt'
+    expect(extractSkillHotkeys([line])).toEqual([])
+  })
+
   it('ignores menu footer help text', () => {
     const lines = [
       ' [?] Help                [=] set a skill target',
