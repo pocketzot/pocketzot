@@ -87,10 +87,10 @@ describe('agoLabel', () => {
   const ago = (ms: number): string => agoLabel(NOW - ms, NOW)
   it('scales through the units and yields to the date past a year', () => {
     expect(ago(30_000)).toBe('just now')
-    expect(ago(20 * 60_000)).toBe('20 min ago')
+    expect(ago(20 * 60_000)).toBe('20m ago')
     expect(ago(5 * 3600_000)).toBe('5h ago')
     expect(ago(3 * 86400_000)).toBe('3d ago')
-    expect(ago(90 * 86400_000)).toBe('3 months ago')
+    expect(ago(90 * 86400_000)).toBe('3mo ago')
     expect(ago(400 * 86400_000)).toBe('')
     expect(agoLabel(NOW + 60_000, NOW)).toBe('') // clock skew — say nothing
   })
