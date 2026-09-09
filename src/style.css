@@ -39,8 +39,9 @@
      through #crt-display. Both paths share these tokens, so they're the single
      knob for menu text. --fs-overlay is reading text (rows, descriptions,
      titles, CRT body); --fs-overlay-scroller is formatted-scroller text
-     (Ctrl-P scrollback, help pages) — one step smaller, paired with a tight
-     line pitch in .overlay-body--scroller. Menu rows deliberately stay at
+     (Ctrl-P scrollback, help pages) — a half step below reading text (0.8rem
+     read as too tiny on-device), paired with a tight line pitch in
+     .overlay-body--scroller. Menu rows deliberately stay at
      --fs-overlay: 0.8rem was tried on-device and reverted — the row pitch
      is pinned by the sprite (tiles) / tap-target padding (ASCII), so it
      saved no height, and real item names are long enough that ~5 extra
@@ -48,7 +49,7 @@
      title. --fs-overlay-chrome is secondary labels (headers, footers).
      Control buttons stay literal — different role. */
   --fs-overlay:          0.9rem;
-  --fs-overlay-scroller: 0.8rem;
+  --fs-overlay-scroller: 0.85rem;
   --fs-overlay-chrome:   0.8rem;
 
   /* Home-indicator clearance: the device's real bottom inset (viewport-fit=
