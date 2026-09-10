@@ -146,6 +146,22 @@ export type ServerMsg =
   // synthesizes the same message with `filename` (the dump's stem) instead —
   // there is no URL, the file lives in the engine's FS.
   | { msg: 'dump'; url?: string; filename?: string }
+  // Offline only: the mini-server's relay of the engine's starred `ending`
+  // line (end.cc _persist_ending → tileweb.cc send_ending, PocketZot
+  // engine) — the same reason + hiscore blurb game_ended will repeat,
+  // delivered the moment the ending is flushed to IndexedDB, BEFORE the end
+  // screens (more, inventory, goodbye). It exists because game_ended is
+  // synthesized at process exit (upstream parity): an app killed on the end
+  // screens never receives it, while the disk already holds the ending. So
+  // every client record that mirrors the ending (avatars.ts outcome stamp,
+  // offline-state.ts slot record, the outcome counters) closes on THIS
+  // message, and game_ended's copy is a no-op behind a latch — an engine
+  // whose flush fails sends no `ending`, so the client can never be ahead
+  // of the disk. Never an exit: the game view stays up until game_ended.
+  // No `dump`: the offline game_ended carries none either (mini-server
+  // `end()` builds it from reason + message; '#' dumps travel as their own
+  // {msg:'dump', filename}), so the latch drops nothing.
+  | { msg: 'game_ending'; reason: string; message?: string }
   | { msg: 'game_ended'; reason: string; message?: string; dump?: string }
   | { msg: 'go_lobby' }
   | { msg: 'lobby_entry' } & LobbyEntry

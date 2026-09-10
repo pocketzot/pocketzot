@@ -7,6 +7,8 @@ import { ENABLE_SPELL_TAB } from '../game/input/touch'
 import type { WsConnection } from '../ws/connection'
 import type { ServerMsg, ClientMsg, GameExit } from '../ws/types'
 import type { MapStore } from '../game/map/map-store'
+import { fakeStorage } from '../test/fake-storage'
+import { listAllAvatars, saveAvatar } from '../avatars'
 
 // game-view.ts exports buildGameView (plus unwrapHangingIndents/HANG_MARK for
 // the data-file sweep test), so it's exercised end-to-end the way
@@ -2266,5 +2268,69 @@ describe('newchar counting', () => {
     h.dispatch(identity)
     h.dispatch(welcome('<yellow>Welcome, bram the Minotaur Berserker.</yellow>'))
     expect(chars()).toEqual([])
+  })
+})
+
+// Offline, the engine announces a flushed ending (game_ending) before the
+// end screens and game_ended repeats the reason at process exit. The crypt
+// stamp + counters must land on the first, so an app killed on the end
+// screens leaves the character closed; the second must not double-record.
+describe('game_ending: the offline flush-time outcome', () => {
+  const realDev = import.meta.env.DEV
+  let beacons: string[]
+
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    beacons = []
+    import.meta.env.DEV = false
+    Object.defineProperty(navigator, 'sendBeacon', {
+      value: (url: string) => { beacons.push(url); return true },
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    import.meta.env.DEV = realDev
+    vi.unstubAllGlobals()
+  })
+
+  // The slot's live entry, as a map capture would have left it.
+  const seed = (): void => saveAvatar({
+    wsUrl: 'local://offline', username: 'Dumptest', gameId: 'offline', charName: 'Dumptest',
+    httpBase: '', version: 'local', doll: null, mcache: null,
+  }, { turn: 100 })
+  const deadEach = (): string[] => beacons.filter((u) => u === '/api/e?e=dead-each-offline')
+  const ending = { msg: 'game_ending', reason: 'dead', message: 'Slain by a kobold' }
+
+  it('stamps the outcome and counts the death while the game view stays up', () => {
+    seed()
+    const h = setupOffline(async () => null)
+    h.dispatch({ msg: 'player', name: 'Dumptest', turn: 120 })
+    h.dispatch(ending)
+    expect(listAllAvatars()[0]!.outcome).toMatchObject({ reason: 'dead', message: 'Slain by a kobold' })
+    expect(h.onLobby).not.toHaveBeenCalled()
+    expect(deadEach()).toHaveLength(1)
+  })
+
+  it('the game_ended that follows exits without recording twice', () => {
+    seed()
+    const h = setupOffline(async () => null)
+    h.dispatch({ msg: 'player', name: 'Dumptest', turn: 120 })
+    h.dispatch(ending)
+    h.dispatch({ msg: 'game_ended', reason: 'dead', message: 'Slain by a kobold' })
+    expect(h.onLobby).toHaveBeenCalledTimes(1)
+    expect(h.onLobby.mock.calls[0]![0]).toMatchObject({ reason: 'dead' })
+    expect(deadEach()).toHaveLength(1)
+    expect(listAllAvatars().filter((a) => a.outcome)).toHaveLength(1)
+  })
+
+  // charName comes only from a player message — the harness's username
+  // ('Dumptest') is a different field and does not stand in for it.
+  it('records nothing before a character has been seen', () => {
+    seed()
+    const h = setupOffline(async () => null)
+    h.dispatch(ending)
+    expect(listAllAvatars()[0]!.outcome).toBeUndefined()
+    expect(deadEach()).toHaveLength(0)
   })
 })

@@ -206,6 +206,53 @@ describe('mini-server dump routing', () => {
   })
 })
 
+describe('mini-server ending relay', () => {
+  // The engine announces a flushed ending (end.cc _persist_ending) before
+  // the end screens; the client's records close on it while the game view
+  // stays up through the screens.
+  it('relays the starred ending as game_ending without touching the exit path', () => {
+    const { port, delivered, mini } = harness()
+    mini.start()
+    delivered.length = 0
+    port.onOutput('*{"msg":"ending","type":"dead","message":"Slain by a kobold"}\n')
+    expect(delivered).toEqual([{ msg: 'game_ending', reason: 'dead', message: 'Slain by a kobold' }])
+    expect(port.terminated).toBe(false)
+    // The end screens still tear down normally: exitDeclared is not latched.
+    delivered.length = 0
+    port.onOutput('{"msg":"ui-pop"}\n')
+    expect(delivered).toEqual([{ msg: 'ui-pop' }])
+  })
+
+  // screen_end_game's real order: exit_reason first, then the persist and
+  // its ending. Starred lines bypass the exitDeclared drop-list.
+  it('relays an ending that arrives after exit_reason, without a message', () => {
+    const { port, delivered, mini } = harness()
+    mini.start()
+    delivered.length = 0
+    port.onOutput('*{"msg":"exit_reason","type":"quit"}\n')
+    port.onOutput('*{"msg":"ending","type":"quit"}\n')
+    expect(delivered).toEqual([{ msg: 'game_ending', reason: 'quit', message: undefined }])
+  })
+
+  it('game_ended still follows from exit_reason at process exit', () => {
+    const { port, delivered, mini } = harness()
+    mini.start()
+    port.onOutput('*{"msg":"ending","type":"dead","message":"Slain by a kobold"}\n')
+    port.onOutput('*{"msg":"exit_reason","type":"dead","message":"Slain by a kobold"}\n')
+    port.onExit(0)
+    expect(delivered.at(-1)).toEqual({ msg: 'game_ended', reason: 'dead', message: 'Slain by a kobold' })
+  })
+
+  it('drops an ending once the game has ended', () => {
+    const { port, delivered, mini } = harness()
+    mini.start()
+    port.onExit(0)
+    delivered.length = 0
+    port.onOutput('*{"msg":"ending","type":"dead"}\n')
+    expect(delivered).toEqual([])
+  })
+})
+
 describe('mini-server engine→client relay', () => {
   it('splits newline-batched chunks and delivers each message in order, synchronously', () => {
     const { port, delivered, mini } = harness()

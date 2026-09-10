@@ -2,8 +2,9 @@
 // screen's offline card and the offline lobby can label save slots ("Bram the
 // Chopper — D:3") without booting the engine or opening its IndexedDB. One
 // record per save slot, keyed by the slot's save-file stem (see slotStem);
-// boot.ts folds inbound messages in (player deltas, milestones, game_ended)
-// and offlineTracker commits the fold when the engine reports a checkpoint.
+// boot.ts folds inbound messages in (player deltas, milestones, game_ending
+// / game_ended) and offlineTracker commits the fold when the engine reports
+// a checkpoint.
 // A record existing means "we believe this slot has a resumable save" — the
 // IDBFS probe (save-transfer.ts listOfflineSaves) is ground truth where the
 // browser allows it, and reconcileOfflineChars trues the records up against
@@ -160,7 +161,7 @@ const SAVE_GONE = new Set(['dead', 'quit', 'won', 'bailed out', 'cancel'])
 // localStorage only at checkpoint(), i.e. when the engine reports its save
 // file has caught up — see the tracker below for why.
 export interface OfflineSlotTracker {
-  // Fold one inbound message: player deltas and game_ended.
+  // Fold one inbound message: player deltas, game_ending and game_ended.
   note(msg: ServerMsg): void
   // Fold one starred milestone message (mini-server hands over the parsed
   // xlog snapshot; every field is a string, empty ones omitted). Only two
@@ -196,9 +197,14 @@ export function offlineTracker(name: string): OfflineSlotTracker {
   // player delta arrives the save exists and a bare record is already true
   // of it.
   let recorded = stem in getOfflineChars()
+  // The save was unlinked (a SAVE_GONE ending): nothing that arrives after
+  // — the end screens' player/milestone traffic, a checkpoint — may fold a
+  // record back for it. game_ending precedes that whole span (types.ts), so
+  // the drop can't rely on being the last message the way game_ended was.
+  let closed = false
 
   const flush = (): void => {
-    if (!pending) return
+    if (closed || !pending) return
     const map = getOfflineChars()
     map[stem] = { ...pending, when: Date.now() }
     write(map)
@@ -208,6 +214,7 @@ export function offlineTracker(name: string): OfflineSlotTracker {
 
   return {
     note(msg: ServerMsg): void {
+      if (closed) return
       if (msg.msg === 'player') {
         const next: OfflineChar = { ...(pending ?? getOfflineChars()[stem] ?? { name, when: 0 }) }
         if (msg.name) next.name = msg.name
@@ -223,10 +230,11 @@ export function offlineTracker(name: string): OfflineSlotTracker {
         if (msg.turn !== undefined) next.turn = msg.turn
         pending = next
         if (!recorded) flush()
-      } else if (msg.msg === 'game_ended') {
+      } else if (msg.msg === 'game_ending' || msg.msg === 'game_ended') {
         if (SAVE_GONE.has(msg.reason)) {
           const map = getOfflineChars()
           if (stem in map) { delete map[stem]; write(map) }
+          closed = true
         }
         // Nothing else to do for an ending that leaves a save. A clean exit
         // commits on the way out, so its checkpoint has already flushed the

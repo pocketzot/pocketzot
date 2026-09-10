@@ -141,6 +141,21 @@ export function createMiniServer(
         exitDeclared = true
         break
       }
+      case 'ending': {
+        // Relayed as game_ending (types.ts has the why). Not an exit: the
+        // end screens are still coming, so exitDeclared stays down and
+        // nothing is stashed for game_ended. No "unknown" filter, unlike
+        // exit_reason above: end_game's reason comes from
+        // _kill_method_to_exit (never unknown) and screen_end_game
+        // hardcodes "quit"; the boot preamble resets exit_reason only.
+        if (ended) break
+        deliver({
+          msg: 'game_ending',
+          reason: String(msg['type'] ?? 'error'),
+          message: typeof msg['message'] === 'string' ? msg['message'] : undefined,
+        })
+        break
+      }
       case 'milestone':
         hooks.milestone?.(msg)
         break

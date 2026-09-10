@@ -357,6 +357,37 @@ export function buildGameView(
   // can't be dodged by a reload. Merely non-scoring-but-honest play (seeded
   // games) deliberately does NOT latch.
   let cheatSeen = false
+  // The terminal outcome has been recorded (crypt stamp + counters) by
+  // whichever of game_ending / game_ended arrived first (types.ts). Never
+  // reset: exitToLobby discards the whole view, like gameOverSeen.
+  let endingRecorded = false
+
+  // Stamp a terminal outcome onto the character's crypt entry (see
+  // ../avatars recordAvatarOutcome) and bump the anonymous outcome counters.
+  // The excluded reasons either leave a resumable save ('saved',
+  // 'disconnect', 'crash', 'error') or never had a character ('cancel', a
+  // creation abort). charName doubles as the this-session-played-a-character
+  // guard, so an exit with no character can't stamp the slot's previous
+  // entry.
+  function recordEnding(reason: string, message?: string, dump?: string): void {
+    const terminal = reason === 'dead' || reason === 'won'
+      || reason === 'quit' || reason === 'bailed out'
+    if (!terminal || spectating || !charName || !gameId || endingRecorded) return
+    endingRecorded = true
+    recordAvatarOutcome({ wsUrl: conn.wsUrl, username, gameId }, { reason, message, dump }, charMeta)
+    // Same own-real-game gate as the crypt write (fixture replays keep
+    // gameId ''), plus the wizard/explore latch — see cheatSeen. Win rows
+    // carry the rune count parsed from the end blurb (absent on parse miss,
+    // never 0).
+    if (cheatSeen || (reason !== 'won' && reason !== 'dead')) return
+    const offline = gameId === 'offline' ? '-offline' as const : ''
+    if (reason === 'won') {
+      countEach(`won-each${offline}`, {}, parseWinRuneCount(message))
+    } else {
+      count(`dead${offline}`)
+      countEach(`dead-each${offline}`)
+    }
+  }
   // Runes already counted this view, by name. The pickup line reaches a live
   // client at most once (rollback touches only temporary messages; neither
   // reconnect nor the attach handshake replays history — message.cc
@@ -1265,7 +1296,10 @@ export function buildGameView(
     // in the lobby (CPO) or in-view (CDI); name from the first player snapshot —
     // all land early in a played game. charName gates out the pre-name
     // character-creation screens.
-    if (spectating || !charName || !gameId || !loader) return
+    // endingRecorded: a closed entry always appends (avatars.ts saveAvatar),
+    // so a capture off the end screens' frames would mint a phantom live
+    // entry for the character that just died.
+    if (spectating || !charName || !gameId || !loader || endingRecorded) return
     const cell = store.get(store.playerPos.x, store.playerPos.y)
     if (!cell) return
     const doll = cell.doll ?? null
@@ -2270,36 +2304,13 @@ export function buildGameView(
         exitToLobby()
         break
 
+      case 'game_ending':
+        recordEnding(msg.reason, msg.message)
+        break
+
       case 'game_ended': {
         disarmCreationGuard()
-        // Stamp terminal outcomes onto the character's crypt entry (see
-        // ../avatars recordAvatarOutcome). The excluded reasons either leave a
-        // resumable save ('saved', 'disconnect', 'crash', 'error') or never had
-        // a character ('cancel', a creation abort). charName doubles as the
-        // this-session-played-a-character guard, so an exit with no character
-        // can't stamp the slot's previous entry.
-        const terminal = msg.reason === 'dead' || msg.reason === 'won'
-          || msg.reason === 'quit' || msg.reason === 'bailed out'
-        if (terminal && !spectating && charName && gameId) {
-          recordAvatarOutcome(
-            { wsUrl: conn.wsUrl, username, gameId },
-            { reason: msg.reason, message: msg.message, dump: msg.dump },
-            charMeta,
-          )
-          // Anonymous outcome counters, same own-real-game gate as the crypt
-          // write above (fixture replays keep gameId ''), plus the wizard/
-          // explore latch — see cheatSeen. Win rows carry the rune count
-          // parsed from the end blurb (absent on parse miss, never 0).
-          if (!cheatSeen && (msg.reason === 'won' || msg.reason === 'dead')) {
-            const offline = gameId === 'offline' ? '-offline' as const : ''
-            if (msg.reason === 'won') {
-              countEach(`won-each${offline}`, {}, parseWinRuneCount(msg.message))
-            } else {
-              count(`dead${offline}`)
-              countEach(`dead-each${offline}`)
-            }
-          }
-        }
+        recordEnding(msg.reason, msg.message, msg.dump)
         // Forward exit details so the lobby renders the exit dialog after the
         // layer switch. The trailing go_lobby + lobby list (often batched with
         // this) land on the lobby's message handler, not ours.

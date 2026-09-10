@@ -234,9 +234,10 @@ export function sortRecords(recs: readonly XlogRecord[], mode: RecordsSort): Xlo
   return out
 }
 
-// The client stamps outcome.endedAt when it receives game_ended — seconds
-// after the engine's death_time, so a generous window still can't cross two
-// games of the same character.
+// The client stamps outcome.endedAt on game_ending (the engine's flush of
+// the ending, types.ts) or, failing that, game_ended — seconds after the
+// engine's death_time either way, so a generous window still can't cross
+// two games of the same character.
 const JOIN_WINDOW_MS = 10 * 60_000
 
 // Best-effort xlog→doll join against the avatars store — the doll-sidecar

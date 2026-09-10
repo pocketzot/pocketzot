@@ -85,7 +85,7 @@ export function mergeRunes(cur?: readonly string[], add?: readonly string[]): st
 // terminal reasons are recorded (dead/won/quit/bailed out) — an entry with an
 // outcome is closed: it can never be the live save again.
 export interface AvatarOutcome {
-  reason: string    // game_ended reason
+  reason: string    // game_ended / game_ending reason (offline stamps on the latter)
   message?: string  // morgue summary blurb (whitespace-aligned)
   dump?: string     // morgue/dump URL without extension — append ".txt"
   endedAt: number   // ms epoch when recorded
@@ -188,8 +188,9 @@ export function listAllAvatars(): Avatar[] {
   return load()
 }
 
-// Stamp a terminal game_ended outcome onto the slot's current (most-recent)
-// entry — the character that was just being played. One-shot: an existing
+// Stamp a terminal outcome (game_ended, or offline's earlier game_ending —
+// types.ts) onto the slot's current (most-recent) entry — the character that
+// was just being played. One-shot: an existing
 // outcome is never overwritten (after a terminal end the next capture in the
 // slot appends a fresh entry, so a second stamp could only be a misfire).
 // `meta` carries the final identity/progress snapshot: the death-turn player

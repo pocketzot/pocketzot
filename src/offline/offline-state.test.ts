@@ -121,6 +121,36 @@ describe('offlineTracker', () => {
     }
   })
 
+  // game_ending is the engine's flush-time announcement of the same reason
+  // (before the end screens); the record must go there, so an app killed on
+  // the end screens can't keep a label for an unlinked save.
+  it('drops the record on game_ending, and the later game_ended has nothing left to do', () => {
+    const track = trackerWithRecord('Bram')
+    track.note({ msg: 'player', place: 'D:2' } as ServerMsg)
+    track.note({ msg: 'game_ending', reason: 'dead' } as ServerMsg)
+    expect('Bram' in getOfflineChars()).toBe(false)
+    track.note({ msg: 'game_ended', reason: 'dead' } as ServerMsg)
+    expect(getOfflineChars()).toEqual({})
+  })
+
+  // The end screens' traffic (player frames, a milestone, a checkpoint)
+  // arrives AFTER game_ending; none of it may fold a record back for the
+  // unlinked save.
+  it('nothing after game_ending can re-create the dropped record', () => {
+    const track = trackerWithRecord('Bram')
+    track.note({ msg: 'game_ending', reason: 'dead' } as ServerMsg)
+    track.note({ msg: 'player', place: 'D:3', xl: 4 } as ServerMsg)
+    track.milestone({ milestone: 'killed Sigmund.' })
+    track.checkpoint()
+    expect(getOfflineChars()).toEqual({})
+  })
+
+  it('a game_ending whose reason leaves a save keeps the record', () => {
+    const track = trackerWithRecord('Bram')
+    track.note({ msg: 'game_ending', reason: 'saved' } as ServerMsg)
+    expect('Bram' in getOfflineChars()).toBe(true)
+  })
+
   // Only a checkpoint writes a label. A clean exit commits on its way out, so
   // its checkpoint arrives first and the fold is already committed; a crash
   // never commits, so whatever is still folded describes turns the save file
