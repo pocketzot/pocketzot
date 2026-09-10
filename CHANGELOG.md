@@ -11,7 +11,7 @@ Notable changes to PocketZot, newest first.
 
 ## 2026-09-10
 
-- Closed a too-tempting death rollback for offline games.
+- Closed a death rollback for offline games.
 
 ## 2026-09-09
 
@@ -21,7 +21,7 @@ Notable changes to PocketZot, newest first.
   detection, it is set to 17.
 - Reduced line spacing in the full message history so more lines fit
   on screen.
-- Adjusted date labels in character cards.
+- Date labels in character cards are now a bit more compact.
 - Fixed a stray skill letter appearing in certain situations.
 
 ## 2026-09-08
