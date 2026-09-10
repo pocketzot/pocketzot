@@ -9,12 +9,16 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-10
+
+- Closed a too-tempting death rollback for offline games.
+
 ## 2026-09-09
 
 - In tiles mode, the zoomed map now fits line of sight exactly instead
   of one cell beyond, for larger tiles. By default this is diameter 15.
   For Barachi, or Ashenzari followers with range-eight monster
-  detection, the zoom is set to 17.
+  detection, it is set to 17.
 - Reduced line spacing in the full message history so more lines fit
   on screen.
 - Adjusted date labels in character cards.
