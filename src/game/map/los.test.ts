@@ -13,6 +13,11 @@ describe('losDiameter', () => {
     expect(losRange('Barachi')).toBe(8)
     expect(losDiameter('Barachi')).toBe(17)
   })
+
+  it('accepts the 0.34 Beogh orc name for Barachi', () => {
+    expect(losDiameter('Orcphibian')).toBe(17)
+    expect(losDiameter('Orc')).toBe(15) // Human's orc_name — plain species stay default
+  })
 })
 
 describe('viewFloorDiameter', () => {

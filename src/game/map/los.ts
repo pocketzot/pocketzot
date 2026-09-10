@@ -10,6 +10,14 @@
 // player.cc update_vision). Every other modifier — Nightstalker, scarf of
 // shadows, robe of Night, Nightfall — lowers it.
 //
+// The wire `species` is species::name() in trunk (tileweb.cc, since
+// 0c61520c21 — the orcified name moved to `species_display_name`), but in
+// 0.34 it is player_species_name(), which under Beogh returns the species'
+// orc_name: a 0.34 Barachi of Beogh arrives as "Orcphibian"
+// (describe.cc:7739, barachi.yaml). Beogh takes any species, so both
+// strings must match; the orc name is unique to Barachi in every
+// species yaml, so no other species can collide.
+//
 // Detection — out-of-LoS monster markers (MONS_SENSED, drawn through
 // walls): player_monster_detect_radius (player.cc) is the max of Antennae
 // level×2 (≤6), the assassin's hood (4) and Ashenzari piety/20, capped at
@@ -32,9 +40,12 @@
 //
 // LoS is symmetric, so a view floored at the sight diameter shows every
 // cell a monster can act from; the detection ring adds the only live
-// information that can sit beyond it. Cells past both hold map memory
-// only. Narrower than viewFloorDiameter() hides live threats — never floor
-// below it.
+// information that can sit beyond it per turn. Cells past both hold map
+// memory only — the exceptions are one-shot level reveals (Xom's
+// divination, fully-mapped branches such as Temple/Gauntlet, Descent
+// stair reveals, tesseract activation) whose monster data goes stale the
+// moment it lands, so no floor accounts for them. Narrower than
+// viewFloorDiameter() hides live threats — never floor below it.
 export const LOS_DEFAULT_RANGE = 7
 
 // Wire `player` facts the floor depends on: `species` and `god` are
@@ -47,7 +58,9 @@ export interface SightFacts {
 }
 
 export function losRange(species: string | undefined): number {
-  return species === 'Barachi' ? LOS_DEFAULT_RANGE + 1 : LOS_DEFAULT_RANGE
+  return species === 'Barachi' || species === 'Orcphibian'
+    ? LOS_DEFAULT_RANGE + 1
+    : LOS_DEFAULT_RANGE
 }
 
 export function losDiameter(species: string | undefined): number {
