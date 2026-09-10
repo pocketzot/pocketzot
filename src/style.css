@@ -37,20 +37,19 @@
   /* Server-menu/overlay font scale. Most server menus (i, a, shops,
      descriptions) read through the .overlay-* classes; the skills menu reads
      through #crt-display. Both paths share these tokens, so they're the single
-     knob for menu text. --fs-overlay is reading text (rows, descriptions,
-     titles, CRT body); --fs-overlay-scroller is formatted-scroller text
-     (Ctrl-P scrollback, help pages) — a half step below reading text (0.8rem
-     read as too tiny on-device), paired with a tight line pitch in
-     .overlay-body--scroller. Menu rows deliberately stay at
-     --fs-overlay: 0.8rem was tried on-device and reverted — the row pitch
-     is pinned by the sprite (tiles) / tap-target padding (ASCII), so it
-     saved no height, and real item names are long enough that ~5 extra
-     columns rarely un-wrap a row; it just read as demoted beside the
-     title. --fs-overlay-chrome is secondary labels (headers, footers).
-     Control buttons stay literal — different role. */
-  --fs-overlay:          0.9rem;
-  --fs-overlay-scroller: 0.85rem;
-  --fs-overlay-chrome:   0.8rem;
+     knob for menu text: rows, descriptions, titles, CRT body, and
+     formatted-scroller streams (Ctrl-P, `%`, Ctrl-O, help) all sit at
+     --fs-overlay. Don't re-split a smaller size for the scrollers — 0.8rem
+     then 0.85rem were both tried on-device and reverted. Nothing in reach
+     un-wraps 80-column content (~0.5rem would), so it bought ~2 lines on the
+     only surface that can gain any: menu-row pitch is pinned by the sprite
+     (tiles) / tap-target padding (ASCII), so a smaller row saves no height
+     and just reads as demoted beside the title. Scrollers still differ in
+     line PITCH (.overlay-body--scroller). --fs-overlay-chrome is secondary
+     labels (headers, footers). Control buttons stay literal — different
+     role. */
+  --fs-overlay:        0.9rem;
+  --fs-overlay-chrome: 0.8rem;
 
   /* Home-indicator clearance: the device's real bottom inset (viewport-fit=
      cover makes env() reliable), capped at the field-tested 25px rather than
@@ -3117,11 +3116,11 @@ html.map-hold, html.map-hold * {
   position: relative;
 }
 /* formatted-scroller bodies (Ctrl-P scrollback, Ctrl-O overview, help pages,
-   `%`): terminal-shaped line streams, not prose — smaller and tighter
-   (1.5 → 1.25 pitch). Ctrl-P alone can't be singled out: it arrives
+   `%`): terminal-shaped line streams, not prose — tighter pitch (1.5 → 1.25),
+   same size as every other overlay (see the --fs-overlay comment for why the
+   size split was folded back). Ctrl-P alone can't be singled out: it arrives
    untagged, like the others (see UiPushMsg.tag). */
 .overlay-body--scroller {
-  font-size: var(--fs-overlay-scroller);
   line-height: 1.25;
 }
 
