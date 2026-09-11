@@ -352,7 +352,7 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 0.5rem;
+  gap: 1rem;
   margin-bottom: var(--login-head-gap);
   min-height: 64px;
   cursor: pointer;            /* the row taps through to the crypt (full history) */
@@ -405,8 +405,8 @@ html, body {
   justify-content: center;
   align-content: flex-start;
   align-items: flex-end;
-  gap: 1rem 0.5rem;
-  padding-top: 1rem;
+  gap: 1rem 0.75rem;
+  padding-top: 1.5rem;
 }
 /* Each doll is a tap target (→ its character card, crypt-view.ts). */
 .crypt-doll {
