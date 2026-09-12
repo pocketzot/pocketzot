@@ -268,7 +268,7 @@ html, body {
    bottom margin so showing it never shifts the card. */
 .logo-tell {
   position: absolute;
-  top: calc(100% + 0.22em); /* clear of the thickest rarity rule (0.06 + 0.13em) */
+  top: calc(100% + 0.22em); /* clear of the tiers' down-right depth (0.12em + ornate's soft drop) */
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.62rem;
@@ -288,56 +288,101 @@ html, body {
   .logo-tell--show { animation: none; opacity: 1; }
 }
 
-/* Tier colours: CRT lightgreen(10) → lightmagenta(13) → white(15) → yellow(14). */
+/* Tier colours: CRT lightgreen(10) → lightmagenta(13) → white(15) → yellow(14);
+   monochrome, apart from the ladder, white(15). */
 .tier-ornate      { color: #8ae234; }
 .tier-magnificent { color: #fd59fa; }
 .tier-artifact    { color: #eeeeec; }
 .tier-mythical    { color: #fce94f; }
+.tier-monochrome  { color: #eeeeec; }
 
-/* Rarity decoration (setTierDecor in src/logo.ts): underlines of rising weight,
-   artifact adds a hard offset shadow, mythical a frame. Rules are pseudo-
-   elements on the title box, not text-decoration: the lookalike glyphs live in
-   fallback fonts, and per-glyph underlines stepped at every font boundary
-   (seen live). Not borders either: those grew the box 1–5px at settle and
-   nudged the whole card. Tall glyphs (╬ ‡ Þ) crossing the rules is intended.
-   The shadow is a ::before clone of the glyph (attr(data-ch)) rather than
-   text-shadow, which would also shadow any propagated decoration. */
-.decor-ornate::after,
-.decor-magnificent::after,
-.decor-artifact::after,
-.decor-mythical::before,
-.decor-mythical::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  pointer-events: none;
+/* Rarity decoration (setTierDecor in src/logo.ts). All depth runs down-right:
+   one light, and letters paint left to right, so each letter's depth tucks
+   under the next. Depth is text-shadow on the letter, which is safe because no
+   tier draws a text decoration for the shadow to catch. The options weighed
+   (and rejected) are in dev-material/logo-wordmark-specimens.html. */
+
+/* Ornate: a dark extrusion in each letter's own colour. currentColor in the
+   custom property resolves on each .logo-ch, so the depth follows the colour
+   fade. */
+.decor-ornate .logo-ch {
+  --depth: color-mix(in srgb, currentColor 40%, #000);
+  text-shadow:
+    0.02em 0.02em 0 var(--depth), 0.04em 0.04em 0 var(--depth), 0.06em 0.06em 0 var(--depth),
+    0.08em 0.08em 0 var(--depth), 0.1em 0.1em 0 var(--depth), 0.12em 0.12em 0.02em var(--depth),
+    0.16em 0.2em 0.25em rgb(0 0 0 / 0.7);
 }
-/* Outside the box: inside its edge the rules ride up into the glyphs. */
-.decor-ornate::after,
-.decor-magnificent::after,
-.decor-artifact::after,
-.decor-mythical::after    { top: calc(100% + 0.06em); }
-.decor-mythical::before   { bottom: calc(100% + 0.06em); }
-.decor-ornate::after      { height: 0.055em; background: #8ae234; }
-.decor-magnificent::after { height: 0.13em;  background: #fd59fa; }
-.decor-artifact::after    { height: 0.13em;  background: #eeeeec; }
-.decor-mythical::before,
-.decor-mythical::after    { height: 0.08em;  background: #fce94f; }
-.decor-artifact .logo-ch,
-.decor-mythical .logo-ch { position: relative; z-index: 0; } /* clone behind glyph, above backgrounds */
-.decor-artifact .logo-ink,
-.decor-mythical .logo-ink { position: relative; }
-.decor-artifact .logo-ink::before,
-.decor-mythical .logo-ink::before {
+
+/* Magnificent: an offset copy of each glyph (attr(data-ch)) in lightmagenta.
+   The ink must be inline-block: inside an inline ink the absolutely positioned
+   copy takes its baseline from its own line-height, so swapped letters
+   (line-height 1) and the rest threw it in opposite vertical directions
+   (measured in WebKit: +0.068em vs -0.034em). */
+.decor-magnificent .logo-ch { position: relative; z-index: 0; } /* copy behind glyph, above backgrounds */
+.decor-magnificent .logo-ink { position: relative; display: inline-block; }
+.decor-magnificent .logo-ink::before {
   content: attr(data-ch);
   position: absolute;
   left: 0.055em;
   top: 0.055em;
   z-index: -1;
+  color: #fd59fa;
 }
-.decor-artifact .logo-ink::before { color: #eeeeec; }
-.decor-mythical .logo-ink::before { color: #fce94f; }
+
+/* Artifact: a solid white edge lit from the bottom-right, a bright rim at the
+   seam falling off toward the back. */
+.decor-artifact .logo-ch {
+  text-shadow:
+    0.012em 0.012em 0 #fff, 0.025em 0.025em 0 #eeeeec, 0.04em 0.04em 0 #eeeeec,
+    0.055em 0.055em 0 #dededc, 0.07em 0.07em 0 #cbcbc9, 0.085em 0.085em 0 #b5b5b3,
+    0.1em 0.1em 0 #a0a09e, 0.115em 0.115em 0 #8b8b89;
+}
+
+/* Mythical: the nine letters as a 3×3 square (P·o·c / k·e·t / Z·o·t), each
+   throwing exact copies (0-blur currentColor text-shadow) at ±1 and ±2 tile
+   widths: a band of five whole tiles across the card, with no JS. Everything
+   is sized in cqw against the card, so it stays five tiles at any width.
+   Assumes the title holds only the word's spans (no fork head/tail text). */
+.login-card:has(> .decor-mythical) { container-type: inline-size; }
+.login-title.decor-mythical { /* two classes: must beat .logo-tappable's fit-content */
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, calc(100cqw / 15));
+  justify-content: center;
+  grid-auto-rows: 1.2em;
+  place-items: center;
+  font-size: calc(100cqw / 17.25);
+  letter-spacing: 0;
+  line-height: 1;
+}
+.decor-mythical .logo-ch {
+  text-shadow:
+    calc(100cqw / 5) 0 currentColor, calc(100cqw / -5) 0 currentColor,
+    calc(100cqw / 2.5) 0 currentColor, calc(100cqw / -2.5) 0 currentColor;
+}
+
+/* Monochrome: hollow letters with a level dot over each. The faint fill is
+   -webkit-text-fill-color so fill and stroke both read the letter's own colour
+   (currentColor in `color` would mean the parent's). line-height 1 on every
+   letter gives each .logo-ch the same top, so the dots can't step at the
+   swapped glyphs' fallback fonts. */
+.decor-monochrome .logo-ch { position: relative; line-height: 1; }
+.decor-monochrome .logo-ink {
+  display: inline-block;
+  -webkit-text-fill-color: color-mix(in srgb, currentColor 14%, transparent);
+  -webkit-text-stroke: 0.03em currentColor;
+}
+.decor-monochrome .logo-ch::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -0.22em;
+  width: 0.13em;
+  height: 0.13em;
+  margin-left: -0.115em; /* centre on the glyph, not its trailing letter-spacing */
+  border-radius: 50%;
+  background: currentColor;
+}
 
 /* Recently-played character dolls (see src/avatars.ts): a bare, centered row of
    doll sprites under the title, painted as DOM tile-stacks (.tile-stack). No

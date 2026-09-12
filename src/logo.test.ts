@@ -80,10 +80,17 @@ describe('rarity tiers', () => {
   })
 
   it('scoreRoll counts only swapped glyphs', () => {
-    const plain: Roll = { ch: 'o', fg: 4, swapped: false }
-    const swap: Roll = { ch: '○', fg: 4, swapped: true }
-    expect(scoreRoll([plain, plain, plain])).toBe('mundane')
-    expect(scoreRoll([swap, swap, swap, swap, swap, plain])).toBe('ornate')
+    const plain = (fg: number): Roll => ({ ch: 'o', fg, swapped: false })
+    const swap = (fg: number): Roll => ({ ch: '○', fg, swapped: true })
+    expect(scoreRoll([plain(4), plain(5), plain(4)])).toBe('mundane')
+    expect(scoreRoll([swap(4), swap(5), swap(4), swap(5), swap(4), plain(5)])).toBe('ornate')
+  })
+
+  it('scoreRoll: one colour across every letter is monochrome, whatever the swaps', () => {
+    const plain: Roll = { ch: 'o', fg: 10, swapped: false }
+    const swap: Roll = { ch: '○', fg: 10, swapped: true }
+    expect(scoreRoll([plain, plain, plain])).toBe('monochrome')
+    expect(scoreRoll([...Array<Roll>(8).fill(swap), plain])).toBe('monochrome') // beats mythical
   })
 
   it('setTierDecor decorates ornate and above, swaps cleanly, clears below the floor', () => {
@@ -93,6 +100,9 @@ describe('rarity tiers', () => {
     setTierDecor(el, 'mythical')
     expect(el.classList.contains('decor-mythical')).toBe(true)
     expect(el.classList.contains('decor-ornate')).toBe(false)
+    setTierDecor(el, 'monochrome')
+    expect(el.classList.contains('decor-monochrome')).toBe(true)
+    expect(el.classList.contains('decor-mythical')).toBe(false)
     setTierDecor(el, 'glowing')
     expect([...el.classList].some((c) => c.startsWith('decor-'))).toBe(false)
     setTierDecor(el, 'mythical')

@@ -14,8 +14,9 @@
 // Colour integers are DCSS console colour indices == the CRT `fg0`..`fg15`
 // classes in style.css, so a roll of N just sets class `fgN`.
 //
-// Rarity: a roll's tier is its swap count (TIERS); ornate and up get a
-// decoration plus a one-word caption at settle. Nothing is persisted — the
+// Rarity: a roll's tier is its swap count (TIERS), unless all nine letters
+// share one colour (monochrome); ornate and up get a decoration plus a
+// one-word caption at settle. Nothing is persisted — the
 // roll lives in module memory for the page's lifetime (see sessionRoll).
 
 export const LOGO_CONFIG = {
@@ -104,10 +105,10 @@ export function rollLogo(): Roll[] {
 
 // One rung per swap count from 3 up. Swap count is Binomial(8, pGlyphShift)
 // over the 8 swap-capable letters, so at 0.2: 0–2 ≈ 80%, 3 ≈ 1/7, 4 ≈ 1/22,
-// 5 ≈ 1/109, 6 ≈ 1/871, 7 ≈ 1/12k, 8 ≈ 1/391k. Only DECOR_FLOOR and above
-// render anything.
+// 5 ≈ 1/109, 6 ≈ 1/871, 7 ≈ 1/12k, 8 ≈ 1/391k. Monochrome sits apart, above
+// the ladder (see scoreRoll). Only DECOR_FLOOR and above render anything.
 export const TIERS = [
-  'mundane', 'glowing', 'shimmering', 'ornate', 'magnificent', 'artifact', 'mythical',
+  'mundane', 'glowing', 'shimmering', 'ornate', 'magnificent', 'artifact', 'mythical', 'monochrome',
 ] as const
 export type Tier = (typeof TIERS)[number]
 export const DECOR_FLOOR: Tier = 'ornate'
@@ -122,7 +123,11 @@ export function swapTier(swaps: number): Tier {
   return 'mundane'
 }
 
+// Monochrome (every letter one colour) outranks any swap count. Only brown,
+// lightgreen, lightred and white are reachable by all nine letters, brown and
+// white only through swaps (t has no brown, c no white): ~1 in 330M rolls.
 export function scoreRoll(rolls: Roll[]): Tier {
+  if (new Set(rolls.map((r) => r.fg)).size === 1) return 'monochrome'
   return swapTier(rolls.filter((r) => r.swapped).length)
 }
 
@@ -143,8 +148,8 @@ function setFg(span: HTMLElement, fg: number): void {
 }
 
 // Apply one roll to a span. `animate` re-triggers the reveal keyframe. The
-// glyph sits in an inner .logo-ink span whose data-ch feeds the shadow tiers'
-// glyph clone (see the .decor-* block in style.css for why not text-shadow).
+// glyph sits in an inner .logo-ink span whose data-ch feeds the magnificent
+// tier's offset copy (see the .decor-* block in style.css).
 function applyRoll(span: HTMLElement, roll: Roll, animate: boolean): void {
   const { ch, fg, swapped } = roll
   if (fg < 0) return
