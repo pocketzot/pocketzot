@@ -14,10 +14,10 @@
 // Colour integers are DCSS console colour indices == the CRT `fg0`..`fg15`
 // classes in style.css, so a roll of N just sets class `fgN`.
 //
-// Rarity: a roll's tier is its swap count (TIERS), unless all nine letters
-// share one colour (monochrome); ornate and up get a decoration plus a
-// one-word caption at settle. Nothing is persisted — the
-// roll lives in module memory for the page's lifetime (see sessionRoll).
+// Rarity: a roll's tier comes from its swap count plus one colour signal (see
+// scoreRoll); ornate and up get a decoration plus a one-word caption at
+// settle. Nothing is persisted — the roll lives in module memory for the
+// page's lifetime (see sessionRoll).
 
 export const LOGO_CONFIG = {
   pDecorate: 0.30,     // probability of decorating at all
@@ -103,18 +103,17 @@ export function rollLogo(): Roll[] {
   return [...LOGO_WORD].map(rollLogoChar)
 }
 
-// One rung per swap count from 3 up. Swap count is Binomial(8, pGlyphShift)
+// One rung per swap count from 3 to 7. Swap count is Binomial(8, pGlyphShift)
 // over the 8 swap-capable letters, so at 0.2: 0–2 ≈ 80%, 3 ≈ 1/7, 4 ≈ 1/22,
-// 5 ≈ 1/109, 6 ≈ 1/871, 7 ≈ 1/12k, 8 ≈ 1/391k. Monochrome sits apart, above
-// the ladder (see scoreRoll). Only DECOR_FLOOR and above render anything.
+// 5 ≈ 1/109, 6 ≈ 1/871, 7+ ≈ 1/12k. Prismatic comes only from scoreRoll. Only
+// DECOR_FLOOR and above render anything.
 export const TIERS = [
-  'mundane', 'glowing', 'shimmering', 'ornate', 'magnificent', 'artifact', 'mythical', 'monochrome',
+  'mundane', 'glowing', 'shimmering', 'ornate', 'magnificent', 'prismatic', 'artifact',
 ] as const
 export type Tier = (typeof TIERS)[number]
 export const DECOR_FLOOR: Tier = 'ornate'
 
 export function swapTier(swaps: number): Tier {
-  if (swaps >= 8) return 'mythical'
   if (swaps >= 7) return 'artifact'
   if (swaps >= 6) return 'magnificent'
   if (swaps >= 5) return 'ornate'
@@ -123,12 +122,15 @@ export function swapTier(swaps: number): Tier {
   return 'mundane'
 }
 
-// Monochrome (every letter one colour) outranks any swap count. Only brown,
-// lightgreen, lightred and white are reachable by all nine letters, brown and
-// white only through swaps (t has no brown, c no white): ~1 in 330M rolls.
+// Nine distinct colours alone is common (≈ 1/34: the palettes are wide and
+// mostly disjoint), so it only ever lifts an already-decorated roll, to
+// prismatic at most — with 5–6 swaps ≈ 1/3.1k. Odds are exact from GLYPHS; the
+// full table (incl. the colour-count axis) is in dev-material/logo-tier-ladder.html.
 export function scoreRoll(rolls: Roll[]): Tier {
-  if (new Set(rolls.map((r) => r.fg)).size === 1) return 'monochrome'
-  return swapTier(rolls.filter((r) => r.swapped).length)
+  const tier = swapTier(rolls.filter((r) => r.swapped).length)
+  const distinct = new Set(rolls.map((r) => r.fg)).size === rolls.length
+  if (!distinct || !decorated(tier)) return tier
+  return TIERS.indexOf(tier) > TIERS.indexOf('prismatic') ? tier : 'prismatic'
 }
 
 function decorated(tier: Tier): boolean {
@@ -148,8 +150,8 @@ function setFg(span: HTMLElement, fg: number): void {
 }
 
 // Apply one roll to a span. `animate` re-triggers the reveal keyframe. The
-// glyph sits in an inner .logo-ink span whose data-ch feeds the magnificent
-// tier's offset copy (see the .decor-* block in style.css).
+// glyph sits in an inner .logo-ink span so the swap font-size can live on the
+// ink rather than the span (see .logo-ch--swap in style.css).
 function applyRoll(span: HTMLElement, roll: Roll, animate: boolean): void {
   const { ch, fg, swapped } = roll
   if (fg < 0) return
@@ -161,7 +163,6 @@ function applyRoll(span: HTMLElement, roll: Roll, animate: boolean): void {
     span.appendChild(ink)
   }
   ink.textContent = ch
-  ink.dataset.ch = ch
   span.classList.toggle('logo-ch--swap', swapped)
   setFg(span, fg)
   // Only an animated apply sets `logo-ch--lit`: a fresh span mounted with it

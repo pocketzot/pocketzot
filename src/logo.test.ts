@@ -73,10 +73,10 @@ describe('rollLogoChar', () => {
 })
 
 describe('rarity tiers', () => {
-  it('one rung per swap count from 3 up; 0-2 collapse into mundane', () => {
+  it('one rung per swap count from 3 to 7; 0-2 collapse into mundane, 8 stays artifact', () => {
     expect([0, 1, 2].map(swapTier)).toEqual(['mundane', 'mundane', 'mundane'])
     expect([3, 4, 5, 6, 7, 8].map(swapTier))
-      .toEqual(['glowing', 'shimmering', 'ornate', 'magnificent', 'artifact', 'mythical'])
+      .toEqual(['glowing', 'shimmering', 'ornate', 'magnificent', 'artifact', 'artifact'])
   })
 
   it('scoreRoll counts only swapped glyphs', () => {
@@ -86,26 +86,32 @@ describe('rarity tiers', () => {
     expect(scoreRoll([swap(4), swap(5), swap(4), swap(5), swap(4), plain(5)])).toBe('ornate')
   })
 
-  it('scoreRoll: one colour across every letter is monochrome, whatever the swaps', () => {
-    const plain: Roll = { ch: 'o', fg: 10, swapped: false }
-    const swap: Roll = { ch: '○', fg: 10, swapped: true }
-    expect(scoreRoll([plain, plain, plain])).toBe('monochrome')
-    expect(scoreRoll([...Array<Roll>(8).fill(swap), plain])).toBe('monochrome') // beats mythical
+  it('scoreRoll: nine distinct colours promote a 5–6-swap roll to prismatic, never past artifact', () => {
+    // First `swaps` letters swapped; colours all distinct unless overridden.
+    const nine = (swaps: number): Roll[] =>
+      [1, 2, 3, 4, 5, 6, 7, 9, 10].map((fg, i) => ({ ch: i < swaps ? '○' : 'o', fg, swapped: i < swaps }))
+    expect(scoreRoll(nine(4))).toBe('shimmering') // distinct colours alone never decorate
+    expect(scoreRoll(nine(5))).toBe('prismatic')
+    expect(scoreRoll(nine(6))).toBe('prismatic')
+    expect(scoreRoll(nine(7))).toBe('artifact')
+    const repeat = nine(6)
+    repeat[8].fg = 1
+    expect(scoreRoll(repeat)).toBe('magnificent')
   })
 
   it('setTierDecor decorates ornate and above, swaps cleanly, clears below the floor', () => {
     const el = document.createElement('div')
     setTierDecor(el, 'ornate')
     expect(el.classList.contains('decor-ornate')).toBe(true)
-    setTierDecor(el, 'mythical')
-    expect(el.classList.contains('decor-mythical')).toBe(true)
+    setTierDecor(el, 'artifact')
+    expect(el.classList.contains('decor-artifact')).toBe(true)
     expect(el.classList.contains('decor-ornate')).toBe(false)
-    setTierDecor(el, 'monochrome')
-    expect(el.classList.contains('decor-monochrome')).toBe(true)
-    expect(el.classList.contains('decor-mythical')).toBe(false)
+    setTierDecor(el, 'prismatic')
+    expect(el.classList.contains('decor-prismatic')).toBe(true)
+    expect(el.classList.contains('decor-artifact')).toBe(false)
     setTierDecor(el, 'glowing')
     expect([...el.classList].some((c) => c.startsWith('decor-'))).toBe(false)
-    setTierDecor(el, 'mythical')
+    setTierDecor(el, 'artifact')
     setTierDecor(el, null)
     expect([...el.classList].some((c) => c.startsWith('decor-'))).toBe(false)
   })
@@ -221,7 +227,7 @@ describe('decorateLogo', () => {
   })
 
   it('a rare roll decorates the title at settle and shows a one-word tell that fades', () => {
-    // pGlyphShift 1 swaps all 8 swap-capable letters → mythical, deterministically.
+    // pGlyphShift 1 swaps all 8 swap-capable letters → artifact, deterministically.
     // Reduced motion settles synchronously; the tell still rides its own timers.
     const savedMM = window.matchMedia
     window.matchMedia = (() => ({ matches: true })) as unknown as typeof window.matchMedia
@@ -231,17 +237,17 @@ describe('decorateLogo', () => {
       const el = makeTitle('PocketZot (fork)')
       decorateLogo(el)
       el.click()
-      expect(el.classList.contains('decor-mythical')).toBe(true)
+      expect(el.classList.contains('decor-artifact')).toBe(true)
       const tell = el.querySelector<HTMLElement>('.logo-tell')!
       expect(tell.classList.contains('logo-tell--show')).toBe(false) // not before the pause
       vi.advanceTimersByTime(400)
       expect(tell.classList.contains('logo-tell--show')).toBe(true)
-      expect(tell.textContent).toBe('mythical')
-      expect(tell.classList.contains('tier-mythical')).toBe(true)
+      expect(tell.textContent).toBe('artifact')
+      expect(tell.classList.contains('tier-artifact')).toBe(true)
       expect(el.lastChild?.textContent).toBe(' (fork)')               // tail still last
       vi.runAllTimers()
       expect(tell.classList.contains('logo-tell--show')).toBe(false) // hidden again
-      expect(el.classList.contains('decor-mythical')).toBe(true)     // decoration persists
+      expect(el.classList.contains('decor-artifact')).toBe(true)     // decoration persists
 
       // A mundane re-roll clears the decoration (the hidden caption keeps its text).
       LOGO_CONFIG.pGlyphShift = 0
@@ -266,7 +272,7 @@ describe('decorateLogo', () => {
     window.matchMedia = (() => ({ matches: false })) as unknown as typeof window.matchMedia
     vi.useFakeTimers()
     try {
-      LOGO_CONFIG.pGlyphShift = 1 // mythical, so the decoration is part of what must stick
+      LOGO_CONFIG.pGlyphShift = 1 // artifact, so the decoration is part of what must stick
       const first = makeTitle(LOGO_WORD)
       decorateLogo(first)
       first.click()
@@ -274,7 +280,7 @@ describe('decorateLogo', () => {
       const glyphs = (el: HTMLElement) => [...wordmarkSpans(el)].map((s) => s.textContent).join('')
       const colours = (el: HTMLElement) =>
         [...wordmarkSpans(el)].map((s) => [...s.classList].find((c) => /^fg\d+$/.test(c)))
-      expect(first.classList.contains('decor-mythical')).toBe(true)
+      expect(first.classList.contains('decor-artifact')).toBe(true)
 
       // The view is rebuilt (return from spectate): same roll, at once.
       LOGO_CONFIG.pDecorate = 1 // the gate must not even be consulted
@@ -286,7 +292,7 @@ describe('decorateLogo', () => {
       expect([...wordmarkSpans(first)].every((s) => s.classList.contains('logo-ch--lit'))).toBe(true)
       expect(glyphs(again)).toBe(glyphs(first))
       expect(colours(again)).toEqual(colours(first))
-      expect(again.classList.contains('decor-mythical')).toBe(true)
+      expect(again.classList.contains('decor-artifact')).toBe(true)
       expect(again.querySelector('.logo-tell')?.classList.contains('logo-tell--show')).toBe(false)
 
       // A tap on the rebuilt title still rolls fresh and becomes the new sticky roll.
