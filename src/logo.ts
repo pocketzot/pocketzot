@@ -10,7 +10,7 @@
 //
 // Provenance + the full palette (which monster uses each letter, every legit
 // colour, and the lookalike-glyph rationale) lives in
-//   dev-material/pocketzot-glyph-palette.md   (sourced from DCSS 0.34.1)
+//   dev-material/pocketzot-glyph-palette.md   (sourced from DCSS 0.34.1 + trunk)
 // Colour integers are DCSS console colour indices == the CRT `fg0`..`fg15`
 // classes in style.css, so a roll of N just sets class `fgN`.
 //
@@ -46,29 +46,34 @@ interface Glyph {
 // of these. See the doc's "Legitimate cloud-element colour palette" section.
 const PALETTE = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15]
 
+// Colours: every identity colour DCSS draws the glyph in, 0.34 or trunk (a
+// white Č is Antaeus or Chuck). Situational tints (berserk red, inner flame,
+// sanctuary) are left out for now: they say "something berserk", not "a
+// drake". Per-glyph sources: the palette doc's colour rule.
 const GLYPHS: Record<string, Glyph> = {
   P: { colors: [2, 5, 6, 7, 10, 11, 12, 13, 14, 15], anyColor: true,
        subs: [{ ch: 'Þ', colors: [7, 14, 4, 10] }] },                 // trunk sphinx (thorn reads as P; ß dropped)
   o: { colors: [2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15],
-       subs: [{ ch: '○', cloud: true }, { ch: '•', cloud: true }, { ch: '☼', cloud: true },
-              { ch: 'φ', colors: [14, 10, 11, 13, 12, 15] },          // rune (bright)
-              { ch: '¤', colors: [13, 9, 5, 1] },                     // trunk battlesphere (etc_magic)
-              { ch: 'ö', colors: PALETTE },                           // trunk orc-apostle (colour_undef → any)
+       subs: [{ ch: '○', cloud: true }, { ch: '☼', cloud: true },
+              { ch: '•', colors: [7] },                               // bauble: lightgrey only (no colour of its own; get_colour's default)
+              { ch: 'φ', colors: PALETTE },                           // rune (colour schemes; the abyssal rune is etc_random → any)
+              { ch: '¤', colors: [13, 9, 5, 1, 4, 14, 6, 10] },       // trunk battlesphere (etc_magic), solar ember, living spells (recoloured per spell)
+              { ch: 'ö', colors: [14, 13, 11] },                      // trunk orc apostle: warrior/wizard/priest (ghost.cc init_orc_apostle sets it; not colour_undef's any)
               { ch: '●', colors: [6, 4, 12, 15, 13] },                // trunk orb/boulder
               { ch: 'Θ', colors: [4, 9, 14, 5] },                     // trunk orbs (fire red / winter lightblue / entropy yellow / wretched-star magenta)
-              { ch: '◊', colors: PALETTE }] },                        // trunk plant glyph (plants migrated P→◊) — round, so it reads as o; colour follows the glyph (plant palette: demonic-plant etc_random / toadstool colour_undef → any)
+              { ch: '◊', colors: PALETTE },                           // trunk plant glyph (plants migrated P→◊) — round, so it reads as o; colour follows the glyph (plant palette: demonic-plant etc_random / toadstool colour_undef → any)
+              { ch: '©', colors: [4, 15] }] },                        // transporter (red; white when emphasised) — never on c: after an o it reads "Poo"
   c: { colors: [2, 4, 5, 6, 10, 12, 14],
-       subs: [{ ch: '©', colors: [5, 9] },                            // teleporter — contains a 'c'
-              { ch: 'Č', colors: [15, 1] }] },                        // trunk giants (antaeus/chuck white, polyphemus blue) — literal C-shape
-  k: { colors: [1, 6, 7, 10, 12, 13, 15], subs: [] },
+       subs: [{ ch: 'Č', colors: [15, 1] }] },                        // trunk giants (antaeus/chuck white, polyphemus blue) — literal C-shape
+  k: { colors: [1, 2, 6, 7, 10, 12, 13, 15], subs: [] },              // green: trunk mongrel wurm
   e: { colors: [1, 3, 4, 6, 7, 9, 10, 11, 12, 13, 14, 15],
-       subs: [{ ch: 'Σ', colors: [11, 6, 9, 7, 4, 5, 1] },            // trunk elemental (angular E)
+       subs: [{ ch: 'Σ', colors: [11, 6, 9, 7, 4, 5, 1, 3] },         // trunk elemental (angular E)
               { ch: 'ξ', cloud: true }] },                            // trunk weak-cloud glyph — Greek, rhyming with Σ (curvier, has a descender)
   t: { colors: [2, 7, 10, 12, 14, 15],
-       subs: [{ ch: '†', colors: [6, 4] },                            // corpse
-              { ch: '‡', colors: [15, 12, 9, 5, 11] },                // trunk turret/cannon (double dagger)
+       subs: [{ ch: '†', colors: PALETTE },                           // corpse (takes its monster's colour → any)
+              { ch: '‡', colors: [15, 12, 9, 5, 11, 3, 7] },          // trunk turrets, cannons, spire, strange machine (double dagger)
               { ch: '╬', colors: [5, 13] }] },                        // trunk boundless-tesseract (etc_orb_glow → magenta/lightmagenta)
-  Z: { colors: [2, 6, 7, 9, 10, 11, 12, 14, 15],
+  Z: { colors: [2, 6, 7, 9, 10, 11, 12, 13, 14, 15],                  // lightmagenta: trunk player ghost
        subs: [{ ch: 'ζ', cloud: true },                              // trunk fading-cloud glyph (zeta ↔ Z); § dropped — ζ reads as Z far better
               { ch: 'ž', colors: [13, 12, 5, 9] }] },                // trunk floating skulls (curse/laughing/weeping, murray) — undead, like Z's derived undead
 }
@@ -122,9 +127,9 @@ export function swapTier(swaps: number): Tier {
   return 'mundane'
 }
 
-// Nine distinct colours alone is common (≈ 1/34: the palettes are wide and
+// Nine distinct colours alone is common (≈ 1/35: the palettes are wide and
 // mostly disjoint), so it only ever lifts an already-decorated roll, to
-// prismatic at most — with 5–6 swaps ≈ 1/3.1k. Odds are exact from GLYPHS; the
+// prismatic at most — with 5–6 swaps ≈ 1/2.8k. Odds are exact from GLYPHS; the
 // full table (incl. the colour-count axis) is in dev-material/logo-tier-ladder.html.
 export function scoreRoll(rolls: Roll[]): Tier {
   const tier = swapTier(rolls.filter((r) => r.swapped).length)

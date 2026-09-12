@@ -39,7 +39,7 @@ Progressive Web App.
 - Spectator mode with an expanded map view.
 - Floating, collapsible monster list; tap for details.
 - Map double-tap toggles zoom; two-finger long-press toggles tiles.
-- Over 2.8 trillion logos.
+- 8.6 trillion logos.
 - Installs to your home screen as a PWA.
 
 See [ABOUT.md](ABOUT.md) for more, including the controls model and the

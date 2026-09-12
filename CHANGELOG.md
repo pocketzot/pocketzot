@@ -9,6 +9,11 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-12
+
+- Added some missing ASCII-mode colors to the procedural PocketZot
+  logo. Now 8.6 trillion unique rolls.
+
 ## 2026-09-10
 
 - Closed a death rollback for offline games.

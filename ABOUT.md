@@ -19,7 +19,7 @@ DCSS has no app on the App Store, but you don't need one: install PocketZot like
 - Context-aware control sets for common situations
 - Spectator mode with an expanded map view
 - Floating, collapsible monster list; tap to inspect monsters
-- Over 2.8 trillion logos
+- 8.6 trillion logos
 - Installs to your home screen as a PWA
 
 ## Controls
