@@ -244,6 +244,7 @@ describe('decorateLogo', () => {
       expect(tell.classList.contains('logo-tell--show')).toBe(true)
       expect(tell.textContent).toBe('artifact')
       expect(tell.classList.contains('tier-artifact')).toBe(true)
+      expect(tell.children).toHaveLength('artifact'.length)           // a span per letter
       expect(el.lastChild?.textContent).toBe(' (fork)')               // tail still last
       vi.runAllTimers()
       expect(tell.classList.contains('logo-tell--show')).toBe(false) // hidden again

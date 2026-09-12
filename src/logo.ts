@@ -229,7 +229,12 @@ export function decorateLogo(titleEl: HTMLElement): void {
   spans[spans.length - 1].after(tell)
   const hideTell = (): void => tell.classList.remove('logo-tell--show')
   const showTell = (tier: Tier): void => {
-    tell.textContent = tier
+    // A span per letter: .tier-prismatic colours each one (style.css).
+    tell.replaceChildren(...[...tier].map((ch) => {
+      const span = document.createElement('span')
+      span.textContent = ch
+      return span
+    }))
     tell.className = `logo-tell tier-${tier}`
     void tell.offsetWidth // reflow so the fade animation restarts
     tell.classList.add('logo-tell--show')

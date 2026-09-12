@@ -292,13 +292,19 @@ html, body {
    spectrum → white(15). */
 .tier-ornate      { color: var(--text-dim); }
 .tier-magnificent { color: #fd59fa; }
-.tier-prismatic   {
-  background: linear-gradient(90deg, var(--d1), var(--d2), var(--d3), var(--d4), var(--d5), var(--d6));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
 .tier-artifact    { color: #eeeeec; }
+/* Prismatic: one hue per letter, in spectrum order — the extrusion's six
+   steps plus CRT lightcyan(11), lightblue(9) and lightmagenta(13) to fill nine
+   letters. A continuous gradient washed its tail into the lavender step. */
+.tier-prismatic > :nth-child(1) { color: #ef2929; }
+.tier-prismatic > :nth-child(2) { color: #f57900; }
+.tier-prismatic > :nth-child(3) { color: #fce94f; }
+.tier-prismatic > :nth-child(4) { color: #8ae234; }
+.tier-prismatic > :nth-child(5) { color: #34e2e2; }
+.tier-prismatic > :nth-child(6) { color: #729fcf; }
+.tier-prismatic > :nth-child(7) { color: #5e78ff; }
+.tier-prismatic > :nth-child(8) { color: #ad7fa8; }
+.tier-prismatic > :nth-child(9) { color: #fd59fa; }
 
 /* Rarity decoration (setTierDecor in src/logo.ts): one extrusion, coloured per
    tier — six hard steps down-right (--d1 nearest the letter, --d6 farthest)
@@ -328,8 +334,7 @@ html, body {
   --d1: #fd59fa; --d2: #e84fe5; --d3: #cf45cc; --d4: #b53bb2; --d5: #9a3198; --d6: #7f277d;
 }
 /* Prismatic: the spectrum, red at the letter so the depth still darkens away
-   from it like the other tiers. The caption's gradient reads the same steps. */
-.tier-prismatic,
+   from it like the other tiers. */
 .decor-prismatic .logo-ch {
   --d1: #ef2929; --d2: #f57900; --d3: #fce94f; --d4: #8ae234; --d5: #729fcf; --d6: #ad7fa8;
 }
