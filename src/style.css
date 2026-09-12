@@ -288,9 +288,9 @@ html, body {
   .logo-tell--show { animation: none; opacity: 1; }
 }
 
-/* Tier captions: CRT lightgreen(10) → lightmagenta(13) → the spectrum →
-   white(15). */
-.tier-ornate      { color: #8ae234; }
+/* Tier captions: the card's muted grey → CRT lightmagenta(13) → the
+   spectrum → white(15). */
+.tier-ornate      { color: var(--text-dim); }
 .tier-magnificent { color: #fd59fa; }
 .tier-prismatic   {
   background: linear-gradient(90deg, var(--d1), var(--d2), var(--d3), var(--d4), var(--d5), var(--d6));
