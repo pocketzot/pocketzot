@@ -11,8 +11,8 @@ Notable changes to PocketZot, newest first.
 
 ## 2026-09-12
 
-- Added some missing ASCII-mode colors to the procedural PocketZot
-  logo. Now 8.6 trillion unique rolls.
+- Added some missing ASCII-mode colors to the procedural logo. Now 8.6
+  trillion unique rolls.
 
 ## 2026-09-10
 
