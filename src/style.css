@@ -288,10 +288,11 @@ html, body {
   .logo-tell--show { animation: none; opacity: 1; }
 }
 
-/* Tier captions: the card's muted grey → CRT lightmagenta(13) → the
-   spectrum → white(15). */
+/* Tier captions: the card's muted grey → the deep purple mixed 30% toward
+   white in oklab (#6a1fb0 itself is 2.2:1 on the card; this is 4.7:1) →
+   the spectrum → white(15). */
 .tier-ornate      { color: var(--text-dim); }
-.tier-magnificent { color: #fd59fa; }
+.tier-magnificent { color: #936bcb; }
 .tier-artifact    { color: #eeeeec; }
 /* Prismatic: one hue per letter, in spectrum order — the extrusion's six
    steps plus CRT lightcyan(11), lightblue(9) and lightmagenta(13) to fill nine
@@ -329,9 +330,10 @@ html, body {
   --d1: color-mix(in srgb, currentColor 40%, #000);
   --d2: var(--d1); --d3: var(--d1); --d4: var(--d1); --d5: var(--d1); --d6: var(--d1);
 }
-/* Magnificent: lit lightmagenta at the seam, falling off toward the back. */
+/* Magnificent: one solid deep purple (off the CRT palette) on every step. */
 .decor-magnificent .logo-ch {
-  --d1: #fd59fa; --d2: #e84fe5; --d3: #cf45cc; --d4: #b53bb2; --d5: #9a3198; --d6: #7f277d;
+  --d1: #6a1fb0;
+  --d2: var(--d1); --d3: var(--d1); --d4: var(--d1); --d5: var(--d1); --d6: var(--d1);
 }
 /* Prismatic: the spectrum, red at the letter so the depth still darkens away
    from it like the other tiers. */
