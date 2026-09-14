@@ -18,6 +18,10 @@ export interface GameConnection {
   onClose: StateHandler
 }
 
+// Default handshake bound for connect() — generous for a cellular TLS
+// handshake, short enough that a hung attempt can't eat a retry budget.
+const CONNECT_TIMEOUT_MS = 10_000
+
 export class WsConnection implements GameConnection {
   private socket: WebSocket | null = null
   private url: string
@@ -50,31 +54,65 @@ export class WsConnection implements GameConnection {
     return this.url.replace(/^ws/, 'http').replace(/\/socket\/?$/, '')
   }
 
-  connect(): Promise<void> {
+  // Resolves on open. Every other outcome rejects AND leaves no socket
+  // behind: error, close before open (a close() while still CONNECTING
+  // included — engines fire `close`, not `error`, for that), or the
+  // handshake bound. The bound exists because a lie-fi network (SYN
+  // unanswered) keeps a socket CONNECTING for the OS's own TCP timeout, ~75s
+  // on iOS, which no caller wants to sit through — the resume loop's whole
+  // backoff budget is ~90s.
+  connect(opts: { timeoutMs?: number } = {}): Promise<void> {
     // close() latches this; un-latch on (re)connect so a reused instance
     // doesn't permanently suppress onClose.
     this.intentionalClose = false
     return new Promise((resolve, reject) => {
       // Request no-compression to keep message handling simple.
       // The server will fall back gracefully if the subprotocol is unsupported.
-      this.socket = new WebSocket(this.url, 'no-compression')
+      const sock = new WebSocket(this.url, 'no-compression')
+      this.socket = sock
+      // Handlers are per-socket closures: a superseded socket (close() →
+      // connect() on the same instance) may still fire late, and must
+      // neither touch the live socket's instance state (the `this.socket
+      // === sock` checks) nor resolve — it settles its own promise as a
+      // failure.
+      let opened = false
+      let timer: number | null = null
+      const clearTimer = (): void => {
+        if (timer != null) { window.clearTimeout(timer); timer = null }
+      }
+      const failed = (e: Error): void => {
+        clearTimer()
+        if (this.socket === sock) this.close()
+        else sock.close()
+        reject(e)
+      }
+      timer = window.setTimeout(() => {
+        timer = null
+        if (!opened) failed(new Error(`WebSocket connect to ${this.url} timed out`))
+      }, opts.timeoutMs ?? CONNECT_TIMEOUT_MS)
 
-      this.socket.onopen = () => {
+      sock.onopen = () => {
+        clearTimer()
+        if (this.socket !== sock) { failed(new Error(`WebSocket to ${this.url} superseded before opening`)); return }
+        opened = true
         this.onOpen()
         resolve()
       }
 
-      this.socket.onerror = (e) => {
-        reject(new Error(`WebSocket error connecting to ${this.url}`))
+      sock.onerror = (e) => {
         console.error('WS error', e)
+        if (!opened) failed(new Error(`WebSocket error connecting to ${this.url}`))
       }
 
-      this.socket.onclose = () => {
+      sock.onclose = () => {
+        if (!opened) { failed(new Error(`WebSocket closed before connecting to ${this.url}`)); return }
+        if (this.socket !== sock) return
         this.socket = null
         if (!this.intentionalClose) this.onClose()
       }
 
-      this.socket.onmessage = (event) => {
+      sock.onmessage = (event) => {
+        if (this.socket !== sock) return
         this.handleRawMessage(event.data as string)
       }
 
@@ -89,6 +127,8 @@ export class WsConnection implements GameConnection {
     })
   }
 
+  // Silently drops when the socket isn't OPEN; a caller that must know
+  // (typed chat) checks `connected` first — same tick, same answer.
   send(msg: ClientMsg): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return
     if (import.meta.env.DEV) devLog('out', redactForLog(msg))

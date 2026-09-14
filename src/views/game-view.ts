@@ -1,6 +1,7 @@
 import type { GameConnection } from '../ws/connection'
 import type { ClientMsg, ServerMsg, GameExit } from '../ws/types'
 import { fitToWidth } from './fit-terminal'
+import { registerViewDispose } from './view-dispose'
 import { MapStore } from '../game/map/map-store'
 import { MapView } from '../game/map/map-view'
 import { TileMapView } from '../game/map/tile-map-view'
@@ -1262,12 +1263,10 @@ export function buildGameView(
 
   // Every deliberate return to the lobby funnels through here so this view's
   // window listeners don't outlive it (each game builds a fresh view).
+  // dispose() is declared at the end of buildGameView, after everything it
+  // tears down.
   function exitToLobby(exit?: GameExit): void {
-    window.removeEventListener(RENDER_MODE_CHANGED_EVENT, onRenderModePref)
-    window.removeEventListener(MONSTER_LIST_MODE_CHANGED_EVENT, onMonsterListModePref)
-    closeWatcher?.destroy()
-    closeWatcher = null
-    touchControls.destroy()
+    dispose()
     onLobby(exit)
   }
 
@@ -1492,10 +1491,11 @@ export function buildGameView(
   // (min-height: 601px, the --sidebar-w override) is this query's complement:
   // change one bound and the other must move with it, or a height could get
   // the compact chip inside the wide sidebar. Portrait floats the full list
-  // over the map and never matches this query. Re-sync on rotation/resize,
-  // self-removing
-  // once the view is gone (mirrors docKeyHandler); set the initial state before
-  // the first map message so the first render is already in the right mode.
+  // over the map and never matches this query. Re-sync on rotation/resize.
+  // dispose() removes the listener; the isConnected self-removal (like
+  // docKeyHandler's) is the fallback for a mount that bypasses the app
+  // shell's setView (perf/replay.ts). Set the initial state before the
+  // first map message so the first render is already in the right mode.
   const compactMql = window.matchMedia('(orientation: landscape) and (max-height: 600px)')
   const syncMonsterCompact = (): void => {
     if (!view.isConnected) { compactMql.removeEventListener('change', syncMonsterCompact); return }
@@ -4436,5 +4436,23 @@ export function buildGameView(
     pushMsgRow(makeMsgRow(text, html))
   }
 
+  // Everything this view installed outside its own subtree. Idempotent: the
+  // deliberate exits (exitToLobby) run it before handing over, and the app
+  // shell runs it again when it replaces the view (views/view-dispose.ts) —
+  // that second route is the only teardown a resume-rebuilt view gets.
+  // Declared last so every handle it releases is initialized above it.
+  let disposed = false
+  function dispose(): void {
+    if (disposed) return
+    disposed = true
+    window.removeEventListener(RENDER_MODE_CHANGED_EVENT, onRenderModePref)
+    window.removeEventListener(MONSTER_LIST_MODE_CHANGED_EVENT, onMonsterListModePref)
+    closeWatcher?.destroy()
+    closeWatcher = null
+    touchControls.destroy()
+    document.removeEventListener('keydown', docKeyHandler)
+    compactMql.removeEventListener('change', syncMonsterCompact)
+  }
+  registerViewDispose(view, dispose)
   return view
 }

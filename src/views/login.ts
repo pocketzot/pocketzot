@@ -32,6 +32,10 @@ export function buildLoginView(
   // Opens the offline lobby (save slots for the on-device WASM engine). When
   // absent the offline card is not rendered.
   onOffline?: () => void,
+  // Who was just signed out involuntarily (a resume whose saved session the
+  // server refused): the form opens on that server with the username filled
+  // in, so re-entry is the password alone. Only meaningful with `notice`.
+  prefill?: { wsUrl: string; username: string },
 ): HTMLElement {
   const view = document.createElement('div')
   view.id = 'login-view'
@@ -216,6 +220,16 @@ export function buildLoginView(
   const topSession = sessions[0]
   if (topSession && KNOWN_SERVERS.some(s => s.wsUrl === topSession.wsUrl)) {
     formSelect.value = topSession.wsUrl
+  }
+  // Only when the server is one the form can select — a username against
+  // the wrong server is worse than an empty field. With other accounts
+  // saved the form sits inside the collapsed "Add another account"
+  // disclosure; open it, or the prefill is invisible.
+  if (prefill && KNOWN_SERVERS.some(s => s.wsUrl === prefill.wsUrl)) {
+    formSelect.value = prefill.wsUrl
+    userInput.value = prefill.username
+    const details = view.querySelector<HTMLDetailsElement>('#add-account')
+    if (details) details.open = true
   }
   const savedSpectate = getLastSpectateServer()
   if (savedSpectate) {

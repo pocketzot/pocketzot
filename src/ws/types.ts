@@ -90,7 +90,9 @@ export interface PlayerStatus {
 }
 
 export interface LobbyEntry {
-  id: string
+  // A plain int on the wire (process_handler.py: last_game_id + 1); readers
+  // String() it for map keys and comparisons.
+  id: number
   username: string
   game_id: string
   idle_time?: number
@@ -165,7 +167,7 @@ export type ServerMsg =
   | { msg: 'game_ended'; reason: string; message?: string; dump?: string }
   | { msg: 'go_lobby' }
   | { msg: 'lobby_entry' } & LobbyEntry
-  | { msg: 'lobby_remove'; id: string; reason?: string }
+  | { msg: 'lobby_remove'; id: number; reason?: string }
   | { msg: 'lobby_complete' }
   | { msg: 'lobby_clear' }
   // invis_mon_desc: names of sensed invisible monsters whose position is

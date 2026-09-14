@@ -383,7 +383,10 @@ export function resumeOnConn(
 
 // --- Retry loop + overlay -----------------------------------------------------
 
-// Delay *before* each attempt; first is immediate. Roughly 90s of trying.
+// Delay *before* each attempt; first is immediate. Roughly 90s of trying —
+// each attempt's handshake is bounded by WsConnection.connect, so a hung
+// attempt can't eat the budget, and the `online` shortcut in
+// interruptibleSleep can actually reach the next attempt.
 const BACKOFF_MS = [0, 1000, 2000, 4000, 8000, 15000, 30000, 30000]
 
 export interface AttemptResumeOpts {
@@ -563,6 +566,11 @@ function buildOverlay(onCancel: () => void): Overlay {
   }
   renderCancelAction()
 
+  // The backdrop blocks taps but not keys: an input focused in the frozen
+  // view (chat, with the phone keyboard still up) would keep submitting into
+  // a socket that conn.send silently drops. Drop focus so the keyboard goes
+  // away with the game.
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
   document.body.appendChild(backdrop)
 
   return {

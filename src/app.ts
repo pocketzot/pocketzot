@@ -4,9 +4,10 @@ import { buildLoginView } from './views/login'
 import { buildLobbyView } from './views/lobby'
 import { buildOfflineLobbyView } from './views/offline-lobby'
 import { buildGameView, type SpectateTarget } from './views/game-view'
+import { disposeView } from './views/view-dispose'
 import type { TileLoader } from './game/tiles/tile-loader'
 import { OFFLINE_GAME_ID } from './offline/offline-state'
-import { attemptResume, clearGameStart, loadPersistedResume, markProactiveClose } from './reconnect'
+import { activeGameStart, attemptResume, clearGameStart, loadPersistedResume, markProactiveClose } from './reconnect'
 import { count, type CountFlags } from './counter'
 import { getActiveControlSet } from './game/input/control-sets'
 import { getPref, setPref } from './prefs'
@@ -31,7 +32,7 @@ export function initApp(appEl: HTMLElement): void {
       // resume then eats the server's hardcoded ~10s stale-purge wait. Close
       // cleanly while we still can: the server saves the game at swap-away
       // time and the resume replays `play` against a free slot in ~2s.
-      if (state === 'game' && conn?.connected && !resumeActive
+      if (gameInProgress() && conn?.connected && !resumeActive
           && platformSuspendsSockets() && canResumeAfterClose()) {
         markProactiveClose()
         conn.close()
@@ -165,14 +166,14 @@ async function showOfflineGame(name: string): Promise<void> {
   boot.start()
 }
 
-function showLogin(notice?: string): void {
+function showLogin(notice?: string, prefill?: { wsUrl: string; username: string }): void {
   conn?.close()
   conn = null
   state = 'login'
   clearGameStart()
   setView(buildLoginView((result) => {
     enterLobby(result.conn, result.username, result.guest ?? false)
-  }, notice, () => showOfflineLobby()))
+  }, notice, () => showOfflineLobby(), prefill))
 }
 
 // Every route onto a server ends the same way: take the connection, record who
@@ -260,11 +261,24 @@ function adoptConn(c: GameConnection): void {
 // dev-material/sticky-lobby-shelved.md.)
 function connLost(): void {
   if (resumeActive) return
-  if (state === 'game') {
+  if (gameInProgress()) {
     startResume(conn!.wsUrl)
     return
   }
   showLogin(state === 'lobby' ? undefined : 'Connection lost.')
+}
+
+// "In a game" for the purposes of the proactive close and the resume: the
+// game view is mounted, OR the lobby has a play/watch in flight. `state`
+// only flips to 'game' at the transition, but the lobby's play is armed at
+// click time (rememberGameStart) and the server may hold it in the ~10s
+// stale_processes wait — exactly when a user swaps away. Treating that
+// window as 'lobby' zombified the socket (no proactive close) and then
+// dropped the user on the login screen with a second zombie process.
+// abortGameStart (lobby.ts) nulls the context when the attempt is refused,
+// so an idle lobby stays on the login-screen path.
+function gameInProgress(): boolean {
+  return state === 'game' || (state === 'lobby' && activeGameStart() != null)
 }
 
 function startResume(wsUrl: string): void {
@@ -293,7 +307,13 @@ function startResume(wsUrl: string): void {
     },
     onGiveUp: (notice) => {
       resumeActive = false
-      showLogin(notice)
+      // No session record = the account card is gone (the server refused
+      // the token; token-login.ts cleared it): hand the form the identity so
+      // re-entry is just the password. Every other give-up — retries
+      // exhausted, a server-sent close, cancel, the age cutoff — leaves the
+      // card on the login screen, where it is the better nudge.
+      const cardGone = !currentIsGuest && !loadSession(wsUrl, currentUsername)
+      showLogin(notice, cardGone ? { wsUrl, username: currentUsername } : undefined)
     },
   })
 }
@@ -320,6 +340,10 @@ function platformSuspendsSockets(): boolean {
 }
 
 function setView(el: HTMLElement): void {
+  // Tear down the outgoing view's out-of-tree listeners first — the resume
+  // route is the one that reaches here without the view's own exit having
+  // run (views/view-dispose.ts).
+  if (root.firstElementChild) disposeView(root.firstElementChild)
   root.textContent = ''
   root.appendChild(el)
 }
