@@ -8,7 +8,8 @@
          (innerHeight/100dvh/100svh say screen-minus-inset; the real window is
          full-screen — WebKit bug #254868), so style.css forces 100vh on
          html/body/#app there. Full write-up:
-         dev-material/ios-safe-area-viewport.md. -->
+         dev-material/ios-safe-area-viewport.md. Installed iOS drops cover
+         again at boot (src/status-blur.ts — the iOS 27 status-bar blur). -->
     <!-- maximum-scale=1 suppresses iOS's auto-zoom when a sub-16px input gains
          focus (the rc editor textarea, landscape login fields); like
          user-scalable=no it does not block real pinch gestures on iOS 10+. -->
@@ -63,6 +64,8 @@
     <link rel="apple-touch-icon" href="/icon-192.png" />
   </head>
   <body>
+    <!-- WebKit's status-bar colour sampler target (src/status-blur.ts). -->
+    <div id="status-strip" aria-hidden="true"></div>
     <div id="app"></div>
     <noscript>
       <main style="max-width:680px;margin:0 auto;padding:3rem 1.5rem;font-family:system-ui,-apple-system,sans-serif;color:#e7e2da;background:#000000;line-height:1.6">

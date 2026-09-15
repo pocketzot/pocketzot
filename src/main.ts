@@ -1,6 +1,7 @@
 import './style.css'
 import { initApp } from './app'
 import { initUiScale } from './ui-scale'
+import { initStatusBlur } from './status-blur'
 import { maybeMountSafeAreaProbe } from './safe-area-probe'
 import { registerServiceWorker } from './sw/register'
 import { count } from './counter'
@@ -15,6 +16,7 @@ if (!appEl) throw new Error('#app element not found')
 
 // Before the first view mounts, so nothing lays out at stock size first.
 initUiScale()
+initStatusBlur()
 initApp(appEl)
 maybeMountSafeAreaProbe()
 registerServiceWorker()
