@@ -63,11 +63,14 @@
      there. Applied per-component on the bottom-most interactive bars, not on
      #app — surfaces bleed to the screen edge, controls pad themselves. See
      dev-material/vertical-space-savings.md (safe-area migration). */
-  --safe-bottom: min(env(safe-area-inset-bottom, 0px), 25px);
+  --home-indicator-cap: 25px;
+  --safe-bottom: min(env(safe-area-inset-bottom, 0px), var(--home-indicator-cap));
   /* Status-bar/Dynamic-Island clearance for surfaces that anchor to the
-     screen's top edge (menus, floats). Raw env, except under the
-     installed-iOS swap, which sets it to #status-strip's height (the
-     html.pz-status-blur block below). A sticky-calibration shim
+     screen's top edge (menus, floats). Raw env; the installed-iOS swap
+     overrides both --safe-* tokens (the html.pz-status-blur block below).
+     Keep these plain lengths, never max()/min() over env(): the fit paths
+     parseFloat --map-top-occlusion, which is var(--safe-top), and an
+     unregistered custom property never evaluates math. A sticky-calibration shim
      (viewport-inset.ts) once guarded this against suspected cold-start env()
      flakiness in installed mode; removed 2026-07-09 to playtest whether that
      flakiness was real or an artifact of the migration debug session — if
@@ -105,31 +108,34 @@ html, body {
    must be forced on html/body too: at 100% they'd resolve to the misreported
    height and body's overflow:hidden would clip the app's bottom rows.
    Installed iOS now drops cover at boot (status-blur.ts); 100vh still
-   measured right there (Test B, 2026-09-14). The flat --safe-bottom: 25px
-   pin that lived here until 2026-07-09 (a guard against suspected
-   cold-start env() flakiness) is back in a different role: without cover
-   env bottom reads 0, so the swap pins it (html.pz-home-indicator, below). */
+   measured right without it (Test B, 2026-09-14). */
 @media (display-mode: standalone), (display-mode: fullscreen) {
   html, body, #app { height: 100vh; }
 }
-/* The installed-iOS swap (status-blur.ts has the mechanism). The strip only
-   where a status bar exists: portrait, or iPad landscape (iPhone hides the
-   bar in landscape and tops out at ~440px tall there; iPads keep it and are
-   ≥744px). 12px: WebKit's sampler skips boxes 10px or thinner on either
-   axis (LocalFrameView.cpp thinBorderWidth). It replaces env top (0 under
-   the swap) in --safe-top, so every top consumer and the map's centering
-   token clear the strip through their existing sites. */
-@media (orientation: portrait), (min-height: 600px) {
-  html.pz-status-blur { --safe-top: 12px; }
+/* The installed-iOS swap (status-blur.ts has the mechanism): env() reads 0
+   once cover is gone, so both --safe-* tokens come from here instead, and
+   every consumer (top surfaces, the map's --map-top-occlusion, bottom bars)
+   clears the strip / indicator through its existing site.
+   Top: #status-strip's height, only where a status bar exists — portrait,
+   or iPad landscape (iPhone hides the bar in landscape and tops out at
+   ~440px tall there); the landscape leg is the sidebar's iPad-landscape
+   query (its comment explains the 768/601 numbers) — keep them in sync.
+   12px: WebKit's sampler skips boxes 10px or thinner on either axis
+   (LocalFrameView.cpp thinBorderWidth).
+   Bottom: the page still runs under the home indicator (measured
+   2026-09-14), so the field-tested cap is pinned flat on devices
+   status-blur.ts saw an indicator on while cover was live. */
+:root { --status-strip-h: 0px; }
+@media (orientation: portrait), (orientation: landscape) and (min-width: 768px) and (min-height: 601px) {
+  html.pz-status-blur { --status-strip-h: 12px; }
 }
-/* env bottom reads 0 once cover is gone, but the page still runs under the
-   home indicator (measured 2026-09-14) — so the field-tested cap, pinned,
-   on devices status-blur.ts saw an indicator on while cover was live. */
-html.pz-home-indicator { --safe-bottom: 25px; }
+html.pz-status-blur { --safe-top: var(--status-strip-h); }
+html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
 
 /* The fixed box WebKit's top-edge sampler extends over the status bar. A
    real element present from load — pseudo-elements never enter the
-   sampler's ancestor walk. Zero-height, so inert, wherever the swap is off.
+   sampler's ancestor walk. Reads its own height token (0 off the swap), not
+   --safe-top, which is the real inset in a Safari tab under cover.
    Its colour is the bar's: WebKit re-samples on the strip's repaint
    (RenderLayerBacking::setNeedsFixedContainerEdgesUpdateIfNeeded), and
    iPhone may re-sample the top edge after user interaction
@@ -144,14 +150,11 @@ html.pz-home-indicator { --safe-bottom: 25px; }
   top: 0;
   left: 0;
   right: 0;
-  height: 0;
+  height: var(--status-strip-h);
   background: var(--bg);
   pointer-events: none;
   z-index: 1000;
 }
-/* Gated on the class, not bare --safe-top: off the swap that token is the
-   real inset (a Safari tab under cover), and the strip would paint it. */
-html.pz-status-blur #status-strip { height: var(--safe-top); }
 /* JS toggles collapsibles via the hidden attribute; author display rules
    (flex/grid) on the same element would otherwise defeat the UA's
    [hidden] { display: none }, so restate it with priority once, globally. */
@@ -2040,10 +2043,8 @@ html.map-hold, html.map-hold * {
      spell-row variant supplies the matching bottom boundary — the actual
      top of messages, rail included when present). Resolves to 0 on
      notchless devices and in Safari tabs (env is 0), so this is a no-op
-     everywhere the pill isn't.
-     --safe-top, not the raw inset: under the installed-iOS swap
-     (status-blur.ts) env is 0 and --safe-top carries #status-strip's
-     height instead — the strip covers the map's top rows like the pill. */
+     everywhere the pill isn't; under the installed-iOS swap it is
+     #status-strip's height (the html.pz-status-blur block). */
   #game-view #map-grid { --map-top-occlusion: var(--safe-top); }
   /* X-mode: log hidden, examine viewport pans anywhere, and the grid is
      symmetric-centered (rules above) — the biased-centering model doesn't
@@ -4711,7 +4712,8 @@ html.map-hold, html.map-hold * {
    extra columns. min-width keeps squarish desktop / Stage Manager windows
    (landscape only promises width>height, so ~620×610 qualifies) from
    spending over half their width on sidebar — every real iPad landscape
-   is ≥1024. */
+   is ≥1024. The status-strip query (html.pz-status-blur block) repeats
+   this condition as its landscape leg — change both together. */
 @media (orientation: landscape) and (min-width: 768px) and (min-height: 601px) {
   :root { --sidebar-w: var(--touch-panel-cap); }
   /* At the wide sidebar there's room for the reference's 45/55 stat split,

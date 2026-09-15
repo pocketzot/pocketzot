@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  applyStatusBlur, HOME_INDICATOR_CLASS, initStatusBlur, STATUS_BLUR_CLASS, withoutViewportFit,
-} from './status-blur'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import indexHtml from '../index.html?raw'
+import { HOME_INDICATOR_CLASS, initStatusBlur, STATUS_BLUR_CLASS, withoutViewportFit } from './status-blur'
 
-// index.html's viewport content.
-const COVER = 'width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+// The real viewport meta, so the swap is exercised against what boot rewrites.
+const COVER = /<meta name="viewport" content="([^"]*)"/.exec(indexHtml)![1]
 
 // happy-dom's navigator has no `standalone`; define it per case.
 function setStandalone(value: boolean | undefined): void {
@@ -15,7 +14,8 @@ function setStandalone(value: boolean | undefined): void {
 
 describe('withoutViewportFit', () => {
   it('drops viewport-fit and keeps every other key in order', () => {
-    expect(withoutViewportFit(COVER)).toBe('width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no')
+    expect(COVER).toContain('viewport-fit=cover')
+    expect(withoutViewportFit(COVER)).toBe(COVER.replace(/,\s*viewport-fit=cover/, ''))
     expect(withoutViewportFit('viewport-fit=cover,width=device-width')).toBe('width=device-width')
     expect(withoutViewportFit('width=device-width')).toBe('width=device-width')
   })
@@ -35,19 +35,10 @@ describe('the installed-iOS swap', () => {
     meta.remove()
     root.className = ''
     delete (navigator as { standalone?: boolean }).standalone
+    vi.restoreAllMocks()
   })
 
-  it('applyStatusBlur: swap class on, indicator class as measured, cover gone', () => {
-    applyStatusBlur(document, true)
-    expect(root.classList.contains(STATUS_BLUR_CLASS)).toBe(true)
-    expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(true)
-    expect(meta.content).toBe(withoutViewportFit(COVER))
-
-    applyStatusBlur(document, false)
-    expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(false)
-  })
-
-  it('initStatusBlur swaps only when navigator.standalone is true', () => {
+  it('swaps only when navigator.standalone is true', () => {
     // undefined: Android and desktop; false: an iOS Safari tab.
     for (const value of [undefined, false]) {
       setStandalone(value)
@@ -59,6 +50,14 @@ describe('the installed-iOS swap', () => {
     setStandalone(true)
     initStatusBlur()
     expect(root.classList.contains(STATUS_BLUR_CLASS)).toBe(true)
+    expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(false)
     expect(meta.content).toBe(withoutViewportFit(COVER))
+  })
+
+  it('pins the home indicator when env bottom reads > 0 before the swap', () => {
+    setStandalone(true)
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({ paddingBottom: '34px' } as CSSStyleDeclaration)
+    initStatusBlur()
+    expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(true)
   })
 })

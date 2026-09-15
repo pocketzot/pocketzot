@@ -16,6 +16,8 @@
  * the chip whenever running standalone. Tap the chip to dismiss it (also
  * clears the persisted flag).
  */
+import { HOME_INDICATOR_CLASS, STATUS_BLUR_CLASS } from './status-blur'
+
 const FLAG_KEY = 'pocketzot:safearea'
 
 /* "Running as an installed app"; must stay in sync with the `@media
@@ -30,7 +32,7 @@ function isInstalledDisplayMode(): boolean {
 
 /* env()/viewport units aren't readable from JS directly — resolve them via
  * computed style on a hidden fixed-position element. */
-export function hiddenProbe(style: string): HTMLDivElement {
+function hiddenProbe(style: string): HTMLDivElement {
   const el = document.createElement('div')
   el.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;' + style
   return el
@@ -94,10 +96,10 @@ export function maybeMountSafeAreaProbe(): void {
     const legacy = (window as { orientation?: number }).orientation
     chip.textContent =
       `mode: ${standalone ? 'installed' : 'tab'} (display-mode: ${dm ?? '?'})\n` +
-      // The installed-iOS swap (status-blur.ts): while it's on, env reads 0
-      // and the --safe-* lines below come from these classes instead.
-      `status-blur: ${document.documentElement.classList.contains('pz-status-blur') ? 'on' : 'off'}` +
-      `  home-indicator: ${document.documentElement.classList.contains('pz-home-indicator') ? 'yes' : 'no'}\n` +
+      // The installed-iOS swap (status-blur.ts; style.css's html.pz-status-blur
+      // block explains what the --safe-* lines below read under it).
+      `status-blur: ${document.documentElement.classList.contains(STATUS_BLUR_CLASS) ? 'on' : 'off'}` +
+      `  home-indicator: ${document.documentElement.classList.contains(HOME_INDICATOR_CLASS) ? 'yes' : 'no'}\n` +
       `orient: ${so?.type ?? 'n/a'} (angle ${so?.angle ?? '?'}` +
       `, window.orientation ${legacy ?? 'n/a'})\n` +
       `env top:    ${p.paddingTop}\n` +
