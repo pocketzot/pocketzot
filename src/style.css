@@ -2,12 +2,16 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Amber CRT theme — warm near-black surfaces, amber accent.
-     Map (#map-grid) intentionally stays at #000000 because DCSS bg color
-     bytes (bg0–bg15) are calibrated for a black background; tinting it
-     would shift every cell's apparent color. The chrome around the map
-     uses --bg's warm near-black so the seam reads as a deliberate frame. */
-  --bg:        #0a0908;
+  /* Amber CRT theme — black base, amber accent. The base is the map's
+     black (DCSS bg colour bytes bg0–bg15 are calibrated against #000000;
+     #map-grid pins it literally), and it is ONE colour for page, chrome
+     and map: the OS paints the page background into every region we don't
+     control (iOS side insets and the status bar once viewport-fit=cover is
+     dropped, the Reduce Transparency bar, the splash), and those regions
+     border the map in landscape and the chrome in portrait, so any second
+     base colour surfaced as a seam somewhere (a warm #0a0908 chrome did,
+     2026-09-15). Hierarchy is the raised tokens below, never the base. */
+  --bg:        #000000;
   --surface:   #14110f;
   --surface2:  #1f1b18;
   /* Pressed-state fill for every tappable control, dark-UI style: press

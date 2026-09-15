@@ -77,7 +77,9 @@ export function screenSlug(title: string): string {
 // style.css so exports read like the in-app CRT, just at full terminal width.
 // The frame is the DCSS popup card (reference .ui-popup-outer, mirrored by
 // our .overlay-card): 2px #7d623c outline + 1px black border + 20px padding,
-// so the export looks like the dialog the screen was just shown in. MARGIN
+// so the export looks like the dialog the screen was just shown in. The
+// black border is the panel's own colour (--bg is black), so FRAME covers
+// both and nothing paints it separately. MARGIN
 // stays transparent so messenger thumbnail corner-rounding can't shave the
 // bronze ring. The optional caption sits OUTSIDE the frame, on the
 // transparent margin below the bronze ring — the client's mark on the mat's
@@ -128,10 +130,8 @@ export function renderScreenCanvas(lines: DcssRun[][], caption?: string): HTMLCa
   ctx.scale(SCALE, SCALE)
   ctx.fillStyle = FRAME_BROWN
   ctx.fillRect(MARGIN, MARGIN, cssW - MARGIN * 2, cardB - MARGIN * 2)
-  ctx.fillStyle = '#000'
+  ctx.fillStyle = cssVar('--bg', '#000000')
   ctx.fillRect(MARGIN + 2, MARGIN + 2, cssW - (MARGIN + 2) * 2, cardB - (MARGIN + 2) * 2)
-  ctx.fillStyle = cssVar('--bg', '#0a0908')
-  ctx.fillRect(EDGE, EDGE, cssW - EDGE * 2, cardB - EDGE * 2)
   ctx.font = font
   ctx.textBaseline = 'middle'
   rows.forEach((runs, row) => {
