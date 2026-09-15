@@ -12,9 +12,9 @@ Notable changes to PocketZot, newest first.
 ## 2026-09-15
 
 - iOS 27 blurs the top edge of installed web apps, extending into the
-  app content, with no way to disable it. PocketZot now draws a solid
+  app content, with no way to disable it. PocketZot now uses a solid
   status bar, which avoids the blur, but the map no longer extends up
-  under the notch. If Apple fixes this I'll bring it back.
+  under the camera island. If Apple fixes this I'll switch it back.
 - The app background is now true black.
 
 ## 2026-09-12
