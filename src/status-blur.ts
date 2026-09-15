@@ -37,30 +37,61 @@ export function withoutViewportFit(content: string): string {
     .join(', ')
 }
 
-// env(safe-area-inset-bottom) only reports under cover, so this must run
-// before the meta rewrite — the last moment the inset is honest. A cold-start
-// all-zero read (the unconfirmed flakiness, dev-material "sticky shim") would
-// cost that one launch its bottom pin. env() isn't readable from JS
+// The home-indicator read. env(safe-area-inset-bottom) only reports under
+// cover, so it must happen before the meta rewrite — and not before the
+// insets have reached the page at all. iOS delivers them with the UI
+// process's visible-content-rect updates (WebPage::updateVisibleContentRects,
+// WebPageIOS.mm → Page::setUnobscuredSafeAreaInsets), an IPC the main thread
+// handles between tasks, so a read inside the boot script can predate them
+// and see 0. On-device 2026-09-15: a service-worker-cached boot read 0 and
+// lost the pin on every launch; network-loaded boots (the first launch after
+// a deploy, the LAN dev server) ran late enough to read 34. Never go back to
+// one synchronous read.
+//
+// Arrival signal: any inset > 0. The four sides land together (one
+// FloatBoxExtent), and under cover every portrait iPhone and every iPad has
+// a status-bar top, so a zero bottom beside a real top is a genuine
+// home-button device, not an early read. env() isn't readable from JS
 // directly — resolved via computed style on a hidden fixed element.
-function hasHomeIndicator(): boolean {
-  const probe = document.createElement('div')
-  probe.style.cssText =
-    'position:fixed;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px);'
-  document.body.append(probe)
-  const px = parseFloat(getComputedStyle(probe).paddingBottom)
-  probe.remove()
-  return px > 0
-}
+const INSET_PROBE =
+  'position:fixed;visibility:hidden;pointer-events:none;' +
+  'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) ' +
+  'env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);'
 
-// Boot (main.ts), before the first view mounts: #app is still empty, so the
-// relayout the meta change triggers has nothing to move.
-export function initStatusBlur(): void {
-  if ((navigator as { standalone?: boolean }).standalone !== true) return
-  const root = document.documentElement
-  root.classList.add(STATUS_BLUR_CLASS)
-  root.classList.toggle(HOME_INDICATOR_CLASS, hasHomeIndicator())
-  // WebKit reprocesses a viewport meta whose content changes
-  // (HTMLMetaElement::attributeChanged → Document::processViewport).
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
-  if (meta) meta.content = withoutViewportFit(meta.content)
+// Upper bound on the wait, not a measured arrival time: only a launch with no
+// inset on any side (a home-button iPhone in landscape) runs it out, and this
+// is the launch delay that case pays.
+const INSET_WAIT_MS = 500
+
+// Boot (main.ts): `then` mounts the first view. Off installed iOS it runs
+// synchronously. On installed iOS it runs after the swap, polled per frame
+// until the insets arrive, so #app is still empty when the meta change
+// relayouts and nothing lays out twice.
+export function initStatusBlur(then: () => void): void {
+  if ((navigator as { standalone?: boolean }).standalone !== true) {
+    then()
+    return
+  }
+  const probe = document.createElement('div')
+  probe.style.cssText = INSET_PROBE
+  document.body.append(probe)
+  const deadline = performance.now() + INSET_WAIT_MS
+  const poll = (): void => {
+    const s = getComputedStyle(probe)
+    const sides = [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].map(v => parseFloat(v) || 0)
+    if (sides.every(px => px === 0) && performance.now() < deadline) {
+      requestAnimationFrame(poll)
+      return
+    }
+    probe.remove()
+    const root = document.documentElement
+    root.classList.add(STATUS_BLUR_CLASS)
+    root.classList.toggle(HOME_INDICATOR_CLASS, sides[2] > 0)
+    // WebKit reprocesses a viewport meta whose content changes
+    // (HTMLMetaElement::attributeChanged → Document::processViewport).
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
+    if (meta) meta.content = withoutViewportFit(meta.content)
+    then()
+  }
+  poll()
 }

@@ -16,9 +16,11 @@ if (!appEl) throw new Error('#app element not found')
 
 // Before the first view mounts, so nothing lays out at stock size first.
 initUiScale()
-initStatusBlur()
-initApp(appEl)
-maybeMountSafeAreaProbe()
+// Held on installed iOS until the swap lands (status-blur.ts).
+initStatusBlur(() => {
+  initApp(appEl)
+  maybeMountSafeAreaProbe()
+})
 registerServiceWorker()
 count('boot') // boot rows self-attach the W/C environment letters (counter.ts)
 if (healed) count('stale-heal')

@@ -38,26 +38,72 @@ describe('the installed-iOS swap', () => {
     vi.restoreAllMocks()
   })
 
-  it('swaps only when navigator.standalone is true', () => {
+  it('mounts synchronously with cover kept unless navigator.standalone is true', () => {
     // undefined: Android and desktop; false: an iOS Safari tab.
     for (const value of [undefined, false]) {
       setStandalone(value)
-      initStatusBlur()
+      const then = vi.fn()
+      initStatusBlur(then)
+      expect(then).toHaveBeenCalledOnce()
       expect(root.classList.contains(STATUS_BLUR_CLASS)).toBe(false)
       expect(meta.content).toBe(COVER)
     }
-
-    setStandalone(true)
-    initStatusBlur()
-    expect(root.classList.contains(STATUS_BLUR_CLASS)).toBe(true)
-    expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(false)
-    expect(meta.content).toBe(withoutViewportFit(COVER))
   })
 
-  it('pins the home indicator when env bottom reads > 0 before the swap', () => {
-    setStandalone(true)
-    vi.spyOn(window, 'getComputedStyle').mockReturnValue({ paddingBottom: '34px' } as CSSStyleDeclaration)
-    initStatusBlur()
-    expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(true)
+  describe('on installed iOS', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+      setStandalone(true)
+    })
+    afterEach(() => { vi.useRealTimers() })
+
+    // The probe's computed padding is the four env() insets.
+    const insets = (top: number, bottom: number) =>
+      ({ paddingTop: `${top}px`, paddingRight: '0px', paddingBottom: `${bottom}px`, paddingLeft: '0px' }) as CSSStyleDeclaration
+
+    it('swaps at once when the insets are already there', () => {
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue(insets(59, 34))
+      const then = vi.fn()
+      initStatusBlur(then)
+      expect(then).toHaveBeenCalledOnce()
+      expect(root.classList.contains(STATUS_BLUR_CLASS)).toBe(true)
+      expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(true)
+      expect(meta.content).toBe(withoutViewportFit(COVER))
+    })
+
+    it('holds cover and the mount until the insets arrive (the cached-boot read)', () => {
+      const style = vi.spyOn(window, 'getComputedStyle').mockReturnValue(insets(0, 0))
+      const then = vi.fn()
+      initStatusBlur(then)
+      vi.advanceTimersToNextFrame()
+      expect(then).not.toHaveBeenCalled()
+      expect(meta.content).toBe(COVER)
+
+      style.mockReturnValue(insets(59, 34))
+      vi.advanceTimersToNextFrame()
+      expect(then).toHaveBeenCalledOnce()
+      expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(true)
+      expect(meta.content).toBe(withoutViewportFit(COVER))
+    })
+
+    it('reads a zero bottom beside a real top as no home indicator', () => {
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue(insets(20, 0))
+      const then = vi.fn()
+      initStatusBlur(then)
+      expect(then).toHaveBeenCalledOnce()
+      expect(root.classList.contains(STATUS_BLUR_CLASS)).toBe(true)
+      expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(false)
+    })
+
+    it('swaps without the pin once the wait runs out with every inset at 0', () => {
+      vi.spyOn(window, 'getComputedStyle').mockReturnValue(insets(0, 0))
+      const then = vi.fn()
+      initStatusBlur(then)
+      vi.advanceTimersByTime(1000)
+      expect(then).toHaveBeenCalledOnce()
+      expect(root.classList.contains(STATUS_BLUR_CLASS)).toBe(true)
+      expect(root.classList.contains(HOME_INDICATOR_CLASS)).toBe(false)
+      expect(meta.content).toBe(withoutViewportFit(COVER))
+    })
   })
 })
