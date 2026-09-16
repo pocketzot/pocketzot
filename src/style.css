@@ -1888,6 +1888,10 @@ html.map-hold, html.map-hold * {
   z-index: 3;
   background: var(--msglog-bg);
   overflow-y: auto;
+  /* Anchoring only skips at offset 0; at −1px it held the old rows and the
+     newest went off-screen for good (measured, both engines). Off, the
+     offset is distance-from-newest and stays put. */
+  overflow-anchor: none;
   cursor: pointer;
   /* --msglog-box-h grows the box by exactly the inline --more-- row while
      .more-active, on the map side — the anchored edge stays pinned — so no
@@ -1956,7 +1960,12 @@ html.map-hold, html.map-hold * {
   /* One line + the 2px the border-box frame takes from the content. */
   --more-line-h: calc(var(--msglog-font) * var(--msglog-line) + 2px);
 }
-#game-view.more-active #game-messages { border: 1px solid var(--more-cyan); }
+#game-view.more-active #game-messages {
+  border: 1px solid var(--more-cyan);
+  /* The dismiss button must not also be a scroller: a hasty swipe-tap
+     scrolled it off 0. Click unaffected. */
+  touch-action: none;
+}
 #msg-more {
   /* Console (message.cc:718-731): left-aligned at the message column
      — 1ch clears the turn-mark slot the way console's --more-- starts at
