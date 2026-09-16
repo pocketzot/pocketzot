@@ -9,6 +9,12 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-16
+
+- Holding a direction on the d-pad now sends a shift-move in that
+  direction, instead of starting repeated moves. While aiming or in
+  menus, holding repeats single steps as before.
+
 ## 2026-09-15
 
 - iOS 27 blurs the top edge of installed web apps, extending into the

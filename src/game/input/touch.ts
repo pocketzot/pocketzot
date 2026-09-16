@@ -9,6 +9,7 @@ import {
   CK_CTRL_BKSP, CAPTURED_CTRL, ctrlKeycode,
 } from './keyboard'
 import { createShiftToggle } from './shift-state'
+import { LONG_PRESS_MS } from './map-tap'
 import {
   CONTROLS_CHANGED_EVENT, GRID_ROWS, getActiveControlSet, slotLabel, slotTitle,
 } from './control-sets'
@@ -33,8 +34,13 @@ type DpadDef =
   | { label: string; text: string }
 
 // Binds one control's engagement (see bindTap in buildTouchControls).
-// `repeat` opts a control into hold-to-repeat on the touch path.
-type BindTap = (btn: HTMLElement, fire: () => void, opts?: { repeat?: boolean }) => void
+// `repeat` opts a control into hold-to-repeat on the touch path. `onHold`
+// runs once at the hold threshold, before any repeat starts: returning true
+// claims the hold (no repeat interval follows), false falls through to
+// `repeat`. The d-pad's run-on-hold lives behind it.
+type BindTap = (
+  btn: HTMLElement, fire: () => void, opts?: { repeat?: boolean; onHold?: () => boolean },
+) => void
 
 // Press feedback for controls that fire on a preventDefault()ed touchstart.
 // CSS :active alone is not enough there: WebKit sets :active from the touch
@@ -53,6 +59,10 @@ export function bindPressedClass(btn: HTMLElement): void {
 // Hold-to-repeat pacing, roughly matching OS keyboard auto-repeat defaults.
 export const REPEAT_DELAY_MS = 350
 export const REPEAT_INTERVAL_MS = 85
+// Hold threshold for controls with an `onHold` (the d-pad's run): the map's
+// long-press, so the two hold gestures feel like one. A fall-through repeat
+// on such a control starts here too rather than at REPEAT_DELAY_MS.
+export const HOLD_MS = LONG_PRESS_MS
 
 // game-view owns the spell data (and the tile loader / cast logic), so it
 // supplies the grid DOM for the z tab; touch.ts just hosts it in the panel's
@@ -72,6 +82,10 @@ export interface TouchControls {
   // feedback) — the state hook stays for the shelved reticle treatment in
   // dev-material/cursor-mode-reticle.md.
   setCursorMode(on: boolean): void
+  // Tracks "a server overlay is up" (root class `overlay-mode`), set from
+  // game-view's single overlay entry/exit (enterOverlayLayout /
+  // hideOverlay). Read by the d-pad hold (see buildDpad).
+  setOverlayMode(on: boolean): void
   openKbd(): void
   closeKbd(): void
   isKbdOpen(): boolean     // for the Android back handler: back dismisses the kbd first
@@ -481,8 +495,8 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
 
   const bindTap: BindTap = (btn, fire, opts) => {
     bindPressedClass(btn)
-    if (opts?.repeat) {
-      // Hold-to-repeat, touch path only: touch events stay bound to their
+    if (opts?.repeat || opts?.onHold) {
+      // Hold handling, touch path only: touch events stay bound to their
       // start element, so this button's own touchend/touchcancel always
       // arrives to stop the timers — even if the finger drifts off the
       // button (repeat continues while held, like a hardware key). Mouse
@@ -501,11 +515,13 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
         stop()
         repeatStops.add(stop)
         delayTimer = window.setTimeout(() => {
+          if (!btn.isConnected) { stop(); return }
+          if (opts.onHold?.()) { stop(); return }
           repeatTimer = window.setInterval(() => {
             if (!btn.isConnected) { stop(); return }
             fire()
           }, REPEAT_INTERVAL_MS)
-        }, REPEAT_DELAY_MS)
+        }, opts.onHold ? HOLD_MS : REPEAT_DELAY_MS)
       }, { passive: false })
       btn.addEventListener('touchend', stop)
       btn.addEventListener('touchcancel', stop)
@@ -564,14 +580,19 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
     clearOneshot()
   }
 
-  function sendDpad(def: DpadDef): void {
+  // Returns whether the direction went out unmodified — the d-pad hold path
+  // (buildDpad) only follows a plain step with a run.
+  function sendDpad(def: DpadDef): boolean {
+    let plain = false
     if ('text' in def) {
       send({ msg: 'input', text: def.text })
     } else {
       const code = ctrlActive ? def.ctrled : shift.isOn ? def.shifted : def.plain
+      plain = code === def.plain
       send({ msg: 'key', keycode: code })
     }
     clearOneshot()
+    return plain
   }
 
   // --- Root element ---
@@ -702,7 +723,45 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
         const btn = document.createElement('button')
         btn.className = 'tc-dpad-btn' + (r === 1 && c === 1 ? ' wait' : '')
         btn.textContent = def.label
-        bindTap(btn, () => sendDpad(def), { repeat: true })
+        if ('text' in def) {
+          bindTap(btn, () => sendDpad(def), { repeat: true })
+        } else {
+          // Hold = run: the touch-down's plain step, then ONE shifted keycode
+          // at the hold threshold. In normal play CK_SHIFT_<dir> is
+          // CMD_RUN_<dir> (cmd-keys.h:63), which the engine refuses outright
+          // with monsters in view (main.cc _start_running → i_feel_safe(true),
+          // "There are monsters nearby") and stops on its own at anything
+          // interesting. Never re-send the run on continued hold: the
+          // engine's interruption is the safety, and a second run after it
+          // is blind key repeat again.
+          //
+          // Not in the cursor contexts, checked at the threshold (freshest
+          // state): while aiming or in `x`, the same keycode is
+          // CMD_TARGET_DIR_<dir> (cmd-keys.h:267) — it FIRES in that
+          // direction; in the `X` level map it's a block jump
+          // (cmd-keys.h:322), worse for panning than the single-cell repeat.
+          // Nor under an overlay, where the d-pad stays reachable for all
+          // but the bar-tag menus: there it's CMD_MENU_LINE_<dir>
+          // (cmd-keys.h:377), so a run would scroll two lines and stop —
+          // held scrolling needs the repeat. A hold that starts inside the
+          // round trip after a cast has the same one-trip exposure as a
+          // sticky-Shift tap; accepted.
+          //
+          // A modified down (Shift lock = the run itself, Ctrl =
+          // attack/open-door) claims the hold: no repeat, no second send.
+          let downPlain = false
+          const onHold = (): boolean => {
+            for (const mode of ['x-mode', 'cursor-mode', 'overlay-mode']) {
+              if (root.classList.contains(mode)) return false
+            }
+            if (downPlain) {
+              send({ msg: 'key', keycode: def.shifted })
+              clearOneshot()  // a Shift tapped mid-hold must not arm a second run
+            }
+            return true
+          }
+          bindTap(btn, () => { downPlain = sendDpad(def) }, { repeat: true, onHold })
+        }
         dpadEl.appendChild(btn)
       }
     }
@@ -814,6 +873,10 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
     root.classList.toggle('cursor-mode', on)
   }
 
+  function setOverlayMode(on: boolean): void {
+    root.classList.toggle('overlay-mode', on)
+  }
+
   // Initial render
   buildDpad()
   applyControlSet()
@@ -827,5 +890,5 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
   // isKbdOpen also demands rendered geometry: overlay layouts can hide the
   // whole controls root while a manually-opened kbd stays display:flex —
   // an invisible kbd must not swallow the back gesture's dismissal.
-  return { element: root, enterXMode, exitXMode, setCursorMode, openKbd, closeKbd, isKbdOpen: () => kbdEl.style.display !== 'none' && kbdEl.getClientRects().length > 0, refreshSpellTab, consumeShift, destroy }
+  return { element: root, enterXMode, exitXMode, setCursorMode, setOverlayMode, openKbd, closeKbd, isKbdOpen: () => kbdEl.style.display !== 'none' && kbdEl.getClientRects().length > 0, refreshSpellTab, consumeShift, destroy }
 }

@@ -3854,6 +3854,7 @@ export function buildGameView(
     uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert')
     uiOverlay.classList.toggle('overlay-float', !!opts?.float)
     uiOverlay.style.display = ''
+    touchControls.setOverlayMode(true)
     chatView.syncChip()
     if (opts?.float) {
       // Float mode (prompt modal): the game shows through the dim backdrop.
@@ -4074,6 +4075,7 @@ export function buildGameView(
       showHud()
     }
     touchControls.element.style.display = ''
+    touchControls.setOverlayMode(false)
     // Spectator lens restore. Cleared only on a successful reopen: overlay
     // teardown can interleave (hide_dialog fires under a still-stacked
     // ui-push; close_menu doesn't clear dialogActive), so a refused attempt

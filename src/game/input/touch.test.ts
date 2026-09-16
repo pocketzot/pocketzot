@@ -5,7 +5,7 @@ import { fakeStorage } from '../../test/fake-storage'
 
 vi.stubGlobal('localStorage', fakeStorage())
 
-import { buildTouchControls, REPEAT_DELAY_MS, REPEAT_INTERVAL_MS } from './touch'
+import { buildTouchControls, HOLD_MS, REPEAT_DELAY_MS, REPEAT_INTERVAL_MS } from './touch'
 import {
   cloneSet, newSetId, saveControlSet, setActiveControlSet, builtinSets,
 } from './control-sets'
@@ -184,8 +184,8 @@ describe('phantom-engagement guard', () => {
   })
 })
 
-// Hold-to-repeat: d-pad and kbd character/backspace keys auto-repeat while
-// held (touch path only); everything else stays single-fire.
+// Hold behavior (touch path only): a d-pad direction runs, the center key and
+// kbd character/backspace keys auto-repeat, everything else stays single-fire.
 describe('hold-to-repeat', () => {
   beforeEach(() => { vi.useFakeTimers() })
   afterEach(() => { vi.useRealTimers() })
@@ -200,23 +200,130 @@ describe('hold-to-repeat', () => {
     const { tc, sent } = setup()
     const btn = dpadUp(tc.element)
     btn.dispatchEvent(touchEvent('touchstart'))
-    vi.advanceTimersByTime(REPEAT_DELAY_MS / 2)
+    vi.advanceTimersByTime(HOLD_MS / 2)
     btn.dispatchEvent(touchEvent('touchend'))
     vi.advanceTimersByTime(REPEAT_DELAY_MS * 4)
     expect(sent).toHaveLength(1)
   })
 
-  it('a held d-pad key repeats after the delay and stops on release', () => {
+  const dpadWait = (root: HTMLElement) =>
+    root.querySelector<HTMLElement>('.tc-dpad-btn.wait')!
+  const shiftBtn = (root: HTMLElement) =>
+    root.querySelector<HTMLButtonElement>('.tc-shift')!
+  const ctrlBtn = (root: HTMLElement) =>
+    root.querySelector<HTMLButtonElement>('.tc-ctrl')!
+  const key = (m: ClientMsg) => ('keycode' in m ? m.keycode : m)
+
+  // Hold = run: the down's plain step, then ONE shifted keycode at the
+  // threshold and nothing more for the rest of the hold (see buildDpad).
+  it('a held d-pad direction sends the plain step, then one run, then nothing', () => {
     const { tc, sent } = setup()
     const btn = dpadUp(tc.element)
     btn.dispatchEvent(touchEvent('touchstart'))
-    expect(sent).toHaveLength(1)  // immediate fire
-    vi.advanceTimersByTime(REPEAT_DELAY_MS + REPEAT_INTERVAL_MS * 3)
-    expect(sent).toHaveLength(4)
-    expect(sent.every(m => 'keycode' in m && m.keycode === -254)).toBe(true)  // CK_UP
+    expect(sent.map(key)).toEqual([-254])  // CK_UP on the down
+    vi.advanceTimersByTime(HOLD_MS - 1)
+    expect(sent).toHaveLength(1)
+    vi.advanceTimersByTime(1 + REPEAT_INTERVAL_MS * 5)
+    expect(sent.map(key)).toEqual([-254, -243])  // + CK_SHIFT_UP, once
     btn.dispatchEvent(touchEvent('touchend'))
     vi.advanceTimersByTime(REPEAT_INTERVAL_MS * 5)
+    expect(sent).toHaveLength(2)
+  })
+
+  const holdUp = (root: HTMLElement) => {
+    const btn = dpadUp(root)
+    btn.dispatchEvent(touchEvent('touchstart'))
+    vi.advanceTimersByTime(HOLD_MS + REPEAT_INTERVAL_MS * 3)
+    btn.dispatchEvent(touchEvent('touchend'))
+    return btn
+  }
+
+  it('a held direction keeps the plain single-step repeat in X mode', () => {
+    const { tc, sent } = setup()
+    tc.enterXMode()
+    holdUp(tc.element)
+    expect(sent.map(key)).toEqual([-254, -254, -254, -254])
+  })
+
+  it('a held direction keeps the plain single-step repeat in cursor mode', () => {
+    const { tc, sent } = setup()
+    tc.setCursorMode(true)
+    holdUp(tc.element)
+    expect(sent.map(key)).toEqual([-254, -254, -254, -254])
+  })
+
+  it('a held direction keeps the plain single-step repeat under an overlay (menu scrolling)', () => {
+    const { tc, sent } = setup()
+    tc.setOverlayMode(true)
+    holdUp(tc.element)
+    expect(sent.map(key)).toEqual([-254, -254, -254, -254])
+    sent.length = 0
+    tc.setOverlayMode(false)
+    holdUp(tc.element)
+    expect(sent.map(key)).toEqual([-254, -243])
+  })
+
+  // The mode is read at the threshold: an aiming prompt landing mid-hold
+  // turns the pending run into cursor steps.
+  it('a mode change during the hold is honored at the threshold', () => {
+    const { tc, sent } = setup()
+    const btn = dpadUp(tc.element)
+    btn.dispatchEvent(touchEvent('touchstart'))
+    vi.advanceTimersByTime(HOLD_MS / 2)
+    tc.setCursorMode(true)
+    vi.advanceTimersByTime(HOLD_MS / 2 + REPEAT_INTERVAL_MS * 2)
+    btn.dispatchEvent(touchEvent('touchend'))
+    expect(sent.map(key)).toEqual([-254, -254, -254])
+  })
+
+  it('a Shift-lock down sends the run itself and the hold adds nothing', () => {
+    const { tc, sent } = setup()
+    shiftBtn(tc.element).click()
+    shiftBtn(tc.element).click()  // quick double-tap = lock
+    holdUp(tc.element)
+    expect(sent.map(key)).toEqual([-243])
+  })
+
+  it('a Ctrl down sends the ctrl-move and the hold adds nothing', () => {
+    const { tc, sent } = setup()
+    ctrlBtn(tc.element).click()
+    holdUp(tc.element)
+    expect(sent.map(key)).toEqual([-232])  // CK_CTRL_UP
+  })
+
+  it('a Shift tapped mid-hold is consumed by the run, not left armed', () => {
+    const { tc, sent } = setup()
+    const btn = dpadUp(tc.element)
+    btn.dispatchEvent(touchEvent('touchstart'))
+    vi.advanceTimersByTime(HOLD_MS / 2)
+    shiftBtn(tc.element).dispatchEvent(touchEvent('touchstart'))  // a second finger
+    shiftBtn(tc.element).dispatchEvent(touchEvent('touchend'))
+    expect(shiftBtn(tc.element).classList.contains('active')).toBe(true)
+    vi.advanceTimersByTime(HOLD_MS / 2)
+    btn.dispatchEvent(touchEvent('touchend'))
+    expect(sent.map(key)).toEqual([-254, -243])
+    expect(shiftBtn(tc.element).classList.contains('active')).toBe(false)
+  })
+
+  it('the center wait key still repeats while held', () => {
+    const { tc, sent } = setup()
+    const btn = dpadWait(tc.element)
+    btn.dispatchEvent(touchEvent('touchstart'))
+    vi.advanceTimersByTime(REPEAT_DELAY_MS + REPEAT_INTERVAL_MS * 3)
+    btn.dispatchEvent(touchEvent('touchend'))
     expect(sent).toHaveLength(4)
+    expect(sent.every(m => 'text' in m && m.text === '.')).toBe(true)
+  })
+
+  it('losing the foreground mid-press cancels a pending run', () => {
+    const { tc, sent } = setup()
+    const btn = dpadUp(tc.element)
+    btn.dispatchEvent(touchEvent('touchstart'))
+    vi.advanceTimersByTime(HOLD_MS / 2)
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    document.dispatchEvent(new Event('visibilitychange'))
+    vi.advanceTimersByTime(HOLD_MS * 4)
+    expect(sent.map(key)).toEqual([-254])
   })
 
   it('a held kbd letter repeats', () => {
@@ -263,7 +370,7 @@ describe('hold-to-repeat', () => {
 
   it('repeat halts when the panel leaves the DOM mid-hold', () => {
     const { tc, sent } = setup()
-    const btn = dpadUp(tc.element)
+    const btn = dpadWait(tc.element)
     btn.dispatchEvent(touchEvent('touchstart'))
     vi.advanceTimersByTime(REPEAT_DELAY_MS + REPEAT_INTERVAL_MS)
     expect(sent).toHaveLength(2)
