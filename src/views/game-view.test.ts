@@ -1082,6 +1082,33 @@ describe('floating prompt (yesno/travel popups)', () => {
     expect(isHidden(msgLog(h))).toBe(false)
     expect(isHidden(hud(h))).toBe(false)
   })
+
+  it('a tap on the backdrop outside the card sends Esc; taps inside the card or stray clicks do not', () => {
+    const h = setup()
+    h.dispatch(yesnoPrompt())
+    const esc = () => sent(h).filter(m => m.msg === 'key' && m.keycode === 27).length
+    const tap = (target: Element, down: Element = target) => {
+      down.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    }
+    const card = overlay(h).querySelector('.overlay-card')!
+    tap(card)
+    expect(esc()).toBe(0)
+    tap(overlay(h), card)  // press began inside the card
+    expect(esc()).toBe(0)
+    overlay(h).dispatchEvent(new MouseEvent('click', { bubbles: true }))  // no press on the backdrop
+    expect(esc()).toBe(0)
+    tap(overlay(h))
+    expect(esc()).toBe(1)
+  })
+
+  it('a full-screen (non-float) overlay ignores taps on its own background', () => {
+    const h = setup()
+    h.dispatch({ msg: 'ui-push', type: 'formatted-scroller', title: 'Help', body: 'Help text.' })
+    overlay(h).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    overlay(h).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(sent(h).some(m => m.msg === 'key' && m.keycode === 27)).toBe(false)
+  })
 })
 
 // Non-prompt menus arrive with a hover seed too — Menu::show gives every

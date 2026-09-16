@@ -280,6 +280,18 @@ export function buildGameView(
   // bordered .overlay-card so uiOverlay can act as the dim backdrop. Only
   // append sites need this — querySelector lookups on uiOverlay see through it.
   let overlayContent: HTMLElement = uiOverlay
+  // Float backdrop tap = Esc. Require the press on the backdrop too, so a
+  // gesture begun before the prompt appeared can't cancel it unseen.
+  let backdropPress = false
+  uiOverlay.addEventListener('pointerdown', (e) => {
+    backdropPress = e.target === uiOverlay && uiOverlay.classList.contains('overlay-float')
+  })
+  uiOverlay.addEventListener('click', (e) => {
+    const fire = backdropPress && e.target === uiOverlay
+      && uiOverlay.classList.contains('overlay-float')
+    backdropPress = false
+    if (fire) dispatchTouchInput({ msg: 'key', keycode: 27 })
+  })
 
   // WebTiles chat. The view handles history/pill/chip; we supply transport.
   // Spectators always get the chip — chat is half the point of watching;

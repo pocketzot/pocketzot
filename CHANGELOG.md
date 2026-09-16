@@ -12,8 +12,10 @@ Notable changes to PocketZot, newest first.
 ## 2026-09-16
 
 - Holding a direction on the d-pad now sends a shift-move in that
-  direction, instead of starting repeated moves. While aiming or in
-  menus, holding repeats single steps as before.
+  direction, instead of sending repeated single moves. Holding during
+  cursor movement (targeting, X-mode, menus) sends repeated single
+  steps as before.
+- Tapping outside of a popup prompt now closes it.
 
 ## 2026-09-15
 
