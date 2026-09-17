@@ -20,6 +20,7 @@ import { isOverlayOpen, closeTopOverlay } from './overlay'
 import { handleKeydown, CK_UP, CK_DOWN, CK_PGUP, CK_PGDN, CK_HOME, CK_END } from '../game/input/keyboard'
 import { createShiftToggle } from '../game/input/shift-state'
 import { attachMapGestures, canDescribe, canHover } from '../game/input/map-tap'
+import { attachCornerSwipe } from '../game/input/corner-swipe'
 import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { keepLocalCenter } from '../game/input/map-pan'
 import { uiColor, escHtml, dcssToHtml } from '../game/dcss-colors'
@@ -910,6 +911,24 @@ export function buildGameView(
     if (monsterListView.element.childElementCount === 0) return
     e.stopPropagation()
     openMonsterPanel()
+  })
+
+  // Portrait: swipe the float across to the other top corner (the class
+  // moves the chat chip to the vacated one — style.css's mons-right rules).
+  // Gated on portrait at touch-down: in landscape the list is in normal
+  // flow in the sidebar, where a translate would just smear it.
+  const portraitMql = window.matchMedia('(orientation: portrait)')
+  const applyMonsterListCorner = (): void => {
+    view.classList.toggle('mons-right', getPref('monsterListCorner') === 'top-right')
+  }
+  applyMonsterListCorner()
+  attachCornerSwipe(monsterListView.element, {
+    container: view,
+    enabled: () => portraitMql.matches,
+    onSettle: (side) => {
+      setPref('monsterListCorner', side === 'right' ? 'top-right' : 'top-left')
+      applyMonsterListCorner()
+    },
   })
 
   const hudTop = document.createElement('div')

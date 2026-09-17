@@ -30,10 +30,15 @@ const PREF_EVENTS: Partial<Record<keyof Prefs, string>> = {
 // 'hidden' is reachable only from the settings page — once hidden there is no
 // in-game chip left to tap, so the chevron never cycles into it.
 export type MonsterListMode = 'hidden' | 'collapsed' | 'full'
+// Which top corner of the map the portrait float sits in (swipe it across;
+// game-view's attachCornerSwipe binding). Landscape ignores it — the list is
+// in the sidebar there.
+export type MonsterListCorner = 'top-left' | 'top-right'
 
 export interface Prefs {
   lastGuestSpectateWsUrl: string | null
   monsterListMode: MonsterListMode
+  monsterListCorner: MonsterListCorner
   mapRenderMode: 'ascii' | 'tiles'
   controlSetId: string
   // Character-sprite shelf on the login screen (and with it the crypt, whose
@@ -65,6 +70,7 @@ export interface Prefs {
 const DEFAULTS: Prefs = {
   lastGuestSpectateWsUrl: null,
   monsterListMode: 'full',
+  monsterListCorner: 'top-left',
   mapRenderMode: 'ascii',
   controlSetId: 'standard',
   loginSprites: true,

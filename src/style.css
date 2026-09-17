@@ -2422,8 +2422,17 @@ html.map-hold, html.map-hold * {
        content. */
     top: max(0.25rem, var(--safe-top));
     left: 0.25rem;
-    /* The 7.5rem reservation keeps the panel's right edge (where the
-       collapse chevron floats) clear of the map's top-right corner, which
+    /* Swipe-to-move (attachCornerSwipe): the drag is a translate, so the
+       browser must not claim the touch for scrolling/zoom — and touch-action
+       doesn't cover WebKit's long-press selection/magnifier, which a slow
+       drag across the names would otherwise start (pairing as at
+       .logo-tappable / html.map-hold). */
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    /* The 7.5rem reservation keeps the panel's far edge (where the
+       collapse chevron floats) clear of the map's other top corner, which
        the floating chat chip owns at a higher z — an unbounded panel
        parks the chevron exactly under the chip, untappable. Reserved
        unconditionally, not just while the chip exists: the panel is
@@ -2433,6 +2442,26 @@ html.map-hold, html.map-hold * {
        so extra caps can't prevent banners — they'd only force wraps on
        wide (tablet) viewports where single lines fit fine. */
     max-width: calc(100% - 7.5rem);
+  }
+
+  /* The other top corner (monsterListCorner pref, class set by game-view).
+     The chat chip yields: its position carries no meaning, the list's is
+     the user's choice — so the two floats simply trade corners and the
+     width reservation above still describes the gap between them. */
+  #game-view.mons-right #monster-list {
+    left: auto;
+    right: 0.25rem;
+  }
+  #game-view.mons-right #chat-chip.chat-chip-float {
+    right: auto;
+    left: 0.4rem;
+  }
+
+  /* Mid-drag and during the snap: above the log float (3) and the chip (5)
+     so the card travels over everything, including the chip it's trading
+     corners with. */
+  #monster-list:is(.ml-dragging, .ml-snapping) {
+    z-index: 7;
   }
 }
 
