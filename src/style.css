@@ -1858,13 +1858,18 @@ html.map-hold, html.map-hold * {
   text-shadow: var(--msglog-text-shadow);
   /* Vertical padding is the Safari fix, not cosmetic — don't zero it. With
      box-sizing:border-box the padding-bottom lifts the bottom-pinned column up
-     off the bottom edge, which pushes the row scrolled just out of view a few
-     px clear of the top edge. That gap absorbs WebKit's fractional column-reverse
+     off the bottom edge, which pushes the row scrolled just out of view
+     clear of the top edge. That gap absorbs WebKit's fractional column-reverse
      scroll offset (which Chrome rounds away but Safari/iOS doesn't), so the
      hidden row's descenders no longer bleed in at the top. It also makes the
      content box no longer an exact line-box multiple, removing the
-     boundary-aligned cut that made the artifact possible. */
-  padding: 0.2rem 0.2rem;
+     boundary-aligned cut that made the artifact possible.
+     The lift also cuts the top visible row by the same amount, so it has to
+     fit the line's spare leading: at --msglog-line 1.1 ink starts ~1.9px
+     into a 12px line (measured, WebKit SF Mono) and the old 0.2rem lift
+     shaved the i/j dots. 0.12em splits the slack between the hidden row's
+     descenders and the top row's dots — re-measure if --msglog-line moves. */
+  padding: 0.2rem 0.2rem 0.12em;
   /* Bottom-pinned chat-log pattern: column-reverse lays children from the
      visual bottom upward, which lets the browser keep scroll naturally at
      the latest message without any JS scrollTop writes (which force layout).
