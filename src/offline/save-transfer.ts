@@ -19,6 +19,38 @@
 // Regenerable caches are excluded from export: saves/db + saves/des (the
 // prewarm pack reseeds them; ~10 MB, and stale across engine builds) and the
 // prewarm stamp file itself (its absence just makes the next boot reseed).
+//
+// --- The records overlay -----------------------------------------------------
+// Two lifecycles share the engine's /crawl namespace. The SAVE is one
+// consistent snapshot the engine reads back, and IDBFS's whole-store model
+// (hydrate everything at boot, reconcile everything at each persist) fits it.
+// Finished-game files — a death's morgue .txt/.lst pair (chardump.cc
+// _write_dump, named by ouch.cc morgue_name) plus the client's .doll.png
+// sidecar beside it — are written once and grow forever; the engine's one
+// gameplay reader of them (hiscores.cc _show_morgue, off the startup menu's
+// High Scores entry) is unreachable here because the wasm boot passes -name
+// and never shows that menu (the other reader is wizmode's dump loader,
+// wiz-dump.cc _parse_from_file). Under IDBFS every one of them is copied into the
+// worker's heap on every engine boot and held there for the whole session
+// (libidbfs.js syncfs(populate) loads every remote entry — no partial reads).
+// So they live in a second database the engine never mounts, keyed by the
+// SAME /crawl/morgue/... path the engine wrote them under: the path stays the
+// file's address everywhere (pack manifests, card dump refs, xlog.ts's
+// morgue-filename derivation), and isRecordPath alone decides the physical
+// home. The mount keeps the morgue dir's per-character working files (`#`
+// dumps named after the character; .where/.ts on a DGAMELAUNCH build) —
+// bounded (one set per character name, rewritten in place), and the engine's
+// to maintain.
+//
+// Reads tolerate, writes do not. A read of a record path tries the records
+// store, then the mount, because a morgue the engine just wrote sits in the
+// mount until the next offline-lobby visit moves it (migrateRecordFiles). A
+// write of a record path goes to the records store only; a delete clears
+// both (the mount is where the engine put it). Never add a "write it back
+// where it was found" branch: the mount is a transit stop for these files,
+// and a second write path re-creates the split this overlay exists to end.
+// Don't replace the migration with an engine-side morgue_dir redirect plus
+// starred-line capture: dev-material/offline-play.md (2026-09-16) has why.
 
 import { fetchVersion } from './artifact-store'
 
@@ -40,6 +72,25 @@ const STORE = 'FILE_DATA'
 // creates the database at the exact schema the engine expects to open.
 const IDBFS_DB_VERSION = 21
 const MAGIC = 'PZSAVE1\n'
+
+// The records overlay (see the header): our own database, our own schema —
+// values {mode, mtimeMs, data} keyed by path, nothing IDBFS-shaped to mirror.
+const RECORDS_DB = 'pz-records'
+const RECORDS_STORE = 'files'
+const RECORDS_DB_VERSION = 1
+// morgue_name (ouch.cc) names every finished-game dump
+// morgue-<stem>-YYYYMMDD-HHMMSS (make_file_time); the .lst pair and the
+// .doll.png sidecar share the stem (xlog.ts morgueFileName emits exactly
+// this). The prefix alone is NOT the test: "morgue-" is a legal character
+// name (validateOfflineName allows '-'), and that character's own working
+// files (`#` dump morgue-bob.txt/.lst, morgue-bob.where) must stay in the
+// mount — the date stamp is what tells a record from a name.
+const RECORD_PREFIX = `${MOUNT}/morgue/morgue-`
+const RECORD_TAIL_RE = /^[^/]*-\d{8}-\d{6}\.(txt|lst|doll\.png)$/
+
+export function isRecordPath(path: string): boolean {
+  return path.startsWith(RECORD_PREFIX) && RECORD_TAIL_RE.test(path.slice(RECORD_PREFIX.length))
+}
 
 function isRegenerable(path: string): boolean {
   return path.startsWith(`${MOUNT}/saves/db/`)
@@ -235,6 +286,41 @@ async function openDb(): Promise<IDBDatabase> {
   return db
 }
 
+function openRecordsRaw(version?: number): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const r = version === undefined ? indexedDB.open(RECORDS_DB) : indexedDB.open(RECORDS_DB, version)
+    r.onupgradeneeded = () => {
+      if (!r.result.objectStoreNames.contains(RECORDS_STORE)) r.result.createObjectStore(RECORDS_STORE)
+    }
+    r.onsuccess = () => resolve(r.result)
+    r.onerror = () => reject(r.error ?? new Error('IndexedDB open failed'))
+    r.onblocked = () => reject(new Error('IndexedDB open blocked by another connection'))
+  })
+}
+
+// Same shape as openDb: a version-less open first, then a bump only when the
+// store is missing — a database that exists without its store (any
+// version-less open by a probe creates one) would otherwise be a permanent
+// NotFoundError on every read and export.
+async function openRecordsDb(): Promise<IDBDatabase> {
+  let db = await openRecordsRaw()
+  if (!db.objectStoreNames.contains(RECORDS_STORE)) {
+    const version = Math.max(RECORDS_DB_VERSION, db.version + 1)
+    db.close()
+    db = await openRecordsRaw(version)
+  }
+  return db
+}
+
+interface RecordValue { mode: number; mtimeMs: number; data: Uint8Array }
+
+function partition(paths: readonly string[]): { records: string[]; mount: string[] } {
+  const records: string[] = []
+  const mount: string[] = []
+  for (const p of paths) (isRecordPath(p) ? records : mount).push(p)
+  return { records, mount }
+}
+
 // The save slots present in the engine's IDBFS — the stem of each
 // /crawl/saves/<stem>.cs file (the engine names the save after the character
 // via strip_filename_unsafe_chars; offline-state.ts slotStem is the client
@@ -267,14 +353,36 @@ export async function listOfflineSaves(): Promise<string[] | null> {
   }
 }
 
-// Delete files from the mount (missing paths are no-ops). Only run while no
-// engine is up — the callers (offline lobby surfaces) exist exactly when none
-// is. Note there is deliberately no delete-a-character path: a save goes away
-// by quitting it in-game, the same as in crawl proper.
+// Delete files (missing paths are no-ops). Record paths clear both homes —
+// the overlay AND the mount copy an unmigrated morgue may still be. Only run
+// while no engine is up — the callers (offline lobby surfaces) exist exactly
+// when none is. Note there is deliberately no delete-a-character path: a
+// save goes away by quitting it in-game, the same as in crawl proper.
 export async function deleteOfflineFiles(paths: string[]): Promise<void> {
   for (const p of paths) {
     if (!isMountPath(p)) throw new Error(`bad path: ${p}`)
   }
+  // Both homes are attempted even if one throws: deleteGameRecord strips
+  // the logfile line first, so a copy left behind here is orphaned — no
+  // surface names the path again.
+  const results = await Promise.allSettled([deleteFromMount(paths), deleteFromRecords(paths.filter(isRecordPath))])
+  for (const r of results) if (r.status === 'rejected') throw r.reason
+}
+
+async function deleteFromRecords(paths: readonly string[]): Promise<void> {
+  if (paths.length === 0) return
+  const rdb = await openRecordsDb()
+  try {
+    const txn = rdb.transaction(RECORDS_STORE, 'readwrite')
+    for (const p of paths) txn.objectStore(RECORDS_STORE).delete(p)
+    await txnDone(txn)
+  } finally {
+    rdb.close()
+  }
+}
+
+async function deleteFromMount(paths: readonly string[]): Promise<void> {
+  if (paths.length === 0) return
   const db = await openDb()
   try {
     const txn = db.transaction(STORE, 'readwrite')
@@ -293,20 +401,43 @@ function contentsToBytes(c: unknown): Uint8Array | null {
   return null
 }
 
-// Read one file's bytes from the mount, or null when it doesn't exist.
+// Read one file's bytes, or null when it doesn't exist.
 export async function readOfflineFile(path: string): Promise<Uint8Array | null> {
   return (await readOfflineFilesAt([path])).get(path) ?? null
 }
 
-// Read a specific set of files in one connection and transaction — absent
-// paths (and directory entries) are simply missing from the result.
+// Read a specific set of files — absent paths (and directory entries) are
+// simply missing from the result. Record paths: overlay first, then the
+// mount for the misses (reads tolerate — see the header).
 export async function readOfflineFilesAt(paths: readonly string[]): Promise<Map<string, Uint8Array>> {
   const out = new Map<string, Uint8Array>()
   if (paths.length === 0) return out
+  const { records, mount } = partition(paths)
+  if (records.length > 0) {
+    // An unopenable overlay is a miss for every record path, not a failed
+    // read: the mount leg below still serves unmigrated morgues and — for a
+    // mixed read — everything that was never the overlay's to hold.
+    try {
+      const rdb = await openRecordsDb()
+      try {
+        const store = rdb.transaction(RECORDS_STORE, 'readonly').objectStore(RECORDS_STORE)
+        await Promise.all(records.map(async (p) => {
+          const f = recordEntryToFile(p, await request(store.get(p)))
+          if (f !== null) out.set(p, f.data)
+        }))
+      } finally {
+        rdb.close()
+      }
+    } catch (e) {
+      console.warn('[records] overlay unreadable, reading the mount only', e)
+    }
+    for (const p of records) if (!out.has(p)) mount.push(p)
+  }
+  if (mount.length === 0) return out
   const db = await openDb()
   try {
     const store = db.transaction(STORE, 'readonly').objectStore(STORE)
-    await Promise.all(paths.map(async (p) => {
+    await Promise.all(mount.map(async (p) => {
       const v = await request(store.get(p)) as { contents?: unknown } | undefined
       const data = contentsToBytes(v?.contents)
       if (data !== null) out.set(p, data)
@@ -317,53 +448,169 @@ export async function readOfflineFilesAt(paths: readonly string[]): Promise<Map<
   }
 }
 
-// Snapshot every real file under the mount (one readonly transaction —
-// atomic vs the engine's own syncfs batches), minus regenerable caches.
+// Snapshot every real file: the mount (one readonly transaction — atomic vs
+// the engine's own syncfs batches) minus regenerable caches, then the
+// records overlay on top (its copy wins for a path present in both, i.e. a
+// morgue mid-migration).
 export async function readOfflineFiles(): Promise<SavedFile[]> {
+  const out = new Map<string, SavedFile>()
   const db = await openDb()
   try {
     const store = db.transaction(STORE, 'readonly').objectStore(STORE)
     // Both getAll* return ascending key order, so index i pairs up.
     const [keys, values] = await Promise.all([request(store.getAllKeys()), request(store.getAll())])
-    const out: SavedFile[] = []
     keys.forEach((key, i) => {
       if (typeof key !== 'string' || !key.startsWith(`${MOUNT}/`) || isRegenerable(key)) return
-      const v = values[i] as { timestamp?: unknown; mode?: unknown; contents?: unknown } | undefined
-      const data = contentsToBytes(v?.contents)
-      if (data === null) return // directory entry
-      const ts = v?.timestamp
-      out.push({
-        path: key,
-        mode: typeof v?.mode === 'number' ? v.mode : 0o100664,
-        mtimeMs: ts instanceof Date ? ts.getTime() : typeof ts === 'number' ? ts : Date.now(),
-        data,
-      })
+      const f = mountEntryToFile(key, values[i])
+      if (f !== null) out.set(key, f)
     })
-    return out
   } finally {
     db.close()
+  }
+  // Tolerant like readOfflineFilesAt: a backup of the saves must not hinge on
+  // the overlay opening (before the overlay, export needed the mount alone).
+  try {
+    const rdb = await openRecordsDb()
+    try {
+      const store = rdb.transaction(RECORDS_STORE, 'readonly').objectStore(RECORDS_STORE)
+      const [keys, values] = await Promise.all([request(store.getAllKeys()), request(store.getAll())])
+      keys.forEach((key, i) => {
+        // isRecordPath: unpackSave rejects a whole pack over one path outside
+        // /crawl, so a stray key here must not reach the manifest.
+        if (typeof key !== 'string' || !isRecordPath(key)) return
+        const f = recordEntryToFile(key, values[i])
+        if (f !== null) out.set(key, f)
+      })
+    } finally {
+      rdb.close()
+    }
+  } catch (e) {
+    console.warn('[records] overlay unreadable, exporting the mount only', e)
+  }
+  return [...out.values()]
+}
+
+// An IDBFS record → SavedFile; null for a directory entry.
+function mountEntryToFile(path: string, raw: unknown): SavedFile | null {
+  const v = raw as { timestamp?: unknown; mode?: unknown; contents?: unknown } | undefined
+  const data = contentsToBytes(v?.contents)
+  if (data === null) return null
+  const ts = v?.timestamp
+  return {
+    path,
+    mode: typeof v?.mode === 'number' ? v.mode : 0o100664,
+    mtimeMs: ts instanceof Date ? ts.getTime() : typeof ts === 'number' ? ts : Date.now(),
+    data,
   }
 }
 
-// Write files (plus synthesized parent-directory entries — a fresh device
-// has none) in one readwrite transaction. Existing entries at the same paths
-// are overwritten; nothing else is touched.
+// An overlay entry → SavedFile; null when absent OR 0 bytes (a size:0 pack
+// entry). The one definition of "the overlay holds this record" — reads, the
+// export union and the migration all go through it, so an empty entry can
+// neither shadow a real mount copy nor get that copy deleted as a duplicate.
+function recordEntryToFile(path: string, raw: unknown): SavedFile | null {
+  const v = raw as Partial<RecordValue> | undefined
+  const data = contentsToBytes(v?.data)
+  if (data === null || data.length === 0) return null
+  return {
+    path,
+    mode: typeof v?.mode === 'number' ? v.mode : 0o100664,
+    mtimeMs: typeof v?.mtimeMs === 'number' ? v.mtimeMs : Date.now(),
+    data,
+  }
+}
+
+// Write files, each to its home (writes do not tolerate — see the header):
+// record paths into the overlay, the rest into the mount (plus synthesized
+// parent-directory entries — a fresh device has none), one readwrite
+// transaction per store. Existing entries at the same paths are overwritten;
+// nothing else is touched. Two stores means an import is no longer one
+// atomic transaction: the overlay goes first, so a failure part-way leaves
+// the saves untouched (a re-run overwrites the morgues) rather than saves
+// restored without their history.
 export async function writeOfflineFiles(files: SavedFile[]): Promise<number> {
+  const records = files.filter((f) => isRecordPath(f.path))
+  const mount = files.filter((f) => !isRecordPath(f.path))
+  if (records.length > 0) await writeRecords(records)
+  if (mount.length > 0) {
+    const db = await openDb()
+    try {
+      const txn = db.transaction(STORE, 'readwrite')
+      const store = txn.objectStore(STORE)
+      const dirs = new Set<string>()
+      for (const f of mount) {
+        let d = f.path
+        while ((d = d.slice(0, d.lastIndexOf('/'))).length >= MOUNT.length) dirs.add(d)
+      }
+      // 0o40775: directory bit + the permissions Emscripten's mkdir defaults to.
+      for (const d of dirs) store.put({ timestamp: new Date(), mode: 0o40775 }, d)
+      for (const f of mount) store.put({ timestamp: new Date(f.mtimeMs), mode: f.mode, contents: f.data }, f.path)
+      await txnDone(txn)
+    } finally {
+      db.close()
+    }
+  }
+  return files.length
+}
+
+async function writeRecords(files: readonly SavedFile[]): Promise<void> {
+  const rdb = await openRecordsDb()
+  try {
+    const txn = rdb.transaction(RECORDS_STORE, 'readwrite')
+    const store = txn.objectStore(RECORDS_STORE)
+    for (const f of files) {
+      const v: RecordValue = { mode: f.mode, mtimeMs: f.mtimeMs, data: f.data }
+      store.put(v, f.path)
+    }
+    await txnDone(txn)
+  } finally {
+    rdb.close()
+  }
+}
+
+// Move finished-game files the engine wrote into the mount over to the
+// records overlay. Idempotent and cheap when there's nothing to move (one
+// key-range query). Overlay write first, mount delete second, so an
+// interruption leaves a duplicate — never a lost file. The overlay copy is
+// the truth once it exists: a path already there is only deleted from the
+// mount, never overwritten — the mount copy may be a torn persist while
+// the overlay's just came from a backup import (the lobby imports, then
+// runs this). Engine-stopped-only like every mount mutation, and the caller
+// fires this without blocking its launch controls, so `stillStopped` is
+// re-asserted right before the mount delete: libidbfs.js syncfs(populate)
+// lists the store (getRemoteSet) and loads the listed entries (reconcile →
+// loadRemoteEntry) in two separate transactions, and a delete landing
+// between them hands storeLocalEntry an undefined entry — a failed boot.
+// Yielding costs nothing: the overlay copies are already written, and the
+// next pass clears the mount duplicates.
+// Returns the number of files written to the overlay.
+export async function migrateRecordFiles(stillStopped?: () => boolean): Promise<number> {
+  const range = IDBKeyRange.bound(RECORD_PREFIX, `${RECORD_PREFIX}￿`)
+  const found: SavedFile[] = []
   const db = await openDb()
   try {
-    const txn = db.transaction(STORE, 'readwrite')
-    const store = txn.objectStore(STORE)
-    const dirs = new Set<string>()
-    for (const f of files) {
-      let d = f.path
-      while ((d = d.slice(0, d.lastIndexOf('/'))).length >= MOUNT.length) dirs.add(d)
-    }
-    // 0o40775: directory bit + the permissions Emscripten's mkdir defaults to.
-    for (const d of dirs) store.put({ timestamp: new Date(), mode: 0o40775 }, d)
-    for (const f of files) store.put({ timestamp: new Date(f.mtimeMs), mode: f.mode, contents: f.data }, f.path)
-    await txnDone(txn)
-    return files.length
+    const store = db.transaction(STORE, 'readonly').objectStore(STORE)
+    const [keys, values] = await Promise.all([request(store.getAllKeys(range)), request(store.getAll(range))])
+    keys.forEach((key, i) => {
+      if (typeof key !== 'string' || !isRecordPath(key)) return
+      const f = mountEntryToFile(key, values[i])
+      if (f !== null) found.push(f)
+    })
   } finally {
     db.close()
   }
+  if (found.length === 0) return 0
+  const rdb = await openRecordsDb()
+  let moved: SavedFile[]
+  try {
+    const store = rdb.transaction(RECORDS_STORE, 'readonly').objectStore(RECORDS_STORE)
+    const present = await Promise.all(found.map((f) => request(store.get(f.path))))
+    moved = found.filter((f, i) => recordEntryToFile(f.path, present[i]) === null)
+  } finally {
+    rdb.close()
+  }
+  if (moved.length > 0) await writeRecords(moved)
+  if (stillStopped && !stillStopped()) return moved.length
+  await deleteFromMount(found.map((f) => f.path))
+  return moved.length
 }

@@ -174,15 +174,6 @@ describe('doll sidecars', () => {
     expect(Array.from(files[0].data)).toEqual([1, 2, 3])
   })
 
-  it('yields the write when stillStopped says the engine took the mount', async () => {
-    const a = avatar({ fp: 'fp1' })
-    storeBakedDoll('fp1', dollTileSpec({ doll: a.doll, mcache: a.mcache }), PNG_URL)
-    await materializeDollSidecars([rec()], [a], () => false)
-    expect(writeOfflineFiles).not.toHaveBeenCalled()
-    await materializeDollSidecars([rec()], [a], () => true)
-    expect(writeOfflineFiles).toHaveBeenCalledTimes(1)
-  })
-
   it('skips a bake with an empty payload (would write a 0-byte sidecar)', async () => {
     const a = avatar({ fp: 'fp1' })
     storeBakedDoll('fp1', dollTileSpec({ doll: a.doll, mcache: a.mcache }), 'data:image/png;base64,')
