@@ -28,7 +28,7 @@ import { compactPlace, nameTitle } from '../game/char-label'
 import { escHtml } from '../game/dcss-colors'
 import { paintAvatars, type DollRecipe } from './avatar-tiles'
 import { resolveRuneSource, sourceSprite } from './rune-sprites'
-import { TEX } from '../game/tiles/tile-loader'
+import { dropTileLoader, TEX } from '../game/tiles/tile-loader'
 import { maybeShowExitDialog } from './lobby'
 import { openRcEditor } from './rc-editor'
 import { openGameRecords } from './records-view'
@@ -639,6 +639,9 @@ export function buildOfflineLobbyView(
     downloadBtn.disabled = false
     newBtn.disabled = false
     await refreshReadiness()
+    // Success or not: the download rolls the stores to the deployed build
+    // before it fetches, so the memoized local loader is stale either way.
+    dropTileLoader('', 'local')
     void paintMenuIcons()
     return gateOpen()
   }

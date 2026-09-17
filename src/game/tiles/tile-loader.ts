@@ -122,6 +122,17 @@ export function getTileLoader(httpBase: string, version: string): TileLoader {
   return loader
 }
 
+// Forget a base whose CONTENT changed under a constant URL. Server version
+// dirs are immutable, so only the offline pack needs this: /gamedata/local/
+// is rewritten in place by a pack install/update, and a memoized instance
+// would keep serving the previous build's tileinfo (and any atlas it had
+// decoded) beside whatever it loads fresh — index skew, the same failure
+// artifact-store's openOfflineStores guards against on the cache side.
+// Holders of the old instance keep a self-consistent old pair.
+export function dropTileLoader(httpBase: string, version: string): void {
+  loaders.delete(`${httpBase}/gamedata/${version}`)
+}
+
 export class TileLoader {
   // Public so the routing shim and callers can identify this instance; never
   // mutated after construction.
@@ -133,7 +144,7 @@ export class TileLoader {
   readonly version: string
   private atlases = new Map<string, Promise<HTMLImageElement>>()
   private modules = new Map<string, Promise<TileinfoModule>>()
-  private moduleResolvers = new Map<string, (m: TileinfoModule) => void>()
+  private moduleResolvers = new Map<string, { resolve: (m: TileinfoModule) => void; reject: (e: Error) => void }>()
   // Resolved-state mirrors of `atlases` / `modules` for synchronous lookup.
   // The async maps hold the in-flight promise; these hold the value once it
   // arrives. TileMapView paints from these so a 33×21 canvas redraw doesn't
@@ -261,7 +272,7 @@ export class TileLoader {
     const cached = this.modules.get(name)
     if (cached) return cached
     const p = new Promise<TileinfoModule>((resolve, reject) => {
-      this.moduleResolvers.set(name, resolve)
+      this.moduleResolvers.set(name, { resolve, reject })
       const s = document.createElement('script')
       s.src = `${this.base}/${file}`
       // Key the pending entry by the RESOLVED base: the define shim routes
@@ -276,6 +287,16 @@ export class TileLoader {
         pendingModules.delete(pendingKey)
         this.moduleResolvers.delete(name)
         reject(new Error(`failed to load ${file}`))
+      }
+      // The shim claims the pending entry synchronously while the script
+      // executes, i.e. before `load`. Still ours at `load` = the file ran
+      // without reaching define() — an HTML body served 200 in the module's
+      // place (a parse error fires `load`, never `error`), or a module shape
+      // the shim can't route. Settle it as a failed load, not a hang.
+      s.onload = () => {
+        if (pendingModules.get(pendingKey) !== this) return
+        pendingModules.delete(pendingKey)
+        this.rejectModule(name, new Error(`${file} loaded without defining a module`))
       }
       document.head.appendChild(s)
     })
@@ -292,9 +313,19 @@ export class TileLoader {
   // reach it.
   resolveModule(name: string, mod: TileinfoModule): void {
     this.moduleSync.set(name, mod)
-    const resolve = this.moduleResolvers.get(name)
+    const r = this.moduleResolvers.get(name)
     this.moduleResolvers.delete(name)
-    resolve?.(mod)
+    r?.resolve(mod)
+  }
+
+  // The shim's failure twin of resolveModule: a dependency failed to load or
+  // the factory threw. Every module load must SETTLE — loadModule's eviction
+  // (and so every retry) hangs off the rejection, and a promise left pending
+  // wedges each current and future awaiter of this module for the session.
+  rejectModule(name: string, err: Error): void {
+    const r = this.moduleResolvers.get(name)
+    this.moduleResolvers.delete(name)
+    r?.reject(err)
   }
 
   // Resolves an AMD dependency string a tileinfo module declares. Module-
@@ -360,7 +391,10 @@ function installShim(): void {
         const mod = factory(...args)
         loader.resolveModule(name, mod)
       })
-      .catch((err) => console.error('tileinfo factory failed:', name, err))
+      .catch((err) => {
+        console.error('tileinfo factory failed:', name, err)
+        loader.rejectModule(name, err instanceof Error ? err : new Error(String(err)))
+      })
   }
   ;(define as unknown as { amd: object }).amd = {}
   w['define'] = define
