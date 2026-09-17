@@ -1264,6 +1264,30 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 .offline-slot-doll:empty { display: none; }
 
+/* Menu-entry icons (offline-lobby.ts paintMenuIcons — why this column, and
+   the per-sprite sizes, live there): a sprite on "New game" and the scores
+   row. Both entries take the settings rows' left geometry (.offline-device:
+   1px card border, then .offline-device-row's 0.75rem padding, 1.1rem glyph
+   column, 0.6rem gap). The sprite is wider than the glyph column: it centres
+   on it and overflows. */
+.offline-menu-icon { flex: none; display: flex; justify-content: center; width: 1.1rem; }
+.offline-menu-icon > * { flex: none; }
+.offline-menu-icon:empty { display: none; }
+/* Source-order override of .lobby-game-row's 0.75rem gap (equal specificity;
+   this rule must stay below it). */
+.offline-records-row { gap: 0.6rem; }
+/* The button has no border, so the card border's 1px joins its padding. The
+   negative block margin lets the sprite overhang the label's line box so the
+   button keeps its sprite-less height — any value past the ~3px overhang
+   does; -8px leaves slack for a taller sprite. */
+#offline-new {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-left: calc(0.75rem + 1px);
+}
+#offline-new .offline-menu-icon { margin-block: -8px; }
+
 /* Slot-row meta line: stays one line beside the doll instead of wrapping the
    row taller. Only the char^god fact may shrink/ellipsize — rationale at
    offline-lobby.ts buildSlotRow. The 1ch gap equals the mono space the old
@@ -1324,9 +1348,10 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   font-size: 0.75rem;
   line-height: 1.4;
   color: var(--text-dim);
-  /* Indented to the play button's own text inset (its 1rem padding) so the
+  /* Indented to the play button's own text inset (#offline-new's
+     padding-left — the note only shows while the button has no icon) so the
      price hangs off the control rather than off the page margin. */
-  padding-left: 1rem;
+  padding-left: calc(0.75rem + 1px);
   margin-top: -0.15rem;
 }
 

@@ -14,6 +14,7 @@ Notable changes to PocketZot, newest first.
 - Monster list: if it's blocking something on the map, swipe it to
   the other side, or drag it to peek behind and let it snap back.
 - The monster list now grows wider when the chat chip is hidden.
+- Offline lobby polish.
 
 ## 2026-09-16
 

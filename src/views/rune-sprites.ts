@@ -17,8 +17,8 @@
 // No source = the glyph stays. Decoration-only, so missing is no harm.
 import { cachedGamedataBuild } from '../offline/artifact-store'
 import { resolvePlayerLoader } from '../game/tiles/atlas-dedup'
-import { bakeDoll, bakedDollUrl, storeBakedDoll } from '../game/tiles/avatar-bake'
-import { ORB, runeGlyph, runeLabel, runeTileRef } from '../game/tiles/rune-tiles'
+import { bakeDoll, bakedDollUrl, dropBakedDoll, storeBakedDoll } from '../game/tiles/avatar-bake'
+import { ORB, runeGlyph, runeLabel, runeTileName, runeTileRef } from '../game/tiles/rune-tiles'
 import { getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { DCSS_COLOR_MAP } from '../game/dcss-colors'
 import { renderTiles, type TileRef } from '../game/tiles/tile-view'
@@ -49,23 +49,33 @@ export function runeCell(word: string, scale: number): HTMLElement {
   cell.title = runeLabel(word)
   cell.setAttribute('aria-label', runeLabel(word))
   cell.style.width = cell.style.height = `${32 * scale}px`
+  cell.append(glyphEl(word, scale))
+  return cell
+}
+
+function glyphEl(word: string, scale: number): HTMLElement {
   const g = runeGlyph(word)
   const glyph = document.createElement('span')
   glyph.className = 'rune-glyph'
   glyph.textContent = g.ch
   glyph.style.color = DCSS_COLOR_MAP[g.colour] ?? ''
   glyph.style.fontSize = `${Math.round(26 * scale)}px`
-  cell.append(glyph)
-  return cell
+  return glyph
 }
 
 // Swap a cell's glyph for its sprite under a resolved source. Never rejects;
-// a failure leaves the glyph.
+// a failure leaves the glyph. The bake name is the TILE's (runeTileName — a
+// pure lookup, no module load), so every unknown adjective shares the one
+// generic-rune bake instead of storing a copy each.
 export async function fillRuneCell(cell: HTMLElement, src: RuneSource, scale: number): Promise<void> {
   try {
     const word = cell.dataset.rune!
-    const el = await sourceSprite(src, `rune:${word}`, () => runeTileRef(src.loader, word), scale)
-    if (el) cell.replaceChildren(el)
+    const el = await sourceSprite(src, `main:${runeTileName(word)}`, () => runeTileRef(src.loader, word), scale)
+    if (!el) return
+    // sourceSprite's self-heal removes a bake that fails to decode; the cell
+    // is fixed-size, so put the glyph back rather than leave a blank hole.
+    el.addEventListener('error', () => cell.replaceChildren(glyphEl(word, scale)))
+    cell.replaceChildren(el)
   } catch { /* glyph stays */ }
 }
 
@@ -73,9 +83,10 @@ export async function fillRuneCell(cell: HTMLElement, src: RuneSource, scale: nu
 // a live tile-stack otherwise (the header's source policy). Also draws the
 // offline lobby's scores-row icon, which is no rune but the same kind of
 // fixed decoration. The bake is addressed by `name` (empty spec), never by
-// tile index: an index costs a tileinfo module load (gui ~150 KB, main
-// larger), so `ref` runs only on a bake miss and a placed sprite touches
-// nothing but localStorage.
+// tile index: an index costs a tileinfo module load — for gui, 156 KB plus
+// the tileinfo-player it define()s a dependency on (475 KB) — so `ref` runs
+// only on a bake miss and a placed sprite touches nothing but localStorage.
+// (The miss also decodes the atlas — gui.png is 718 KB — once per build.)
 export async function sourceSprite(
   src: RuneSource, name: string, ref: () => Promise<TileRef | null>, scale: number,
 ): Promise<HTMLElement | null> {
@@ -92,7 +103,17 @@ export async function sourceSprite(
     if (url == null) return null
     storeBakedDoll(fp, [], url)
   }
-  return bakedImg(url, scale)
+  const img = bakedImg(url, scale)
+  // A stored data-URL that no longer decodes is dropped and the broken <img>
+  // removed, so the next paint re-bakes instead of serving the bad URL for
+  // the pack build's lifetime (dolls: paintAvatars). What the emptied host
+  // shows is the caller's business — the lobby boxes collapse, rune cells
+  // restore their glyph (fillRuneCell).
+  img.addEventListener('error', () => {
+    dropBakedDoll(fp, [])
+    img.remove()
+  })
+  return img
 }
 
 // Resolve once, fill every cell.

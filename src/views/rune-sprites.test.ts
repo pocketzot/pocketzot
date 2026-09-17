@@ -107,6 +107,37 @@ describe('renderRuneRow / renderOrbTrophy', () => {
     expect(bakeDoll).toHaveBeenCalledTimes(3)
   })
 
+  it('drops a stored bake that fails to decode, so the next paint re-bakes', async () => {
+    vi.mocked(cachedGamedataBuild).mockResolvedValue('build1')
+    const src = (await resolveRuneSource(null))!
+    const ref = async () => ({ t: 7, tex: 5 })
+    const img = (await sourceSprite(src, 'gui:A', ref, 1))!
+    const host = document.createElement('div')
+    host.append(img)
+    img.dispatchEvent(new Event('error'))
+    expect(host.children).toHaveLength(0)
+    await sourceSprite(src, 'gui:A', ref, 1)
+    expect(bakeDoll).toHaveBeenCalledTimes(2)
+  })
+
+  it('puts the glyph back in a rune cell whose bake fails to decode', async () => {
+    vi.mocked(cachedGamedataBuild).mockResolvedValue('build1')
+    const row = renderRuneRow(['golden'])
+    await vi.waitFor(() => expect(row.querySelectorAll('img.doll-bake')).toHaveLength(1))
+    row.querySelector('img')!.dispatchEvent(new Event('error'))
+    expect(row.querySelector('img')).toBeNull()
+    expect(row.querySelector('.rune-cell')?.textContent).toBe('φ')
+  })
+
+  it('shares one bake between adjectives that draw the same tile', async () => {
+    vi.mocked(cachedGamedataBuild).mockResolvedValue('build1')
+    const row = renderRuneRow(['mossy'])   // unknown → the generic rune
+    await vi.waitFor(() => expect(row.querySelectorAll('img.doll-bake')).toHaveLength(1))
+    const again = renderRuneRow(['lichened'])
+    await vi.waitFor(() => expect(again.querySelectorAll('img.doll-bake')).toHaveLength(1))
+    expect(bakeDoll).toHaveBeenCalledTimes(1)
+  })
+
   it('renders live tile-stacks off the recipe atlas when no pack is on device', async () => {
     vi.mocked(resolvePlayerLoader).mockResolvedValue(fakeLoader as never)
     const row = renderRuneRow(['golden', 'mossy'], { recipe })
