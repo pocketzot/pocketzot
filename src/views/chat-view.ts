@@ -249,6 +249,9 @@ export class ChatView {
     this.hidden = true
     this.closeSheet()
     this.chip.style.display = 'none'
+    // syncChip early-returns on `hidden` from here on, so its class twin
+    // must be cleared here or the monster-list cap stays for the game.
+    this.chip.classList.remove('chat-chip-shown')
     this.hidePill()
   }
 
@@ -350,6 +353,9 @@ export class ChatView {
       && (this.opts.alwaysShowChip
         || this.spectatorCount > 0 || this.unread > 0)
     this.chip.style.display = show ? '' : 'none'
+    // Class twin of the display toggle, for CSS that must know whether the
+    // chip is on screen (the monster-list width cap keys off it via :has()).
+    this.chip.classList.toggle('chat-chip-shown', show)
     // No count yet (or genuinely zero): show a bare `#` rather than a
     // misleading ◉0 — the join-time update_spectators can lag or be missed.
     this.chipEyeEl.textContent = this.spectatorCount > 0 ? `◉${this.spectatorCount}` : ''

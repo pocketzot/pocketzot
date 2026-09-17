@@ -2431,17 +2431,25 @@ html.map-hold, html.map-hold * {
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
-    /* The 7.5rem reservation keeps the panel's far edge (where the
-       collapse chevron floats) clear of the map's other top corner, which
-       the floating chat chip owns at a higher z — an unbounded panel
-       parks the chevron exactly under the chip, untappable. Reserved
-       unconditionally, not just while the chip exists: the panel is
-       shrink-to-fit, so the cap only bites when a name is long, and
-       wrapping such a name into a corner card beats a full-width banner
-       anyway. No tighter bound: shrink-to-fit already hugs short content,
-       so extra caps can't prevent banners — they'd only force wraps on
-       wide (tablet) viewports where single lines fit fine. */
-    max-width: calc(100% - 7.5rem);
+    /* Shrink-to-fit up to the far gutter: a long name runs on one line
+       rather than wrapping into a taller card. The only thing that can
+       be in the way is the chat chip — see the :has() rule below. No
+       tighter bound: shrink-to-fit already hugs short content, so extra
+       caps can't prevent banners — they'd only force wraps on wide
+       (tablet) viewports where single lines fit fine. */
+    max-width: calc(100% - 0.5rem);
+  }
+
+  /* While the chat chip floats in the other top corner (playing role,
+     someone spectating or unread chat — .chat-chip-shown is syncChip's
+     class twin of its display toggle): keep the panel's far edge, where
+     the collapse chevron floats, out from under it — the chip sits at a
+     higher z, so an overlap leaves the chevron untappable. Measured
+     (WebKit, 402px): "◉3 # 2" with the unread badge = 71px ≈ 4.4rem; a
+     two-digit count adds ~0.5rem. 6rem = that + the chip's 0.4rem inset
+     + a gap. */
+  #game-view:has(> #chat-chip.chat-chip-float.chat-chip-shown) #monster-list {
+    max-width: calc(100% - 6rem);
   }
 
   /* The other top corner (monsterListCorner pref, class set by game-view).
