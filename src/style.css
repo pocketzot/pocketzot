@@ -1960,12 +1960,11 @@ html.map-hold, html.map-hold * {
   /* One line + the 2px the border-box frame takes from the content. */
   --more-line-h: calc(var(--msglog-font) * var(--msglog-line) + 2px);
 }
-#game-view.more-active #game-messages {
-  border: 1px solid var(--more-cyan);
-  /* The dismiss button must not also be a scroller: a hasty swipe-tap
-     scrolled it off 0. Click unaffected. */
-  touch-action: none;
-}
+/* Stays scrollable: a long --more-- text (a named monster's description)
+   pushes its own head off the top, and the pause is exactly when you read
+   it. A stray swipe-tap's offset is re-pinned on dismiss (hideMore),
+   not prevented with touch-action:none. */
+#game-view.more-active #game-messages { border: 1px solid var(--more-cyan); }
 #msg-more {
   /* Console (message.cc:718-731): left-aligned at the message column
      — 1ch clears the turn-mark slot the way console's --more-- starts at

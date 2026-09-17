@@ -4129,8 +4129,17 @@ export function buildGameView(
   }
 
   function hideMore(): void {
+    const wasActive = moreActive
     moreActive = false
     syncMoreDisplay()
+    // Re-pin to the newest line (column-reverse: offset 0). The log stays
+    // scrollable during the pause so a long --more-- text can be read, but
+    // with overflow-anchor off any offset left behind — a deliberate
+    // scroll-up or the hasty swipe-tap that dismissed it — would otherwise
+    // hold as a hidden newest row for the rest of the session. Gated on a
+    // real dismissal: input_mode COMMAND calls this every turn, and a
+    // scrollback the player is reading in normal play must survive that.
+    if (wasActive) msgLog.scrollTop = 0
   }
 
   // One renderer for both presentations: the inline log row + .more-active
