@@ -35,6 +35,7 @@ Obligatory virtual keyboard also available.
 ## Gestures
 
 - Tap floating monster list to inspect monsters
+- Swipe floating monster list to the other side, or drag it to peek behind
 - Tap place name in HUD (e.g. @D:1) to toggle minimap
 - Long press on map cell to see what's there
 - Tap or drag on map while targeting or examining (`x`) to move the cursor

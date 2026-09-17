@@ -9,6 +9,12 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-17
+
+- Monster list: if it's blocking something on the map, swipe it to
+  the other side, or drag it to peek behind and let it snap back.
+- The monster list now grows wider when the chat chip is hidden.
+
 ## 2026-09-16
 
 - Holding a direction on the d-pad now sends a shift-move instead of
