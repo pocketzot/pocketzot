@@ -15,7 +15,7 @@ Notable changes to PocketZot, newest first.
   direction, instead of sending repeated single moves. Holding during
   cursor movement (targeting, X-mode, menus) sends repeated single
   steps as before.
-- Tapping outside of a popup prompt now closes it.
+- Tapping outside of a pop-up prompt now closes it.
 
 ## 2026-09-15
 
