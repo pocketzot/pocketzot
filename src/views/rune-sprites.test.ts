@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeStorage } from '../test/fake-storage'
-import { renderOrbTrophy, renderRuneRow } from './rune-sprites'
+import { renderOrbTrophy, renderRuneRow, resolveRuneSource, sourceSprite } from './rune-sprites'
 import { cachedGamedataBuild } from '../offline/artifact-store'
 import { resolvePlayerLoader } from '../game/tiles/atlas-dedup'
 import { bakeDoll } from '../game/tiles/avatar-bake'
@@ -11,7 +11,7 @@ import { renderTiles } from '../game/tiles/tile-view'
 // under it (caches, atlases, canvas) is mocked at its seam.
 vi.mock('../offline/artifact-store', () => ({ cachedGamedataBuild: vi.fn(async () => null) }))
 vi.mock('../game/tiles/atlas-dedup', () => ({ resolvePlayerLoader: vi.fn(async () => null) }))
-const fakeLoader = { getModule: async () => ({ RUNE_TOMB: 10, MISC_RUNE_OF_ZOT: 1, ORB: 20 }) }
+const fakeLoader = { getModule: vi.fn(async () => ({ RUNE_TOMB: 10, MISC_RUNE_OF_ZOT: 1, ORB: 20 })) }
 vi.mock('../game/tiles/tile-loader', () => ({
   TEX: { MAIN: 4 },
   getTileLoader: vi.fn(() => fakeLoader),
@@ -74,6 +74,37 @@ describe('renderRuneRow / renderOrbTrophy', () => {
     await vi.waitFor(() => expect(again.querySelectorAll('img.doll-bake')).toHaveLength(1))
     expect(bakeDoll).toHaveBeenCalledTimes(2)
     expect(resolvePlayerLoader).not.toHaveBeenCalled()
+  })
+
+  it('places a stored bake without loading a tileinfo module', async () => {
+    vi.mocked(cachedGamedataBuild).mockResolvedValue('build1')
+    const first = renderRuneRow(['golden'])
+    await vi.waitFor(() => expect(first.querySelectorAll('img.doll-bake')).toHaveLength(1))
+    expect(fakeLoader.getModule).toHaveBeenCalledTimes(1) // the bake's index lookup
+    const again = renderRuneRow(['golden'])
+    await vi.waitFor(() => expect(again.querySelectorAll('img.doll-bake')).toHaveLength(1))
+    expect(fakeLoader.getModule).toHaveBeenCalledTimes(1)
+  })
+
+  it('addresses bakes by name and pack build, never by tile index', async () => {
+    vi.mocked(cachedGamedataBuild).mockResolvedValue('build1')
+    const src = (await resolveRuneSource(null))!
+    const ref = vi.fn(async () => ({ t: 7, tex: 5 }))
+    await sourceSprite(src, 'gui:A', ref, 1)
+    // Same name, shifted index (a pack reshuffle the fp didn't catch can't
+    // matter): still the stored bake, resolver untouched.
+    const moved = vi.fn(async () => ({ t: 99, tex: 5 }))
+    expect((await sourceSprite(src, 'gui:A', moved, 1))?.className).toBe('doll-bake')
+    expect(moved).not.toHaveBeenCalled()
+    // Another name, or another build, misses.
+    await sourceSprite(src, 'gui:B', ref, 1)
+    expect(ref).toHaveBeenCalledTimes(2)
+    vi.mocked(cachedGamedataBuild).mockResolvedValue('build2')
+    await sourceSprite((await resolveRuneSource(null))!, 'gui:A', ref, 1)
+    expect(ref).toHaveBeenCalledTimes(3)
+    // A name the pack can't resolve yields nothing and stores nothing.
+    expect(await sourceSprite(src, 'gui:NOPE', async () => null, 1)).toBeNull()
+    expect(bakeDoll).toHaveBeenCalledTimes(3)
   })
 
   it('renders live tile-stacks off the recipe atlas when no pack is on device', async () => {

@@ -27,6 +27,8 @@ import { listAllAvatars } from '../avatars'
 import { compactPlace, nameTitle } from '../game/char-label'
 import { escHtml } from '../game/dcss-colors'
 import { paintAvatars, type DollRecipe } from './avatar-tiles'
+import { resolveRuneSource, sourceSprite } from './rune-sprites'
+import { TEX } from '../game/tiles/tile-loader'
 import { maybeShowExitDialog } from './lobby'
 import { openRcEditor } from './rc-editor'
 import { openGameRecords } from './records-view'
@@ -79,6 +81,7 @@ export function buildOfflineLobbyView(
       </div>
       <h2 class="lobby-section-title" id="offline-records-title" hidden>Past Games</h2>
       <div id="offline-records-row" class="lobby-game-row offline-records-row" role="button" tabindex="0" hidden>
+        <div id="offline-records-icon" class="offline-slot-doll"></div>
         <div class="lobby-game-main">
           <div class="lobby-game-toprow">
             <span class="lobby-game-user">Scores and morgues</span>
@@ -322,6 +325,7 @@ export function buildOfflineLobbyView(
     recordsSubEl.textContent = `${recs.length} finished game${recs.length === 1 ? '' : 's'}`
     recordsTitleEl.hidden = empty
     recordsRow.hidden = empty
+    void paintRecordsIcon()
   }
   async function refreshRecords(): Promise<void> {
     // A failed probe keeps the row's last state — nothing new to browse.
@@ -347,6 +351,28 @@ export function buildOfflineLobbyView(
     }
   })
   void refreshRecords()
+
+  // The row's icon: crawl's own main-menu "High Scores" sprite (startup.cc
+  // GAME_TYPE_HIGH_SCORES → TILEG_STARTUP_HIGH_SCORES, rltiles/dc-gui.txt),
+  // in the slot dolls' column at their size. Local pack only — before the
+  // download (or on a pack lacking the tile) the box stays :empty and
+  // collapses like a doll-less slot row's. Called by setRecords and by
+  // runDownload (an in-lobby install paints without a remount); inert while
+  // the row is hidden or already painted. Name-addressed bake (sourceSprite):
+  // tileinfo-gui loads once per pack build, for the bake.
+  async function paintRecordsIcon(): Promise<void> {
+    const box = view.querySelector<HTMLElement>('#offline-records-icon')!
+    if (recordsRow.hidden || box.childElementCount > 0) return
+    try {
+      const src = await resolveRuneSource(null)
+      if (!src) return
+      const el = await sourceSprite(src, 'gui:STARTUP_HIGH_SCORES', async () => {
+        const t = (await src.loader.getModule('gui')).STARTUP_HIGH_SCORES
+        return typeof t === 'number' ? { t, tex: TEX.GUI } : null
+      }, SLOT_DOLL_SCALE)
+      if (el) box.replaceChildren(el)
+    } catch { /* decoration only */ }
+  }
 
   // --- Game data ------------------------------------------------------------
   // A probe, never a stored flag (artifact-store.ts): the status re-checks the
@@ -596,6 +622,7 @@ export function buildOfflineLobbyView(
     downloadBtn.disabled = false
     newBtn.disabled = false
     await refreshReadiness()
+    void paintRecordsIcon()
     return gateOpen()
   }
 

@@ -21,7 +21,7 @@ import { bakeDoll, bakedDollUrl, storeBakedDoll } from '../game/tiles/avatar-bak
 import { ORB, runeGlyph, runeLabel, runeTileRef } from '../game/tiles/rune-tiles'
 import { getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { DCSS_COLOR_MAP } from '../game/dcss-colors'
-import { renderTiles } from '../game/tiles/tile-view'
+import { renderTiles, type TileRef } from '../game/tiles/tile-view'
 import { bakedImg, type DollRecipe } from './avatar-tiles'
 
 export interface RuneSource { loader: TileLoader; bakeFp: string | null }
@@ -63,22 +63,36 @@ export function runeCell(word: string, scale: number): HTMLElement {
 // a failure leaves the glyph.
 export async function fillRuneCell(cell: HTMLElement, src: RuneSource, scale: number): Promise<void> {
   try {
-    const ref = await runeTileRef(src.loader, cell.dataset.rune!)
-    if (!ref) return
-    let el: HTMLElement
-    if (src.bakeFp) {
-      let url = bakedDollUrl(src.bakeFp, [ref])
-      if (url == null) {
-        url = await bakeDoll(src.loader, [ref])
-        if (url == null) return
-        storeBakedDoll(src.bakeFp, [ref], url)
-      }
-      el = bakedImg(url, scale)
-    } else {
-      el = renderTiles(src.loader, [ref], scale)
-    }
-    cell.replaceChildren(el)
+    const word = cell.dataset.rune!
+    const el = await sourceSprite(src, `rune:${word}`, () => runeTileRef(src.loader, word), scale)
+    if (el) cell.replaceChildren(el)
   } catch { /* glyph stays */ }
+}
+
+// One fixed sprite under a resolved source: baked-once off the local pack,
+// a live tile-stack otherwise (the header's source policy). Also draws the
+// offline lobby's scores-row icon, which is no rune but the same kind of
+// fixed decoration. The bake is addressed by `name` (empty spec), never by
+// tile index: an index costs a tileinfo module load (gui ~150 KB, main
+// larger), so `ref` runs only on a bake miss and a placed sprite touches
+// nothing but localStorage.
+export async function sourceSprite(
+  src: RuneSource, name: string, ref: () => Promise<TileRef | null>, scale: number,
+): Promise<HTMLElement | null> {
+  if (!src.bakeFp) {
+    const r = await ref()
+    return r ? renderTiles(src.loader, [r], scale) : null
+  }
+  const fp = `${src.bakeFp}:${name}`
+  let url = bakedDollUrl(fp, [])
+  if (url == null) {
+    const r = await ref()
+    if (!r) return null
+    url = await bakeDoll(src.loader, [r])
+    if (url == null) return null
+    storeBakedDoll(fp, [], url)
+  }
+  return bakedImg(url, scale)
 }
 
 // Resolve once, fill every cell.
