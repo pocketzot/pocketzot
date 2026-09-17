@@ -1017,7 +1017,20 @@ export function buildGameView(
 
   const menuControls = document.createElement('div')
   menuControls.id = 'menu-controls'
-  menuControls.style.display = 'none'
+  // The bar REPLACES the touch panel. Portrait gets that from the inline
+  // hide on #touch-controls, but landscape forces the controls back to
+  // `display: contents` (see the style.css landscape block) so the d-pad
+  // can float beside a map-confined overlay — which also keeps .tc-panel in
+  // the sidebar's panel row, where it sizes the row to its 155px and this
+  // bar (same grid area) stretches to fill it: a lone ⎋ came out 160×147.
+  // The `menu-bar` view class is what lets landscape drop the panel while
+  // the bar is up; route every show/hide through here so the two can't
+  // drift.
+  function setMenuBar(on: boolean): void {
+    menuControls.style.display = on ? '' : 'none'
+    view.classList.toggle('menu-bar', on)
+  }
+  setMenuBar(false)
 
   // Share chip for exportable fixed-width screens (screen-export.ts): the `%`
   // overview and the end screen (the allowlist in showUiPush). A sibling of
@@ -2075,7 +2088,7 @@ export function buildGameView(
           const leavingYesno = prevInputMode === MOUSE_MODE_YESNO && !enteringYesno
           if (tagHasBar || enteringYesno || leavingYesno) {
             buildMenuControls(tag, activeMenu.flags)
-            if (!tagHasBar) menuControls.style.display = enteringYesno ? '' : 'none'
+            if (!tagHasBar) setMenuBar(enteringYesno)
           }
         }
         break
@@ -2366,7 +2379,7 @@ export function buildGameView(
     // takes care of cleanup if they Enter to travel and the menu closes.
     if (activeMenu?.tag === 'stash') {
       uiOverlay.style.display = 'none'
-      menuControls.style.display = 'none'
+      setMenuBar(false)
       mapView.element.style.display = ''
       touchControls.element.style.display = ''
       // The chip's overlay veto keys off uiOverlay's display — every toggle
@@ -2394,7 +2407,7 @@ export function buildGameView(
       // expects them gone), swap map back for overlay + custom controls,
       // re-hide the d-pad.
       uiOverlay.style.display = ''
-      menuControls.style.display = ''
+      setMenuBar(true)
       mapView.element.style.display = 'none'
       touchControls.element.style.display = 'none'
       chatView.syncChip()  // overlay back → chip veto re-engages
@@ -2441,7 +2454,7 @@ export function buildGameView(
       // menu-controls bar (Esc) in their place. Spectators get neither.
       if (!spectating) {
         buildMenuControls()
-        menuControls.style.display = ''
+        setMenuBar(true)
       }
       return
     }
@@ -2636,11 +2649,11 @@ export function buildGameView(
     // letter row is derived from the CRT lines and isn't rebuilt here.
     if (activeMenu && menuTagHasBar(activeMenu.tag)) {
       buildMenuControls(activeMenu.tag, activeMenu.flags)
-      menuControls.style.display = ''
+      setMenuBar(true)
       touchControls.element.style.display = 'none'
     } else if (crtActive && crtTag === 'skills') {
       buildMenuControls(crtTag)
-      menuControls.style.display = ''
+      setMenuBar(true)
       touchControls.element.style.display = 'none'
     }
   }
@@ -2717,7 +2730,7 @@ export function buildGameView(
     mountCrtEl()
     if (tag === 'skills') {
       buildMenuControls(tag)
-      menuControls.style.display = ''
+      setMenuBar(true)
     }
   }
 
@@ -2725,7 +2738,7 @@ export function buildGameView(
     mountCrtEl()
     if (crtTag === 'skills') {
       buildMenuControls(crtTag)
-      menuControls.style.display = ''
+      setMenuBar(true)
     }
     renderCrtEl()
   }
@@ -3543,7 +3556,7 @@ export function buildGameView(
       promptFamily && (promptMoreIsInfo || (msg.more ?? '') !== promptInitialMore))
     if (menuTagHasBar(msg.tag)) {
       buildMenuControls(msg.tag, msg.flags)
-      menuControls.style.display = ''
+      setMenuBar(true)
       touchControls.element.style.display = 'none'
     }
     const listEl = menuListEl()
@@ -3893,7 +3906,7 @@ export function buildGameView(
       hud.style.display = 'none'
     }
     touchControls.element.style.display = opts?.touch === false ? 'none' : ''
-    menuControls.style.display = 'none'
+    setMenuBar(false)
     menuControls.innerHTML = ''
   }
 
@@ -4080,7 +4093,7 @@ export function buildGameView(
     overlayContent = uiOverlay
     chatView.syncChip()  // chip retracts while an overlay is up; map's back
     mapView.element.style.display = ''
-    menuControls.style.display = 'none'
+    setMenuBar(false)
     menuControls.innerHTML = ''
     if (!inXMode) {
       msgLog.style.display = ''

@@ -4685,6 +4685,11 @@ html.map-hold, html.map-hold * {
   #game-messages { display: flex  !important; }
   #game-hud      { display: flex  !important; }
   #touch-controls { display: contents !important; }
+  /* ...except the macro panel while the menu bar is up: the bar takes the
+     same `panel` area (game-view's setMenuBar), and a panel left in flow
+     there sizes the minmax(max-content) row to its own height, so the bar
+     stretched to 155px and a lone ⎋ filled it. The d-pad float stays. */
+  #game-view.menu-bar .tc-panel { display: none; }
 
   /* Spell rail: in-flow sidebar row directly above the touch panel. Base
      styling applies — including the fixed one-row height, so the rail
