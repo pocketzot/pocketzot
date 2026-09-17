@@ -11,7 +11,7 @@
 
 import type { GameExit } from '../ws/types'
 import {
-  loadOfflineSlots, slotStem,
+  getOfflineChars, loadOfflineSlots, slotStem,
   validateOfflineName, OFFLINE_NAME_MAX, type OfflineChar,
 } from '../offline/offline-state'
 import {
@@ -36,10 +36,11 @@ import { liveDollRecipe, materializeDollSidecars, readGameRecords } from '../off
 import type { XlogRecord } from '../offline/xlog'
 import { attachScrollCue } from '../util/scroll-cue'
 
-// Slot-row doll size: 48px (32px cell × 1.5) — a notch under the character
-// cards' 56px, so the thumbnail still reads at a glance without out-growing
-// the two-line row it sits beside. Mirrored by .offline-slot-doll in the CSS.
-const SLOT_DOLL_SCALE = 1.5
+// Slot-row doll size: 64px (32px cell × 2) — the character is the row's
+// subject, and a 32px multiple keeps the pixel grid even on 2x and 3x
+// screens (paintMenuIcons has the reasoning). Mirrored by .offline-slot-doll
+// in the CSS.
+const SLOT_DOLL_SCALE = 2
 
 // Failure notices show the message alone, not "Error: message".
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
@@ -62,8 +63,8 @@ export function buildOfflineLobbyView(
     </div>
     <div class="lobby-scroll">
       <div id="lobby-notice" class="lobby-notice" hidden></div>
-      <div class="lobby-actions">
-        <button type="button" id="offline-new" class="lobby-btn-primary"><span id="offline-new-icon" class="offline-menu-icon"></span>New game</button>
+      <div class="lobby-actions" id="offline-actions" hidden>
+        <button type="button" id="offline-new" class="lobby-btn-primary"><span class="offline-menu-icon" data-menu-icon="STARTUP_STONESOUP"></span>New game</button>
         <form id="offline-name-form" class="offline-name-form" hidden>
           <label class="login-label">
             Character name
@@ -71,26 +72,34 @@ export function buildOfflineLobbyView(
                    autocomplete="off" spellcheck="false" autocorrect="off" required />
           </label>
           <div id="offline-name-error" class="login-error" style="display:none" role="alert"></div>
-          <button type="submit" class="lobby-btn-primary">Start game</button>
+          <div class="offline-name-actions">
+            <button type="submit" class="lobby-btn-primary">Start game</button>
+            <button type="button" id="offline-name-cancel" class="lobby-btn-ghost">Cancel</button>
+          </div>
         </form>
       </div>
       <div id="offline-gate-note" class="offline-gate-note" hidden></div>
-      <h2 class="lobby-section-title">Saved Games</h2>
+      <h2 class="lobby-section-title" id="offline-saves-title">Saved Games</h2>
       <div id="offline-saves" class="lobby-list">
         <div class="lobby-loading">Loading…</div>
       </div>
-      <h2 class="lobby-section-title" id="offline-records-title" hidden>Past Games</h2>
-      <div id="offline-records-row" class="lobby-game-row offline-records-row" role="button" tabindex="0" hidden>
-        <div id="offline-records-icon" class="offline-menu-icon"></div>
-        <div class="lobby-game-main">
-          <div class="lobby-game-toprow">
-            <span class="lobby-game-user">Scores and morgues</span>
-          </div>
-          <span class="lobby-game-info" id="offline-records-sub"></span>
+      <div class="offline-device" id="offline-menu-card" hidden>
+        <div id="offline-new-row" class="offline-device-row offline-nav-row" role="button" tabindex="0" hidden>
+          <span class="offline-device-glyph offline-menu-icon" data-menu-icon="STARTUP_STONESOUP" aria-hidden="true">+</span>
+          <span class="offline-device-lines">
+            <span class="offline-device-label">New game</span>
+          </span>
+        </div>
+        <div id="offline-records-row" class="offline-device-row offline-nav-row" role="button" tabindex="0" hidden>
+          <span class="offline-device-glyph offline-menu-icon" data-menu-icon="STARTUP_HIGH_SCORES" aria-hidden="true">†</span>
+          <span class="offline-device-lines">
+            <span class="offline-device-label">Scores and morgues</span>
+            <span class="offline-device-sub" id="offline-records-sub"></span>
+          </span>
         </div>
       </div>
-      <h2 class="lobby-section-title" id="offline-data-title" hidden>Game Data</h2>
-      <div class="offline-device" id="offline-data-card" hidden>
+      <h2 class="lobby-section-title">On This Device</h2>
+      <div class="offline-device">
         <div id="offline-readiness" class="offline-device-row">
           <span id="offline-ready-glyph" class="offline-device-glyph is-dot">●</span>
           <span class="offline-device-lines">
@@ -99,9 +108,6 @@ export function buildOfflineLobbyView(
           </span>
           <button type="button" id="offline-download" class="offline-device-btn is-accent" hidden></button>
         </div>
-      </div>
-      <h2 class="lobby-section-title">Your Data</h2>
-      <div class="offline-device">
         <div class="offline-device-row">
           <span class="offline-device-glyph">✎</span>
           <span class="offline-device-lines">
@@ -131,6 +137,11 @@ export function buildOfflineLobbyView(
   const savesEl = view.querySelector<HTMLElement>('#offline-saves')!
   const noticeEl = view.querySelector<HTMLElement>('#lobby-notice')!
   const newBtn = view.querySelector<HTMLButtonElement>('#offline-new')!
+  const newRow = view.querySelector<HTMLElement>('#offline-new-row')!
+  const actionsEl = view.querySelector<HTMLElement>('#offline-actions')!
+  const menuCardEl = view.querySelector<HTMLElement>('#offline-menu-card')!
+  const savesTitleEl = view.querySelector<HTMLElement>('#offline-saves-title')!
+  const gateNoteEl = view.querySelector<HTMLElement>('#offline-gate-note')!
   const nameForm = view.querySelector<HTMLFormElement>('#offline-name-form')!
   const nameInput = view.querySelector<HTMLInputElement>('#offline-name')!
   const nameError = view.querySelector<HTMLElement>('#offline-name-error')!
@@ -188,13 +199,101 @@ export function buildOfflineLobbyView(
 
   // --- New character -------------------------------------------------------
 
+  // "New game" is one action with two homes, never both: the primary bar
+  // above the (empty) list while there are no saved games — it is the only
+  // thing to do — and a quiet row in the menu card under the list once there
+  // are, where the characters lead the page and accent colour is theirs
+  // alone. The mount seeds the home from the slot records and every slot
+  // read corrects it (renderSaves). The name form opens in place of
+  // whichever control was tapped.
+  let nameFormOpen = false
+  let hasSavedGames = false
+  function placeNewGame(hasSaves: boolean): void {
+    hasSavedGames = hasSaves
+    const formHome = hasSaves ? menuCardEl : actionsEl
+    // Only on a real change of home: re-inserting drops the input's focus
+    // (and the soft keyboard). When the home does change under an open form
+    // — a backup import landing saves onto an empty device mid-typing — the
+    // move is unavoidable, so put the focus back and keep the form on screen.
+    let refocus = false
+    if (nameForm.parentElement !== formHome) {
+      refocus = document.activeElement === nameInput
+      if (hasSaves) newRow.after(nameForm)
+      else actionsEl.append(nameForm)
+    }
+    // The gate note prices the next launch tap, so it hangs off the launch
+    // controls: under the bar, or — with the bar gone — under the SAVED
+    // GAMES heading as the list's caption. Never alone above the heading,
+    // where it prices nothing in particular.
+    const noteAnchor = hasSaves ? savesTitleEl : actionsEl
+    if (gateNoteEl.previousElementSibling !== noteAnchor) noteAnchor.after(gateNoteEl)
+    newBtn.hidden = hasSaves || nameFormOpen
+    newRow.hidden = !hasSaves || nameFormOpen
+    actionsEl.hidden = hasSaves
+    syncMenuCard()
+    // Last: the new home has to be unhidden before it can take focus.
+    if (refocus) {
+      nameInput.focus()
+      nameForm.scrollIntoView({ block: 'nearest' })
+    }
+  }
+
+  // The menu card exists while it has a row to show.
+  function syncMenuCard(): void {
+    menuCardEl.hidden = newRow.hidden && recordsRow.hidden && (nameForm.hidden || nameForm.parentElement !== menuCardEl)
+  }
+
+  // Every New-game control at once, the open form's buttons included: during
+  // a download they are all inert (gatedLaunch / closeNameForm return early),
+  // and the progress that explains why is in the game-data row at the bottom
+  // of the page — so they have to look inert where the player is looking.
+  function setNewGameDisabled(disabled: boolean): void {
+    newBtn.disabled = disabled
+    newRow.classList.toggle('is-disabled', disabled)
+    newRow.setAttribute('aria-disabled', String(disabled))
+    for (const b of nameForm.querySelectorAll('button')) b.disabled = disabled
+  }
+
   function showNameForm(): void {
+    nameFormOpen = true
     newBtn.hidden = true
+    newRow.hidden = true
     nameForm.hidden = false
     nameInput.focus()
   }
 
-  newBtn.addEventListener('click', () => gatedRun(showNameForm))
+  // Cancel / Escape: back to the control the form replaced. The typed name
+  // and any error go — a reopened form starts clean. Not while a launch is
+  // under way: a submit that is downloading (gatedLaunch → runDownload)
+  // continues into the game, and the form must not look abandoned.
+  function closeNameForm(): void {
+    if (launched || downloading) return
+    nameFormOpen = false
+    nameForm.hidden = true
+    nameForm.reset()
+    nameError.style.display = 'none'
+    placeNewGame(hasSavedGames)
+    ;(hasSavedGames ? newRow : newBtn).focus()
+  }
+  view.querySelector('#offline-name-cancel')!.addEventListener('click', closeNameForm)
+  nameForm.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return
+    e.preventDefault()
+    closeNameForm()
+  })
+
+  const onNewGame = (): void => {
+    if (downloading) return
+    gatedRun(showNameForm)
+  }
+  newBtn.addEventListener('click', onNewGame)
+  newRow.addEventListener('click', onNewGame)
+  newRow.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onNewGame()
+    }
+  })
 
   nameForm.addEventListener('submit', async (e) => {
     e.preventDefault()
@@ -202,6 +301,10 @@ export function buildOfflineLobbyView(
     // knownStems is empty until then, and a fast submit of an existing name
     // would silently resume that character instead of erroring.
     await savesReady
+    // Cancelled while this waited: stop here. (It could not launch anyway —
+    // closeNameForm reset the input, so validation below would fail — but it
+    // would paint that failure into the closed form, to greet the next open.)
+    if (!nameFormOpen) return
     const name = nameInput.value.trim()
     const problem = validateOfflineName(name)
       ?? (knownStems.has(slotStem(name)) ? 'A saved game already has that name.' : null)
@@ -224,6 +327,7 @@ export function buildOfflineLobbyView(
   }
 
   function renderSaves(stems: string[], chars: Record<string, OfflineChar>): void {
+    placeNewGame(stems.length > 0)
     if (stems.length === 0) {
       savesEl.innerHTML = '<div class="lobby-empty">No saved games yet.</div>'
       return
@@ -309,7 +413,7 @@ export function buildOfflineLobbyView(
   }
 
   // --- Past games ------------------------------------------------------------
-  // The section (title + entry row) appears once the logfile has at least one
+  // The menu card's entry row appears once the logfile has at least one
   // entry (game-records.ts). The row re-reads the logfile whenever an
   // in-lobby action may have changed it — a backup import, a delete in the
   // records browser — so its count is always the file's, never a client-side
@@ -317,14 +421,12 @@ export function buildOfflineLobbyView(
 
   const recordsRow = view.querySelector<HTMLElement>('#offline-records-row')!
   const recordsSubEl = view.querySelector<HTMLElement>('#offline-records-sub')!
-  const recordsTitleEl = view.querySelector<HTMLElement>('#offline-records-title')!
   let records: readonly XlogRecord[] = []
   const setRecords = (recs: readonly XlogRecord[]): void => {
     records = recs
-    const empty = recs.length === 0
     recordsSubEl.textContent = `${recs.length} finished game${recs.length === 1 ? '' : 's'}`
-    recordsTitleEl.hidden = empty
-    recordsRow.hidden = empty
+    recordsRow.hidden = recs.length === 0
+    syncMenuCard()
   }
   async function refreshRecords(): Promise<void> {
     // A failed probe keeps the row's last state — nothing new to browse.
@@ -354,39 +456,49 @@ export function buildOfflineLobbyView(
   // The entries' icons are the reference main menu's own (startup.cc entries
   // table: GAME_TYPE_NORMAL → TILEG_STARTUP_STONESOUP, GAME_TYPE_HIGH_SCORES
   // → TILEG_STARTUP_HIGH_SCORES; rltiles/dc-gui.txt): the soup pot on "New
-  // game", the hoard on the scores row. They sit in the settings rows' glyph
-  // column, never in the dolls' column or at their 48px: a shared edge says
-  // "same kind of thing", and there the hoard read as another character.
+  // game" (both its homes — placeNewGame), the hoard on the scores row; each
+  // box names its tile in data-menu-icon. They sit in the settings rows'
+  // glyph column, never in the dolls' column or at doll size: a shared edge
+  // says "same kind of thing", and there the hoard read as another character.
   // Menu entries share one label edge down the page; the indented picture
   // column stays the characters' alone (geometry: .offline-menu-icon in
-  // style.css). Sizes follow each sprite's opaque box, since the glyph column
-  // is narrower than a tile: the pot fills its cell (x 1–31) and touches the
-  // label at 32px, so 24px (the rune row's scale); the hoard's pixels span
-  // x 4–27, leaving ~7px clear at native 32px.
-  // Local pack only — before the download (or on a pack lacking a tile) each
-  // box stays :empty and collapses like a doll-less slot row's. Painted at
-  // mount and again by runDownload (an in-lobby install paints without a
-  // remount) — both icons every time, the scores row's even while the row is
-  // hidden: bakes are name-addressed (sourceSprite), so a paint is a
+  // style.css). Native 32px: the page's main sprites are 32px multiples
+  // (dolls 64px; the rune marks under them are rune-marks.ts's own 16px) so
+  // every source pixel covers a whole number of device pixels at DPR 3 as
+  // well as 2 — 24px and 48px are 2.25x and 4.5x on a 3x phone, and
+  // `image-rendering: pixelated` then draws pixels of uneven widths.
+  // Local pack only. The packless page must read as finished, not as missing
+  // art — it is the first impression, and also what cache eviction or a
+  // backup imported onto a new device shows beside existing saved games: the
+  // menu card's boxes start with a text glyph in the settings rows' idiom
+  // (the rune cells' placeholder-then-swap pattern), the bar's empty box
+  // collapses. Painted at mount and again by runDownload (an in-lobby
+  // install paints without a remount) — every icon every time, hidden rows
+  // included: bakes are name-addressed (sourceSprite), so a paint is a
   // localStorage read and the cold bake happens once per pack build. Don't
   // add a visibility gate; it needs a repaint hook per unhide and an
   // in-flight guard between them, for nothing.
-  const menuIcons: [box: HTMLElement, tile: string, scale: number][] = [
-    [view.querySelector<HTMLElement>('#offline-new-icon')!, 'STARTUP_STONESOUP', 0.75],
-    [view.querySelector<HTMLElement>('#offline-records-icon')!, 'STARTUP_HIGH_SCORES', 1],
-  ]
   async function paintMenuIcons(): Promise<void> {
     try {
       const src = await resolveRuneSource(null)
       if (!src) return
-      await Promise.allSettled(menuIcons.map(async ([box, tile, scale]) => {
-        if (box.childElementCount > 0) return
+      // In turn, not in parallel: the pot's second box then hits the bake
+      // its first one stored instead of baking it again.
+      for (const box of view.querySelectorAll<HTMLElement>('[data-menu-icon]')) {
+        if (!view.isConnected) return
+        if (box.childElementCount > 0) continue
+        const tile = box.dataset.menuIcon!
         const el = await sourceSprite(src, `gui:${tile}`, async () => {
           const t = (await src.loader.getModule('gui'))[tile]
           return typeof t === 'number' ? { t, tex: TEX.GUI } : null
-        }, scale)
-        if (el) box.replaceChildren(el)
-      }))
+        }, 1).catch(() => null)
+        if (!el) continue
+        // sourceSprite's self-heal removes a bake that fails to decode;
+        // put the glyph back rather than leave the column blank.
+        const glyph = box.textContent
+        el.addEventListener('error', () => { box.textContent = glyph })
+        box.replaceChildren(el)
+      }
     } catch { /* decoration only */ }
   }
   void paintMenuIcons()
@@ -409,22 +521,22 @@ export function buildOfflineLobbyView(
   //   3. when do I update? → the Update button exists only when there is an
   //                         update, and nothing mentions updating otherwise.
   //
-  // It sits under its own GAME DATA heading at the bottom, beside YOUR DATA,
-  // because that is where someone goes looking for a payload and its size —
-  // and because on every launch after the first it has nothing to say, which
-  // is a poor use of the space above the play controls. What DOES belong up
-  // there is the one thing the position used to carry: while the set is
-  // incomplete, the note under the play controls prices the tap that will
-  // complete it (gateNote), so consent stays adjacent to the control that
-  // spends it and "New game" still reads "New game".
+  // It is the first row of the ON THIS DEVICE card at the bottom, above the
+  // options file and backup, because that is where someone goes looking for
+  // a payload and its size — and because on every launch after the first it
+  // has nothing to say, which is a poor use of the space beside the play
+  // controls. (It had its own GAME DATA heading beside YOUR DATA once: two
+  // near-synonym headings over three rows.) What DOES belong up there is the
+  // one thing the position used to carry: while the set is incomplete, the
+  // gate note prices the tap that will complete it (renderGateNote; where it
+  // hangs: placeNewGame), so consent stays adjacent to the controls that
+  // spend it and "New game" still reads "New game".
 
-  const dataTitleEl = view.querySelector<HTMLElement>('#offline-data-title')!
-  const dataCardEl = view.querySelector<HTMLElement>('#offline-data-card')!
+  const readinessRowEl = view.querySelector<HTMLElement>('#offline-readiness')!
   const readyGlyphEl = view.querySelector<HTMLElement>('#offline-ready-glyph')!
   const readyStatusEl = view.querySelector<HTMLElement>('#offline-ready-status')!
   const readySubEl = view.querySelector<HTMLElement>('#offline-ready-sub')!
   const downloadBtn = view.querySelector<HTMLButtonElement>('#offline-download')!
-  const gateNoteEl = view.querySelector<HTMLElement>('#offline-gate-note')!
 
   // Bumped by every state write, so a measurement that lands after the state
   // moved on (a download finished, the probe re-ran) can't paint a size onto
@@ -441,8 +553,7 @@ export function buildOfflineLobbyView(
     button?: string,
   ): void {
     sizeToken++
-    dataTitleEl.hidden = false
-    dataCardEl.hidden = false
+    readinessRowEl.hidden = false
     readyGlyphEl.className = `offline-device-glyph is-dot is-${tone}`
     readyGlyphEl.textContent = tone === 'ok' ? '●' : '○'
     readyStatusEl.textContent = label
@@ -478,7 +589,7 @@ export function buildOfflineLobbyView(
             ? (r.deploy !== 'ok' ? 'Needs a connection once to finish installing'
               // Finishing would carry a game-version update with it, so these
               // taps deliberately do nothing (runDownload) and the decision
-              // goes to the game-data card's button below. Named by reading
+              // goes to the game-data row's button below. Named by reading
               // its current label (setReadiness has already painted it — the
               // one caller runs this after) so the note can't point at a word
               // the button isn't showing. Say so before the tap, not after it
@@ -564,12 +675,11 @@ export function buildOfflineLobbyView(
       // has to convey without a lecture about secure contexts.
       setReadiness('warn', packName(r), "Can't install in this browser — connection required")
     } else {
-      // undeployed: this checkout/deploy ships no engine. The whole GAME DATA
-      // section goes, heading included — there is no payload to have an
-      // opinion about. YOUR DATA stays: saves outlive an artifact-less deploy.
+      // undeployed: this checkout/deploy ships no engine. The game-data row
+      // goes — there is no payload to have an opinion about. The card's other
+      // rows stay: saves outlive an artifact-less deploy.
       sizeToken++
-      dataTitleEl.hidden = true
-      dataCardEl.hidden = true
+      readinessRowEl.hidden = true
     }
     renderGateNote(r)
   }
@@ -613,14 +723,14 @@ export function buildOfflineLobbyView(
     // The deploy serves only its current build, so finishing a partial set
     // installs any pending update along with it. A tap on a play control
     // ("New game", a save row) is not consent to migrate saved games across a
-    // game version, so hand that decision back to the game-data card's
-    // download button. Silently, because the note under the play controls
+    // game version, so hand that decision back to the game-data row's
+    // download button. Silently, because the gate note beside the play controls
     // already says that in advance (renderGateNote) — the tap doing nothing
     // is the note's claim coming true, not an unexplained dead end.
     if (from === 'gate' && readiness !== null && migratesSaves(readiness)) return false
     downloading = true
     downloadBtn.disabled = true
-    newBtn.disabled = true
+    setNewGameDisabled(true)
     showNotice('')
     // The note prices a tap that is now happening; the row below carries the
     // live progress from here.
@@ -637,7 +747,7 @@ export function buildOfflineLobbyView(
     }
     downloading = false
     downloadBtn.disabled = false
-    newBtn.disabled = false
+    setNewGameDisabled(false)
     await refreshReadiness()
     // Success or not: the download rolls the stores to the deployed build
     // before it fetches, so the memoized local loader is stale either way.
@@ -714,6 +824,14 @@ export function buildOfflineLobbyView(
     input.click()
   })
 
+  // Seed "New game"'s home from the slot records — a localStorage read that
+  // always answers — before the IDBFS probe corrects it. Never leave the
+  // home to the probe alone: both controls start hidden, the probe's IDB
+  // requests can stall without settling (WebKit, on page restore), and a
+  // lobby with no way to start a game is worse than one whose bar turns
+  // into a row a moment late. It also settles the gate note's anchor and the
+  // menu card's shape before the readiness and records reads can land.
+  placeNewGame(Object.keys(getOfflineChars()).length > 0)
   const savesReady = refreshSaves()
 
   if (exit) maybeShowExitDialog(view, exit)

@@ -1249,6 +1249,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   padding: 0.75rem;
 }
 
+.offline-name-actions { display: flex; align-items: center; gap: 0.5rem; }
+
 /* Slot-row doll (offline-lobby.ts mountSlotDoll): the character's tile-stack —
    or its baked thumbnail — at the row's left edge. Fixed box so the name and
    metadata columns line up down the list; flex-end floors the sprite in it,
@@ -1256,30 +1258,31 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
    slot with no recipe — or one whose atlas never resolves — costs no width. */
 .offline-slot-doll {
   flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
 }
 .offline-slot-doll:empty { display: none; }
 
-/* Menu-entry icons (offline-lobby.ts paintMenuIcons — why this column, and
-   the per-sprite sizes, live there): a sprite on "New game" and the scores
-   row. Both entries take the settings rows' left geometry (.offline-device:
-   1px card border, then .offline-device-row's 0.75rem padding, 1.1rem glyph
-   column, 0.6rem gap). The sprite is wider than the glyph column: it centres
-   on it and overflows. */
-.offline-menu-icon { flex: none; display: flex; justify-content: center; width: 1.1rem; }
+/* Menu-entry icons (offline-lobby.ts paintMenuIcons — why this column and
+   this size live there): a 32px sprite in the glyph column of the menu
+   card's rows, and in the primary "New game" bar, which takes the same left
+   geometry (.offline-device: 1px card border, then .offline-device-row's
+   0.75rem padding, glyph column, 0.6rem gap) so its label starts on the menu
+   labels' edge. --glyph-col is the one width both read (the rows through
+   .offline-device-glyph): room for a 32px sprite, and one label edge for
+   every row on the page that has a glyph column. */
+.offline-lobby { --glyph-col: 2rem; }
+.offline-menu-icon { flex: none; display: flex; justify-content: center; width: var(--glyph-col); }
 .offline-menu-icon > * { flex: none; }
-.offline-menu-icon:empty { display: none; }
-/* Source-order override of .lobby-game-row's 0.75rem gap (equal specificity;
-   this rule must stay below it). */
-.offline-records-row { gap: 0.6rem; }
-/* The button has no border, so the card border's 1px joins its padding. The
+/* Packless, the bar's empty box collapses; a card row's holds a text glyph
+   (paintMenuIcons), so it is never empty. */
+.offline-menu-icon:not(.offline-device-glyph):empty { display: none; }
+/* The bar has no border, so the card border's 1px joins its padding. The
    negative block margin lets the sprite overhang the label's line box so the
-   button keeps its sprite-less height — any value past the ~3px overhang
-   does; -8px leaves slack for a taller sprite. */
+   bar keeps its sprite-less height — any value past the 7px overhang does. */
 #offline-new {
   display: flex;
   align-items: center;
@@ -1287,6 +1290,28 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   padding-left: calc(0.75rem + 1px);
 }
 #offline-new .offline-menu-icon { margin-block: -8px; }
+/* Inert during a download (setNewGameDisabled) — and looking it: the
+   progress that explains why is at the bottom of the page. Scoped to this
+   lobby's controls; .lobby-btn-primary has no disabled look of its own. */
+#offline-new:disabled,
+.offline-name-form button:disabled { opacity: 0.5; cursor: default; }
+
+/* Menu card rows that navigate (New game, Scores and morgues): the settings
+   row shape with the whole row as the control. Centre, not the settings
+   rows' baseline — a sprite has no baseline to hang the label's off. The
+   labels stay neutral: accent colour on this page is the characters'.
+   The doubled class is load-bearing: .offline-device-row's align-items is
+   declared further down the file, and would win at equal specificity. */
+.offline-device-row.offline-nav-row { align-items: center; cursor: pointer; }
+.offline-nav-row .offline-device-label { font-size: 0.95rem; }
+.offline-nav-row::after { content: "→"; color: var(--text-dim); font-size: 0.95rem; }
+.offline-nav-row:active { background: var(--surface2); }
+.offline-nav-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.offline-nav-row.is-disabled { opacity: 0.5; cursor: default; }
+/* The name form, opened in place of the New game row: the card is its
+   surface there, so it drops its own. */
+.offline-device > .offline-name-form { background: none; border: none; border-radius: 0; }
+.offline-device > .offline-name-form + .offline-device-row { border-top: 1px solid var(--border); }
 
 /* Slot-row meta line: stays one line beside the doll instead of wrapping the
    row taller. Only the char^god fact may shrink/ellipsize — rationale at
@@ -1339,28 +1364,25 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .offline-slot-confirm-del:active,
 .offline-slot-confirm-cancel:active { background: var(--surface2); }
 
-/* Price of the tap, under the play controls: shown only while the on-device
-   set is incomplete, so the size a launch would spend sits with the control
-   that spends it (the game-data row that used to carry it now lives at the
-   bottom under its own heading). Indented to the button's text, dim, and
-   gone entirely when there's nothing to pay. */
+/* The gate note (offline-lobby.ts renderGateNote; where it hangs and why:
+   placeNewGame). Dim, and gone entirely when there's nothing to pay. */
 .offline-gate-note {
   font-size: 0.75rem;
   line-height: 1.4;
   color: var(--text-dim);
-  /* Indented to the play button's own text inset (#offline-new's
-     padding-left — the note only shows while the button has no icon) so the
-     price hangs off the control rather than off the page margin. */
+  /* The cards' content inset (border + row padding), so the price hangs off
+     the controls rather than off the page margin. */
   padding-left: calc(0.75rem + 1px);
   margin-top: -0.15rem;
 }
 
-/* Device cards (offline lobby): settings-style rows — status glyph, two-line
-   label, right-aligned compact actions — in one surface card each, under
-   GAME DATA (what the app installed: the engine + tiles pack, its state and
-   size) and YOUR DATA (what you made: options file, backup). Two headings
-   rather than one "Storage" card, so a row's group says whose data it is and
-   therefore what removing it would cost. */
+/* Device cards (offline lobby): settings-style rows — glyph column, two-line
+   label, right-aligned compact actions or a whole-row tap (.offline-nav-row)
+   — in surface cards: the headerless menu card under the saved games (New
+   game, Scores and morgues) and ON THIS DEVICE (the installed engine + tiles
+   pack, then what you made: options file, backup). One heading: GAME DATA /
+   YOUR DATA were two near-synonym headings over three rows, and each row's
+   own label already says whose data it is. */
 .offline-device {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1379,8 +1401,10 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .offline-device-row + .offline-device-row {
   border-top: 1px solid var(--border);
 }
+/* A [hidden] first row still matches the sibling combinator above. */
+.offline-device-row[hidden] + .offline-device-row { border-top: none; }
 .offline-device-glyph {
-  width: 1.1rem;
+  width: var(--glyph-col); /* .offline-menu-icon block */
   text-align: center;
   flex-shrink: 0;
   color: var(--text-dim);
@@ -5830,6 +5854,18 @@ html.map-hold, html.map-hold * {
   flex: 0 0 auto;
   min-width: 36px;
   min-height: 36px;
+  /* …but they must not set the header's row height: the pinned bar sizes to
+     its tallest child, and every other shell's row is the ← Back button
+     (.lobby-btn-ghost, min-height 32px — 34.8 in Chromium's metrics), so a
+     36px child made the morgue's bar 4px taller and
+     dropped ← Back 2px as it stacked over the records list (measured in
+     WebKit at 402px: records 60px/back y=16, morgue 64px/y=18). The negative
+     block margin is (32 - 36) / 2: the tap box and its :active fill stay
+     36px, overflowing into the bar's own padding, while the row it
+     contributes to is 32px. Don't fix this by capping the header height
+     instead — a long username wraps the lobby's account chip to 40.8px and
+     the bar is expected to grow with it. */
+  margin-block: -2px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -5862,8 +5898,10 @@ html.map-hold, html.map-hold * {
   min-width: 0;
   /* Match the 36px ⌧/↓ buttons this row replaces — the confirm pair is
      shorter, and without this the pinned header shrinks and the page
-     shifts up for the swap's duration. */
+     shifts up for the swap's duration. Same 36px box, same -2px correction,
+     for the same reason (see the trio's rule above). */
   min-height: 36px;
+  margin-block: -2px;
 }
 /* Normal reading size (same as the % / inventory overlays); the 80-col dump
    overflows sideways and .crypt-scroll pans both axes (overflow-y:auto forces
@@ -5877,6 +5915,3 @@ html.map-hold, html.map-hold * {
   white-space: pre;
   color: var(--text);
 }
-/* The lobby's Past Games entry row keeps the base .lobby-game-row chrome,
-   including its ::after → affordance (slot rows suppress it; this row is a
-   real navigation). */
