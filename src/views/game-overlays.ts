@@ -88,10 +88,14 @@ export interface OverlayScreenCtx {
   send(msg: ClientMsg): void
   // Swap the screen from map/HUD/log to overlay layout: clear + show the
   // overlay, hide everything else. touch:false also hides the touch controls.
-  enterLayout(opts?: { touch?: boolean }): void
+  // screen:'newgame' marks a character-creation screen: there is no game
+  // behind it yet, so landscape gives it the whole screen instead of the
+  // map column beside a sidebar of pre-creation HUD (the `newgame` view
+  // class; style.css landscape block).
+  enterLayout(opts?: { touch?: boolean; screen?: 'newgame' }): void
   // enterLayout + the standard overlay title header; buildBody appends the
   // rest into `overlay` below it.
-  renderOverlay(title: string, buildBody: () => void): void
+  renderOverlay(title: string, buildBody: () => void, opts?: { screen?: 'newgame' }): void
   // Open the virtual keyboard, flagged so overlay teardown auto-closes it.
   autoOpenKbd(): void
   // Return focus to the game view so physical-keyboard input keeps flowing.
@@ -175,7 +179,7 @@ export function showSeedSelection(ctx: OverlayScreenCtx, msg: UiPushMsg): void {
   const genId = msg.generation_id
   // Touch controls stay visible so the kbd-overlay child stays mounted (see
   // showInputDialog for the same reason).
-  ctx.enterLayout()
+  ctx.enterLayout({ screen: 'newgame' })
 
   const wrap = document.createElement('div')
   wrap.className = 'seed-selection'

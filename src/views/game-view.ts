@@ -3862,7 +3862,7 @@ export function buildGameView(
   // the parent would take an open virtual keyboard down with it (and the
   // keyboard covers the d-pad anyway when open); screens with no use for
   // the d-pad (newgame-choice, CRT) pass touch:false.
-  function enterOverlayLayout(opts?: { touch?: boolean; float?: boolean }): void {
+  function enterOverlayLayout(opts?: { touch?: boolean; float?: boolean; screen?: 'newgame' }): void {
     // Every server-driven overlay passes through here; the map-area minimap
     // lens must not linger over (or under) it, and neither may a chat pill
     // already mid-display (new pills are vetoed via pillAllowed, but that
@@ -3878,6 +3878,9 @@ export function buildGameView(
     uiOverlay.innerHTML = ''
     uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert')
     uiOverlay.classList.toggle('overlay-float', !!opts?.float)
+    // Set per render, not latched: the creation screens re-enter here for
+    // every step, and the first in-game overlay (or hideOverlay) drops it.
+    view.classList.toggle('newgame', opts?.screen === 'newgame')
     uiOverlay.style.display = ''
     touchControls.setOverlayMode(true)
     chatView.syncChip()
@@ -3926,7 +3929,7 @@ export function buildGameView(
     isSpectating: () => !!spectating,
   }
 
-  function renderOverlay(title: string, buildBody: () => void, opts?: { float?: boolean }): void {
+  function renderOverlay(title: string, buildBody: () => void, opts?: { float?: boolean; screen?: 'newgame' }): void {
     autoCloseKbdIfOurs()
     enterOverlayLayout(opts)
 
@@ -4090,6 +4093,7 @@ export function buildGameView(
     uiOverlay.style.display = 'none'
     uiOverlay.innerHTML = ''
     uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert', 'overlay-float')
+    view.classList.remove('newgame')
     overlayContent = uiOverlay
     chatView.syncChip()  // chip retracts while an overlay is up; map's back
     mapView.element.style.display = ''

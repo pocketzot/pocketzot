@@ -95,7 +95,7 @@ describe('showNewgameChoice — layout', () => {
   it('hides touch controls, renders one strip panel per wire column with mid-column sub-headers', () => {
     const { ctx, overlay, calls } = makeCtx()
     showNewgameChoice(ctx, BG_MSG)
-    expect(calls.enterLayout).toEqual([{ touch: false }])
+    expect(calls.enterLayout).toEqual([{ touch: false, screen: 'newgame' }])
     const panels = [...overlay.querySelectorAll('.ngv-strip > .ngv-col')]
     expect(panels).toHaveLength(2)
     expect(panels.map(p => p.querySelector('.ngv-col-h')?.textContent)).toEqual(['Warrior', 'Mage'])

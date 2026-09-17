@@ -75,7 +75,7 @@ export function showNewgameChoice(ctx: OverlayScreenCtx, msg: UiPushMsg): Newgam
   // First call: enterLayout wipes+hides menuControls; the game-view caller
   // rebuilds the Esc bar after us (game-view dispatch), so nothing here
   // may run after that ordering is violated.
-  ctx.enterLayout({ touch: false })
+  ctx.enterLayout({ touch: false, screen: 'newgame' })
 
   const loader = ctx.getLoader()
   const spectating = ctx.isSpectating()
@@ -447,5 +447,5 @@ export function showRandomCombo(ctx: OverlayScreenCtx, msg: UiPushMsg): void {
       bar.appendChild(btn)
     }
     ctx.overlay.appendChild(bar)
-  })
+  }, { screen: 'newgame' })
 }

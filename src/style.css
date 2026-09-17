@@ -4711,6 +4711,82 @@ html.map-hold, html.map-hold * {
     --kbd-key-h: clamp(1.8rem, 9vh, 2.8rem);
     --kbd-row-gap: clamp(0.25rem, 1.2vh, 0.5rem);
   }
+
+  /* Character creation (the `newgame` view class, set by the creation
+     screens through enterLayout): there is no game behind these screens,
+     so the map-column confinement above is wrong for them — the sidebar
+     would show the pre-creation HUD (a caption skeleton, or on 0.34 the
+     previous character's title/species with zeros: the engine sends a
+     `player` frame with an empty name before the choice is made). The
+     overlay takes both columns over the sidebar's info rows instead, and
+     the newgame-choice screen lays itself out as columns + rail: the
+     footer (armed item's description, the shortcut list) moves into the
+     sidebar's column, above the Esc bar, which keeps its `panel` row.
+     Everything the overlay covers is hidden outright (!important beats
+     the forced-visible rules above), not just painted over: the sidebar
+     rows would still size themselves. Row 5 under the map column is an
+     empty band beside the bar — black on black. */
+  #game-view.newgame #ui-overlay {
+    grid-column: 1 / -1;
+    grid-row: 1 / 5;
+    padding-right: 0;
+  }
+  #game-view.newgame :is(#game-hud, #monster-list, #spell-rail, #game-messages, #map-wrap, .tc-dpad, .tc-panel) {
+    display: none !important;
+  }
+  #game-view.newgame #ui-overlay:has(> .ngv-foot) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--sidebar-w);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 0.5rem;
+    overflow: hidden;
+  }
+  /* The column strip scrolls on its own; the rail stays put. overflow-x
+     hidden, not the auto that overflow-y alone implies: the strip's
+     -0.5rem side margins bleed past this column (they bled into the
+     overlay's padding before) and would give the wrap an 8px sideways
+     scroll of its own. */
+  #game-view.newgame .ngv-wrap {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  /* Rail: description at the top, shortcuts pinned to the bottom so they
+     sit on the Esc bar; a long description shrinks and scrolls between
+     them rather than pushing the shortcuts out of reach. Sticky/negative
+     margins were the bottom-dock geometry and go. */
+  #game-view.newgame .ngv-foot {
+    position: static;
+    margin: 0;
+    padding: 0 0.6rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  #game-view.newgame .ngv-desc {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+  }
+  #game-view.newgame .ngv-actions {
+    flex: none;
+    margin-top: auto;
+    /* One column: "Space - Pick background first" alone fills 16rem. */
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: start;
+  }
+  /* Entries carry their wire column inline (buildActions), so the single
+     track needs !important to fold them; the wire's row-major order then
+     reads down the rail, keeping each recommended/random pair adjacent.
+     nowrap, not pre: the labels' leading spaces aligned the dashes of the
+     two-column grid (newgame.cc's "    * - " padding) and would indent
+     half the rail's lines; a line start drops them under nowrap, and the
+     ellipsis stays. */
+  #game-view.newgame .ngv-action {
+    grid-column: 1 !important;
+    white-space: nowrap;
+  }
 }
 
 /* Tablet landscape — min-height: 601px complements the compact-monster-
