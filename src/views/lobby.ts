@@ -13,6 +13,11 @@ import { clearGameStart, FORCE_TERMINATE_WARNING, rememberGameStart } from '../r
 import { classifyTransition } from '../ws/transition'
 import { isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
 import { attachScrollCue } from '../util/scroll-cue'
+import { avatarSlotKey, listAllAvatars, type Avatar } from '../avatars'
+import { comboAbbrev } from '../game/combo-abbrev'
+import { compactPlace, nameTitle } from '../game/char-label'
+import { paintAvatars } from './avatar-tiles'
+import { agoLabel } from './char-card'
 
 export function buildLobbyView(
   conn: GameConnection,
@@ -384,22 +389,17 @@ export function buildLobbyView(
 
   function renderGameButtons(html: string): void {
     if (!gamesEl) return
-    const doc = new DOMParser().parseFromString(html, 'text/html')
-    const links = doc.querySelectorAll<HTMLAnchorElement>('a[href^="#play-"]')
-    if (links.length === 0) return
 
     // Trust the server: every #play-<id> link the server advertises becomes a
     // button. We only decide *visibility* — main DCSS (latest stable + trunk)
     // is shown up front; everything else (older versions, sprint, seeded,
     // descent, ...) goes behind a "Show all versions" toggle so the lobby
     // stays compact on a phone.
-    type Game = { gameId: string; label: string }
-    const all: Game[] = []
-    links.forEach(link => {
-      const gameId = link.getAttribute('href')!.slice(6) // strip "#play-"
-      const label = link.textContent?.trim() || gameId
-      all.push({ gameId, label })
-    })
+    const all = parseGameLinks(html)
+    if (all.length === 0) return
+    // Any save description at all = this server reports saves, so a game
+    // WITHOUT one has none, whatever this device remembers (see GameLink).
+    const serverKnowsSaves = all.some(g => g.save !== undefined)
 
     // The two headline games, already in display order (newest stable on top,
     // trunk second); everything else goes behind the "Show all versions" toggle.
@@ -420,9 +420,9 @@ export function buildLobbyView(
         // "(trunk)" parenthetical the server may bake into the name (e.g. CPO's
         // "Trunk (unstable)") so the button reads cleanly as just the name.
         const label = g.label.replace(/\s*\((?:unstable|trunk)\)\s*$/i, '')
-        gamesEl.appendChild(makeGameBtn({ ...g, label }, 'lobby-btn-primary lobby-btn-trunk'))
+        gamesEl.appendChild(makeGameBtn({ ...g, label }, 'lobby-btn-primary lobby-btn-trunk', serverKnowsSaves))
       } else {
-        gamesEl.appendChild(makeGameBtn(g, 'lobby-btn-primary'))
+        gamesEl.appendChild(makeGameBtn(g, 'lobby-btn-primary', serverKnowsSaves))
       }
     }
 
@@ -449,24 +449,88 @@ export function buildLobbyView(
     }
   }
 
-  function makeGameBtn(g: { gameId: string; label: string }, cls: string): HTMLButtonElement {
+  function play(gameId: string): void {
+    // Recorded so an unexpected mid-game socket drop (or a full iOS page
+    // eviction) can auto-resume by replaying this exact play — the server
+    // never echoes the game_id back.
+    rememberGameStart(
+      { kind: 'play', gameId },
+      { wsUrl: conn.wsUrl, username, guest },
+    )
+    // Also stashed for the avatar shelf: forwarded to the game view at the
+    // transition so a played char's doll can be saved under its game_id.
+    playedGameId = gameId
+    conn.send({ msg: 'play', game_id: gameId })
+  }
+
+  function makeGameBtn(g: GameLink, cls: string, serverKnowsSaves = false): HTMLElement {
+    if (cls.includes('lobby-btn-primary')) {
+      const c = playRowChar(g, liveAvatar(g.gameId), serverKnowsSaves)
+      if (c) return makePlayRow(g, c, cls.includes('lobby-btn-trunk'))
+    }
     const btn = document.createElement('button')
-    btn.className = cls
+    btn.className = cls + (g.save !== undefined ? ' has-save' : '')
     btn.textContent = g.label
-    btn.addEventListener('click', () => {
-      // Recorded so an unexpected mid-game socket drop (or a full iOS page
-      // eviction) can auto-resume by replaying this exact play — the server
-      // never echoes the game_id back.
-      rememberGameStart(
-        { kind: 'play', gameId: g.gameId },
-        { wsUrl: conn.wsUrl, username, guest },
-      )
-      // Also stashed for the avatar shelf: forwarded to the game view at the
-      // transition so a played char's doll can be saved under its game_id.
-      playedGameId = g.gameId
-      conn.send({ msg: 'play', game_id: g.gameId })
-    })
+    btn.addEventListener('click', () => play(g.gameId))
     return btn
+  }
+
+  // The character this device last saw in the game's slot: the slot's newest
+  // entry, unless an outcome closed it (avatars.ts). Device-local — a game
+  // finished or rerolled from another client leaves it stale; playRowChar
+  // decides how far to trust it.
+  function liveAvatar(gameId: string): Avatar | null {
+    const k = avatarSlotKey({ wsUrl: conn.wsUrl, username, gameId })
+    const cur = listAllAvatars().find(a => avatarSlotKey(a) === k)
+    return cur && !cur.outcome ? cur : null
+  }
+
+  // A headline game with a character in progress renders as that character,
+  // in the offline lobby's slot-row idiom (offline-lobby.ts buildSlotRow) —
+  // same tap, same `play`. The stable-vs-trunk distinction must survive both
+  // being rows: the version chip carries it (.lobby-play-version, style.css).
+  function makePlayRow(g: GameLink, c: PlayRowChar, trunk: boolean): HTMLElement {
+    const av = c.avatar
+    const parts: string[] = []
+    if (c.xl != null) parts.push(`<span>XL:${c.xl}</span>`)
+    if (av) {
+      const combo = escHtml(comboAbbrev(av.species, av.background))
+      const god = escHtml(c.god ?? av.god ?? '')
+      if (combo || god) {
+        parts.push(`<span class="offline-slot-god">${combo && god ? `${combo}^${god}` : combo || god}</span>`)
+      }
+      if (c.placeFresh && av.place) parts.push(`<span>${escHtml(compactPlace(av.place, av.depth))}</span>`)
+    } else if (c.what) {
+      parts.push(`<span class="offline-slot-god">${escHtml(c.what)}</span>`)
+    }
+    const version = g.label.replace(/^DCSS\s+/i, '').replace(/\s*\([^)]*\)\s*$/, '')
+
+    const row = document.createElement('div')
+    row.className = 'lobby-game-row offline-slot-row lobby-play-row' + (trunk ? ' lobby-play-row-trunk' : '')
+    row.setAttribute('role', 'button')
+    row.tabIndex = 0
+    row.innerHTML = `
+      <div class="lobby-game-main">
+        <div class="lobby-game-toprow">
+          <span class="lobby-game-user">${escHtml(nameTitle(username, av?.title))}</span>
+          <span class="lobby-play-version">${escHtml(version)}</span>
+        </div>
+        <span class="lobby-game-info">${parts.join('')}</span>
+        ${c.note ? `<span class="offline-slot-milestone">${escHtml(c.note)}</span>` : ''}
+      </div>
+    `
+    const box = document.createElement('div')
+    box.className = 'offline-slot-doll'
+    row.prepend(box)
+    if (av) void paintAvatars(box, [av], 2, 'offline-slot-doll-img')
+    row.addEventListener('click', () => play(g.gameId))
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        play(g.gameId)
+      }
+    })
+    return row
   }
 
   function renderList(): void {
@@ -562,6 +626,74 @@ export function buildLobbyView(
   if (exit) maybeShowExitDialog(view, exit)
 
   return view
+}
+
+// One playable game out of set_game_links. `save` is the server's own word on
+// the slot, present only on servers configured with `show_save_info`
+// (games.d/base.yaml — only CAO and CBR2 send it as of 2026-09-17).
+// templates/game_links.html then renders the game NAME as bare text and makes
+// the play link's text the bracketed save_info instead (ws_handler.py
+// update_save_info): "[<short_desc>]" (player.cc player_save_info::short_desc
+// — "Name, a level 12 Minotaur Berserker of Trog"), or "[playing]" for a save
+// in use by another session. "[slot full]" gets no link at all, so that game
+// is simply not offered. `save` holds the text without its brackets.
+// The server sends set_game_links twice on lobby entry — once at once with no
+// save info, again after its save probe (send_lobby_html) — so the first
+// render never knows; only the second is authoritative.
+export interface GameLink { gameId: string; label: string; save?: string }
+
+export function parseGameLinks(html: string): GameLink[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const out: GameLink[] = []
+  doc.querySelectorAll<HTMLAnchorElement>('a[href^="#play-"]').forEach(link => {
+    const gameId = link.getAttribute('href')!.slice(6) // strip "#play-"
+    const text = link.textContent?.trim() ?? ''
+    const save = /^\[(.*)\]$/.exec(text)?.[1]
+    if (save === undefined) { out.push({ gameId, label: text || gameId }); return }
+    // The name is the text node before the link's wrapper <span>, behind the
+    // template's " | " separator when the game shares an rc row.
+    const name = link.parentElement?.previousSibling?.textContent?.replace(/^[\s|]+/, '').trim()
+    out.push({ gameId, label: name || gameId, save })
+  })
+  return out
+}
+
+// What a headline play row shows. The server's save description, where it
+// exists, outranks the device-local avatar: it is what `play` will resume.
+export interface PlayRowChar {
+  avatar?: Avatar      // lends doll, title, combo, god — only when it is this character
+  xl?: number
+  god?: string         // the server's word on it; absent = use the avatar's
+  placeFresh?: boolean // avatar's place is believable (no evidence of play elsewhere)
+  what?: string        // avatar-less: the server's "Octopode Hedge Wizard of Gozag"
+  note?: string
+}
+
+// Exported for unit testing.
+export function playRowChar(g: GameLink, av: Avatar | null, serverKnowsSaves: boolean): PlayRowChar | null {
+  if (g.save === undefined) {
+    // A server that reports saves reports none here: the avatar is stale
+    // (died or rerolled elsewhere) and `play` would open character creation.
+    if (serverKnowsSaves || !av) return null
+    const ago = av.seenAt != null ? agoLabel(av.seenAt) : ''
+    return { avatar: av, xl: av.xl, placeFresh: true, note: ago ? `seen here ${ago}` : undefined }
+  }
+  if (g.save === 'playing') {
+    return { avatar: av ?? undefined, xl: av?.xl, placeFresh: true, note: 'playing in another session' }
+  }
+  // short_desc, minus a "[sprint] "-style qualifier and the " (WIZ)" tail.
+  const m = /^(?:\[[^\]]*\] )?.+?, a level (\d+) (.+?)(?: \(WIZ\))?$/.exec(g.save)
+  if (!m) return { what: g.save }
+  const xl = parseInt(m[1], 10)
+  const what = m[2]
+  // Same character = the description names the avatar's species (and job,
+  // when the capture caught one). XL is no test: avatar meta lags by design.
+  const same = av?.species != null && what.includes(av.species)
+    && (!av.background || what.includes(av.background))
+  // The god likewise comes off the description (" of Trog" tail; Jiyva's
+  // carries a second name), since a conversion elsewhere is invisible here.
+  const god = / of (.+)$/.exec(what)?.[1] ?? ''
+  return same ? { avatar: av!, xl, god, placeFresh: av!.xl === xl } : { xl, what }
 }
 
 // Expected end-of-game reasons; anything outside this set is "abnormal"
