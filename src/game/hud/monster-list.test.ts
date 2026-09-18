@@ -309,7 +309,12 @@ describe('MonsterListView — invis row', () => {
     ])
     store.invisMonDesc = 'an unseen horror'
     const view = new MonsterListView(store)
-    view.setLoader(getTileLoader('http://test', '0.35.0'))
+    // happy-dom fires `load` on the dummy-URL tileinfo script without running
+    // it, which the loader settles as a rejection — park the module instead so
+    // the row's sprite fill never warns into the run's stderr.
+    const invisLoader = getTileLoader('http://test', '0.35.0')
+    vi.spyOn(invisLoader, 'getModule').mockReturnValue(new Promise(() => {}))
+    view.setLoader(invisLoader)
     view.setRenderMode('tiles')
     view.update(store.getMonsters())
 
