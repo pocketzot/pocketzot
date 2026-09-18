@@ -724,7 +724,8 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
         btn.className = 'tc-dpad-btn' + (r === 1 && c === 1 ? ' wait' : '')
         btn.textContent = def.label
         if ('text' in def) {
-          bindTap(btn, () => sendDpad(def), { repeat: true })
+          // Single-fire: a held wait would burn turns blind.
+          bindTap(btn, () => sendDpad(def))
         } else {
           // Hold = run: the touch-down's plain step, then ONE shifted keycode
           // at the hold threshold. In normal play CK_SHIFT_<dir> is

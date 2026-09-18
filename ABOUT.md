@@ -43,7 +43,7 @@ Obligatory virtual keyboard also available.
 - Tap level map (`X`) to place the cursor
 - Double tap on map to toggle zoom level
 - Two-finger long press on map to toggle ASCII/tiles
-- Hold a d-pad direction to run that way (shift-move)
+- Hold a d-pad direction to shift-move
 - Double tap Shift to lock it
 
 ## Offline play

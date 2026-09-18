@@ -305,14 +305,13 @@ describe('hold-to-repeat', () => {
     expect(shiftBtn(tc.element).classList.contains('active')).toBe(false)
   })
 
-  it('the center wait key still repeats while held', () => {
+  it('the center wait key stays single-fire when held', () => {
     const { tc, sent } = setup()
     const btn = dpadWait(tc.element)
     btn.dispatchEvent(touchEvent('touchstart'))
     vi.advanceTimersByTime(REPEAT_DELAY_MS + REPEAT_INTERVAL_MS * 3)
     btn.dispatchEvent(touchEvent('touchend'))
-    expect(sent).toHaveLength(4)
-    expect(sent.every(m => 'text' in m && m.text === '.')).toBe(true)
+    expect(sent).toEqual([{ msg: 'input', text: '.' }])
   })
 
   it('losing the foreground mid-press cancels a pending run', () => {
@@ -370,7 +369,9 @@ describe('hold-to-repeat', () => {
 
   it('repeat halts when the panel leaves the DOM mid-hold', () => {
     const { tc, sent } = setup()
-    const btn = dpadWait(tc.element)
+    tc.openKbd()
+    const btn = [...tc.element.querySelectorAll<HTMLElement>('.kbd-key.letter')]
+      .find(b => b.textContent === 'q')!
     btn.dispatchEvent(touchEvent('touchstart'))
     vi.advanceTimersByTime(REPEAT_DELAY_MS + REPEAT_INTERVAL_MS)
     expect(sent).toHaveLength(2)
