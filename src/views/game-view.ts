@@ -282,7 +282,10 @@ export function buildGameView(
   // append sites need this — querySelector lookups on uiOverlay see through it.
   let overlayContent: HTMLElement = uiOverlay
   // Float backdrop tap = Esc. Require the press on the backdrop too, so a
-  // gesture begun before the prompt appeared can't cancel it unseen.
+  // gesture begun before the prompt appeared can't cancel it unseen. The
+  // press must be on THIS prompt's backdrop: enterOverlayLayout and
+  // hideOverlay drop it, else a swap between press and lift (server-driven
+  // ui-pop + push) would Esc the successor.
   let backdropPress = false
   uiOverlay.addEventListener('pointerdown', (e) => {
     backdropPress = e.target === uiOverlay && uiOverlay.classList.contains('overlay-float')
@@ -3897,6 +3900,7 @@ export function buildGameView(
     uiOverlay.innerHTML = ''
     uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert')
     uiOverlay.classList.toggle('overlay-float', !!opts?.float)
+    backdropPress = false
     // Set per render, not latched: the creation screens re-enter here for
     // every step, and the first in-game overlay (or hideOverlay) drops it.
     view.classList.toggle('newgame', opts?.screen === 'newgame')
@@ -4112,6 +4116,7 @@ export function buildGameView(
     uiOverlay.style.display = 'none'
     uiOverlay.innerHTML = ''
     uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert', 'overlay-float')
+    backdropPress = false
     view.classList.remove('newgame')
     overlayContent = uiOverlay
     chatView.syncChip()  // chip retracts while an overlay is up; map's back

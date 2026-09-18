@@ -488,7 +488,6 @@ export function buildOfflineLobbyView(
       // its first one stored instead of baking it again.
       for (const box of view.querySelectorAll<HTMLElement>('[data-menu-icon]')) {
         if (!view.isConnected) return
-        if (box.childElementCount > 0) continue
         const tile = box.dataset.menuIcon!
         const el = await sourceSprite(src, `gui:${tile}`, async () => {
           const t = (await src.loader.getModule('gui'))[tile]
@@ -496,8 +495,9 @@ export function buildOfflineLobbyView(
         }, 1).catch(() => null)
         if (!el) continue
         // sourceSprite's self-heal removes a bake that fails to decode;
-        // put the glyph back rather than leave the column blank.
-        const glyph = box.textContent
+        // put the glyph back rather than leave the column blank. Kept on
+        // the box: a repaint finds an <img> where the text was.
+        const glyph = box.dataset.menuGlyph ??= box.textContent ?? ''
         el.addEventListener('error', () => { box.textContent = glyph })
         box.replaceChildren(el)
       }

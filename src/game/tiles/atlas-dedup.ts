@@ -142,6 +142,10 @@ export async function seedLocalPlayerAtlas(): Promise<void> {
     // atlas (atlasOk) and drop the claim on failure, so preferring local is
     // safe even if its atlas were to turn out unreadable.
     groupRep.set(fp, { httpBase: '', version: 'local' })
+    // A different pack (the offline lobby's in-session update, which drops
+    // the local loader and lands here on the next paint) may have names the
+    // old one lacked: its unmappable verdicts don't carry over.
+    if (fp !== localPack) unbakeable.clear()
     localPack = fp
   } catch { /* pack unreadable or unfingerprintable — paint proceeds without it */ }
 }
@@ -180,8 +184,9 @@ export async function bakeViaLocalPack(httpBase: string, version: string, fp: st
     if (fp == null || fp === localPack) return null
     const existing = bakedDollUrl(fp, spec)
     if (existing != null) return { url: existing, fp }
-    // Unmappable within this session stays unmappable (the pack doesn't
-    // change under a running page): don't re-load the module every paint.
+    // Unmappable against this pack stays unmappable (the set is cleared when
+    // seedLocalPlayerAtlas sees a new one): don't re-load the module every
+    // paint.
     const key = bakeKey(fp, spec)
     if (unbakeable.has(key)) return null
     const rep = moduleRep.get(fp) ?? groupRep.get(fp) ?? { httpBase, version }
