@@ -28,6 +28,49 @@ export function parseRunePickup(text: string): string | null {
   return m ? m[1] : null
 }
 
+// --- Gems --------------------------------------------------------------------
+// A gem counts from pickup on, for good: a carried gem that later "shatters"
+// (zot.cc incr_gem_clock) stays in gems_found — the blurb count, the `}`
+// menu's "Gems (N collected)" and xlog `fgem` all keep it — and by default
+// (`more_gem_info` off) the engine sends no message and writes no note about
+// the break. So there is no un-pickup to parse, and nothing here tries.
+
+// items.cc _get_gem: "You pick up the %s gem and feel its impossibly delicate
+// weight in your %s." — adjectives are item-prop.cc Gem_prop's, one of them
+// hyphenated (milky-white), hence not \w+. Same contiguous-phrase reasoning
+// as parseRunePickup.
+export function parseGemPickup(text: string): string | null {
+  const m = text.replace(/<\/?[a-z][^>]*>/gi, '')
+    .match(/You pick up the ([\w-]+) gem and feel its impossibly delicate weight/)
+  return m ? m[1] : null
+}
+
+// The end blurb's gem clause (runes_gems_desc, as parseWinRuneCount): "...
+// and 4 gems" after an Orb win or a rune clause, "... with 2 gems" on an
+// escape with gems but no runes, optionally followed by " (3 intact)". The
+// count is gems FOUND. Deaths never carry it: hiscores.cc death_description
+// calls runes_gems_desc only for KILLED_BY_LEAVING / KILLED_BY_WINNING — so
+// an online death's gems are only the pickup lines this device saw. Where it
+// exists, it's the one gem fact that doesn't depend on that.
+export function parseGemCount(message?: string): number | undefined {
+  const m = message?.match(/(?:and|with) (\d+) gems?\b/)
+  return m ? Number(m[1]) : undefined
+}
+
+// Gem identities from a morgue. Unlike runes there is NO overview line for
+// gems (output.cc prints the Orb and rune lines only; chardump.cc never
+// mentions gems), so the notes are the only place a dump names them
+// (notes.cc NOTE_GET_ITEM):
+//    37678 | Elf:3    | Got a shimmering gem with 325 turns to spare
+// The " with N turns to spare" tail is present only while the gem's clock
+// has time left, so it isn't part of the match. Pickup order. An RC
+// `dump_order` without notes yields none — callers fall back to the count.
+export function parseMorgueGems(text: string): string[] {
+  const out: string[] = []
+  for (const m of text.matchAll(/\| Got an? ([\w-]+) gem\b/g)) if (!out.includes(m[1])) out.push(m[1])
+  return out
+}
+
 // Orb possession from the status light (status.cc STATUS_ORB): light_text
 // "Orb" in LIGHTMAGENTA (13) while the player carries it. The light, not the
 // pickup message, is the source: it's structured, and the `player` message

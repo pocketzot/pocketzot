@@ -6169,14 +6169,16 @@ html.map-hold, html.map-hold * {
 /* Card rune row (rune-row.ts): 24px cells, wrapping — 15 runes make two
    lines at phone width. */
 .rune-row { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
-.char-card-runes { margin-top: 0.2rem; }
+.char-card-runes, .char-card-gems { margin-top: 0.2rem; }
+.char-card-runes + .char-card-gems { margin-top: 2px; } /* the row gap */
 /* Doll column: doll on the floor line, the Orb trophy centred beneath it. */
 .char-card-doll-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 /* Crypt modal (char-card.ts `hero`): the 64px doll, sized by HERO_DOLL_SCALE. */
 .char-card-hero .char-card-doll { min-width: 64px; min-height: 64px; }
 /* Doll marks (rune-marks.ts): wrapper keeps the doll's inline box; the marks
    layer floats over it — Orb badge top-right, rune fan bottom-right with
-   each card overlapping the last, "+N" pip for the overflow. */
+   each card overlapping the last, a total pip past FAN_MAX, then the "♦N"
+   gem chip on the same baseline. */
 .doll-marked { position: relative; display: inline-block; line-height: 0; }
 .doll-marks { position: absolute; inset: 0; pointer-events: none; }
 .doll-mark-orb { position: absolute; top: -4px; right: -6px; }
@@ -6195,6 +6197,15 @@ html.map-hold, html.map-hold * {
   text-shadow: 0 0 2px #000, 0 0 2px #000;
   margin-left: 2px; margin-bottom: 2px;
 }
+/* The count keeps the pip's size exactly; only the ♦ is nudged up so it
+   doesn't read smaller than the digits beside it. */
+.doll-mark-pip + .doll-mark-gems { margin-left: 4px; }
+.doll-mark-gem-glyph { font-size: 1.15em; }
+/* Card gem row: sits under the rune row; the "+N" chip counts gems known
+   only by number (rune-sprites.ts unnamedGems), the note is the offline
+   xlog's intact count (char-card.ts gemNote). */
+.gem-row-more, .gem-row-note { font-size: 0.75rem; color: var(--text-dim); margin-left: 6px; }
+.gem-row-more:first-child { margin-left: 0; }
 /* Corner overlay, not a flex column — rationale in char-card.ts; has-open
    pads the headline clear of it. */
 .char-card-open {

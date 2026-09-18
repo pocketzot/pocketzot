@@ -1,14 +1,14 @@
-// One sprite pipeline for every rune/Orb drawing — the card's rune row and
-// Orb trophy (built here), the doll marks (rune-marks.ts): a synchronous
-// glyph placeholder — the ASCII-mode item glyph in the rune's colour
-// (rune-tiles.ts runeGlyph) — and an async swap for the sprite once a
-// source resolves.
+// One sprite pipeline for every rune/Orb/gem drawing — the card's rune and
+// gem rows and Orb trophy (built here), the doll marks (rune-marks.ts): a
+// synchronous glyph placeholder — the ASCII-mode item glyph in the item's
+// colour (rune-tiles.ts runeGlyph, gem-tiles.ts gemGlyph) — and an async
+// swap for the sprite once a source resolves.
 //
 // Sprite source, in order (the tile-decorations policy: a rune sprite is a
 // rune sprite, whichever pack draws it):
 //   1. the on-device offline tiles pack (same-origin → canvas-bakeable):
-//      each rune bakes ONCE per pack build into the avatar-bake LRU (fixed
-//      sprites, so ~20 bakes cover the feature for good) and thereafter
+//      each sprite bakes ONCE per pack build into the avatar-bake LRU (fixed
+//      sprites, so ~35 bakes cover the feature for good) and thereafter
 //      places from localStorage — airplane mode, pack eviction, dead
 //      version dirs all fine;
 //   2. the recipe's own doll atlas (resolvePlayerLoader): live DOM
@@ -19,6 +19,7 @@ import { cachedGamedataBuild } from '../offline/artifact-store'
 import { resolvePlayerLoader } from '../game/tiles/atlas-dedup'
 import { bakeDoll, bakedDollUrl, dropBakedDoll, storeBakedDoll } from '../game/tiles/avatar-bake'
 import { ORB, runeGlyph, runeLabel, runeTileName, runeTileRef } from '../game/tiles/rune-tiles'
+import { gemGlyph, gemLabel, gemTileName, gemTileRef } from '../game/tiles/gem-tiles'
 import { getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { DCSS_COLOR_MAP } from '../game/dcss-colors'
 import { renderTiles, type TileRef } from '../game/tiles/tile-view'
@@ -43,18 +44,43 @@ export async function resolveRuneSource(recipe: DollRecipe | null | undefined): 
 // The placeholder: a labelled cell holding the glyph, sized like the sprite
 // it stands in for (CELL × scale) so the layout never shifts on swap.
 export function runeCell(word: string, scale: number): HTMLElement {
+  return collectibleCell('rune', word, scale)
+}
+
+// A gem through the same cell → sprite pipeline. Gem and rune adjectives are
+// separate namespaces ("mossy" is both — gem-tiles.ts), so the cell records
+// which it is: `data-gem` vs `data-rune`.
+export function gemCell(word: string, scale: number): HTMLElement {
+  return collectibleCell('gem', word, scale)
+}
+
+type Kind = 'rune' | 'gem'
+
+// `tileName` doubles as the bake name; null = no sprite, the glyph stays.
+const KINDS = {
+  rune: { label: runeLabel, glyph: runeGlyph, tileName: runeTileName, tileRef: runeTileRef },
+  gem: { label: gemLabel, glyph: gemGlyph, tileName: gemTileName, tileRef: gemTileRef },
+} satisfies Record<Kind, {
+  label(word: string): string
+  glyph(word: string): { ch: string; colour: string }
+  tileName(word: string): string | null
+  tileRef(loader: TileLoader, word: string): Promise<TileRef | null>
+}>
+
+function collectibleCell(kind: Kind, word: string, scale: number): HTMLElement {
   const cell = document.createElement('span')
   cell.className = 'rune-cell'
-  cell.dataset.rune = word
-  cell.title = runeLabel(word)
-  cell.setAttribute('aria-label', runeLabel(word))
+  cell.dataset[kind] = word
+  const label = KINDS[kind].label(word)
+  cell.title = label
+  cell.setAttribute('aria-label', label)
   cell.style.width = cell.style.height = `${32 * scale}px`
-  cell.append(glyphEl(word, scale))
+  cell.append(glyphEl(kind, word, scale))
   return cell
 }
 
-function glyphEl(word: string, scale: number): HTMLElement {
-  const g = runeGlyph(word)
+function glyphEl(kind: Kind, word: string, scale: number): HTMLElement {
+  const g = KINDS[kind].glyph(word)
   const glyph = document.createElement('span')
   glyph.className = 'rune-glyph'
   glyph.textContent = g.ch
@@ -69,12 +95,16 @@ function glyphEl(word: string, scale: number): HTMLElement {
 // generic-rune bake instead of storing a copy each.
 export async function fillRuneCell(cell: HTMLElement, src: RuneSource, scale: number): Promise<void> {
   try {
-    const word = cell.dataset.rune!
-    const el = await sourceSprite(src, `main:${runeTileName(word)}`, () => runeTileRef(src.loader, word), scale)
+    const kind: Kind = cell.dataset.gem != null ? 'gem' : 'rune'
+    const word = cell.dataset[kind]!
+    const k = KINDS[kind]
+    const tile = k.tileName(word)
+    if (!tile) return // an unknown gem: no generic tile (gem-tiles.ts)
+    const el = await sourceSprite(src, `main:${tile}`, () => k.tileRef(src.loader, word), scale)
     if (!el) return
     // sourceSprite's self-heal removes a bake that fails to decode; the cell
     // is fixed-size, so put the glyph back rather than leave a blank hole.
-    el.addEventListener('error', () => cell.replaceChildren(glyphEl(word, scale)))
+    el.addEventListener('error', () => cell.replaceChildren(glyphEl(kind, word, scale)))
     cell.replaceChildren(el)
   } catch { /* glyph stays */ }
 }
@@ -141,6 +171,42 @@ export function renderRuneRow(runes: readonly string[], opts: { recipe?: DollRec
   row.append(...cells)
   void fillRuneCells(cells, opts.recipe, ROW_SCALE)
   return row
+}
+
+// The gems as a second row under the runes (char-card.ts): named gems in
+// stored order, then a text chip for the ones the source counted but could
+// not name (unnamedGems) — never a sprite, see gem-tiles.ts on GEM_GENERIC —
+// then the quiet intact note where a source states it (offline xlog only).
+export function renderGemRow(
+  gems: readonly string[], opts: { total?: number; note?: string; recipe?: DollRecipe | null } = {},
+): HTMLElement {
+  const row = document.createElement('div')
+  row.className = 'rune-row gem-row'
+  const cells = gems.map((w) => gemCell(w, ROW_SCALE))
+  row.append(...cells)
+  const more = unnamedGems(gems, opts.total)
+  if (more > 0) {
+    const chip = document.createElement('span')
+    chip.className = 'gem-row-more'
+    chip.textContent = gems.length ? `+${more}` : `${more} gem${more > 1 ? 's' : ''}`
+    chip.title = `${more} more found, not named in this record`
+    row.append(chip)
+  }
+  if (opts.note) {
+    const note = document.createElement('span')
+    note.className = 'gem-row-note'
+    note.textContent = opts.note
+    row.append(note)
+  }
+  void fillRuneCells(cells, opts.recipe, ROW_SCALE)
+  return row
+}
+
+// How many of a stated count the named list doesn't cover — online, a gem
+// picked up on another client; offline, a record whose morgue and avatar
+// entry are both gone (see AvatarMeta.gems).
+export function unnamedGems(gems: readonly string[], total?: number): number {
+  return Math.max(0, (total ?? 0) - gems.length)
 }
 
 // The Orb of Zot as a single larger cell — the card's doll-column trophy.

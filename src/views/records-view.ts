@@ -18,8 +18,8 @@
 
 import { listAllAvatars } from '../avatars'
 import {
-  deleteGameRecord, joinDollRecipe, readDollSidecars, readMorgueRunes, readMorgueText, sortRecords,
-  type RecordsSort,
+  deleteGameRecord, joinDollRecipe, readDollSidecars, readMorgueCollections, readMorgueText, sortRecords,
+  type MorgueCollection, type RecordsSort,
 } from '../offline/game-records'
 import { downloadPackFile } from '../offline/save-transfer'
 import type { XlogRecord } from '../offline/xlog'
@@ -55,9 +55,9 @@ export function openGameRecords(
   let cards = new Map<XlogRecord, HTMLElement>()
   void Promise.all([
     readDollSidecars(records).catch(() => new Map<XlogRecord, string>()),
-    readMorgueRunes(records).catch(() => new Map<XlogRecord, string[]>()),
+    readMorgueCollections(records).catch(() => new Map<XlogRecord, MorgueCollection>()),
   ])
-    .then(([dolls, runes]) => {
+    .then(([dolls, morgues]) => {
       if (!view.isConnected) return
       const avatars = records.length > 0 ? listAllAvatars() : []
       cards = new Map(records.map((rec): [XlogRecord, HTMLElement] => {
@@ -65,9 +65,12 @@ export function openGameRecords(
         // The join rides along even when a sidecar exists: it's the card's
         // repaint fallback if the sidecar PNG turns out undecodable
         // (char-card's <img> error path) — and its live-parsed pickups are
-        // the rune fallback when the morgue can't be read.
+        // the rune/gem fallback, per list, when the morgue can't supply it.
         const joined = joinDollRecipe(rec, avatars)
-        const model = xlogToCard(rec, url, joined, runes.get(rec) ?? joined?.runes)
+        const found = morgues.get(rec)
+        const model = xlogToCard(rec, url, joined,
+          found?.runes.length ? found.runes : joined?.runes,
+          found?.gems.length ? found.gems : joined?.gems)
         return [rec, renderCharCard(model, {
           onOpen: () => openMorgue(model, rec, () => {
             live = live.filter((r) => r !== rec)

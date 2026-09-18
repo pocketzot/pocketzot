@@ -63,18 +63,25 @@ export interface AvatarMeta {
                     // opens it (morgues are cross-origin online, so that
                     // screen is the only catch-up for runes picked up on
                     // another client). Accumulates across sessions via
-                    // mergeRunes: a resume's capture sees no pickup lines,
+                    // mergeNames: a resume's capture sees no pickup lines,
                     // so a plain overwrite would wipe them. Absent = none
                     // seen since this field shipped, NOT "none collected".
+  gems?: string[]   // gem adjectives ("shimmering") in pickup order, from the
+                    // pickup message only (rune-messages.ts parseGemPickup):
+                    // the `%` overview never lists gems, so one picked up on
+                    // another client surfaces here only as the end blurb's
+                    // count (parseGemCount). The `}` menu's `!` gem view does
+                    // name them (item-name.cc _gem_text) — an unbuilt
+                    // catch-up source. Accumulates like runes.
   orb?: true        // carrying the Orb of Zot (rune-messages.ts hasOrbLight);
                     // one-way — the Orb can't be dropped — and kept across
                     // captures like runes
 }
 
-// Order-preserving union of rune lists (existing first, then new ones as
-// they appear). Names are unique per game, so a duplicate can only be the
+// Order-preserving union of rune or gem lists (existing first, then new ones
+// as they appear). Names are unique per game, so a duplicate can only be the
 // same pickup re-observed.
-export function mergeRunes(cur?: readonly string[], add?: readonly string[]): string[] | undefined {
+export function mergeNames(cur?: readonly string[], add?: readonly string[]): string[] | undefined {
   if (!cur?.length) return add?.length ? [...add] : undefined
   const out = [...cur]
   for (const r of add ?? []) if (!out.includes(r)) out.push(r)
@@ -164,11 +171,13 @@ export function saveAvatar(
   // timestamp or re-sort needed; insertion order *is* recency.
   if (cur != null && !turnReset && !closed) {
     list.splice(idx, 1)
-    // Runes only ever accumulate on a continuing character (the capture
-    // carries this session's pickups; the stored entry carries earlier ones).
-    // A reroll takes the `else` path and starts from the new capture alone.
-    const runes = mergeRunes(cur.runes, entry.runes)
+    // Runes and gems only ever accumulate on a continuing character (the
+    // capture carries this session's pickups; the stored entry carries earlier
+    // ones). A reroll takes the `else` path and starts from the new capture alone.
+    const runes = mergeNames(cur.runes, entry.runes)
     if (runes) entry.runes = runes
+    const gems = mergeNames(cur.gems, entry.gems)
+    if (gems) entry.gems = gems
     if (cur.orb) entry.orb = true
   }
   list.unshift(entry)
@@ -214,8 +223,10 @@ export function recordAvatarOutcome(
     if (v !== undefined) target[k] = v
   }
   ;(['species', 'title', 'background', 'god', 'xl', 'place', 'depth'] as const).forEach(merge)
-  const runes = mergeRunes(cur.runes, meta.runes)
+  const runes = mergeNames(cur.runes, meta.runes)
   if (runes) cur.runes = runes
+  const gems = mergeNames(cur.gems, meta.gems)
+  if (gems) cur.gems = gems
   if (meta.orb) cur.orb = true
   cur.outcome = { ...outcome, endedAt: Date.now() }
   persist(list)

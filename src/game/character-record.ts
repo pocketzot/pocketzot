@@ -12,12 +12,12 @@
 import type { PlayerMsg } from '../ws/types'
 import type { Cell } from './map/map-store'
 import type { TileLoader } from './tiles/tile-loader'
-import { mergeRunes, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
+import { mergeNames, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
 import { clearSpellOrder } from './spell-order'
 import { OFFLINE_GAME_ID } from '../offline/offline-state'
 import { count, countEach } from '../counter'
 import { looksLikeWelcome, parseWelcome } from './char-label'
-import { hasOrbLight, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from './rune-messages'
+import { hasOrbLight, parseGemPickup, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from './rune-messages'
 import { cachedFingerprint } from './tiles/atlas-dedup'
 import { ensureDollBaked, isBakeableLoader } from './tiles/avatar-bake'
 import { dollTileSpec } from './tiles/tile-view'
@@ -124,6 +124,7 @@ export class CharacterRecord {
   // One message-log line, as sent (markup included).
   onMessageLine(text: string): void {
     this.onRunePickup(text)
+    this.onGemPickup(text)
     if (!this.welcomeSettled && looksLikeWelcome(text)) {
       this.welcomeLine = text
       this.welcomeTried = ''  // a new candidate line earns a fresh parse
@@ -137,7 +138,7 @@ export class CharacterRecord {
   // is tried: the `}: N/15 runes:` line shape can't occur elsewhere.
   onUiPush(push: { type: string; text?: string }): void {
     if (this.opts.spectating || push.type !== 'formatted-scroller' || !push.text) return
-    const runes = mergeRunes(this.charMeta.runes, parseMorgueRunes(push.text))
+    const runes = mergeNames(this.charMeta.runes, parseMorgueRunes(push.text))
     if (runes) this.charMeta.runes = runes
   }
 
@@ -252,7 +253,7 @@ export class CharacterRecord {
 
   // Rune pickup line → (1) the character's persisted collection (charMeta
   // .runes: the next map capture / the outcome stamp writes it to the crypt
-  // entry — see ../avatars mergeRunes) and (2) the unlatched anonymous
+  // entry — see ../avatars mergeNames) and (2) the unlatched anonymous
   // counter (countEach: one row per rune — totals, never people-counts).
   // Only the counter takes the honest-game gate: wizmode runes stay on the
   // player's own card (policy is badge, not filter — char-card.ts), they
@@ -264,5 +265,13 @@ export class CharacterRecord {
     this.runesCounted.add(rune)
     this.charMeta.runes = [...(this.charMeta.runes ?? []), rune] // runesCounted already dedups
     if (this.opts.gameId && !this.cheatSeen) countEach(`rune-each${this.offlineSuffix}`)
+  }
+
+  // Gem pickup line → charMeta.gems, the runes' persisted-collection path
+  // without a counter. No `%` catch-up exists for gems (see AvatarMeta.gems).
+  private onGemPickup(text: string): void {
+    if (this.opts.spectating) return
+    const gem = parseGemPickup(text)
+    if (gem && !this.charMeta.gems?.includes(gem)) this.charMeta.gems = [...(this.charMeta.gems ?? []), gem]
   }
 }

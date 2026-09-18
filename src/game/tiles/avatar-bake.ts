@@ -27,11 +27,11 @@ const SEP = '\x00'
 // Sized for the widest consumers: the offline score list (uncapped; ~100
 // games is a generous bound for one device, budgeted at 128), the crypt's
 // history (STORE_CAP), and the fixed sprites rune-sprites.ts bakes under
-// `runes#<build>:<name>` (~20 runes/Orb, plus the offline lobby's icons) —
-// at ~1 KB per bake still under 200 KB of localStorage — plus the crypt
-// room's one tile strip (crypt-room.ts, ~40 KB). Insertion-order LRU,
+// `runes#<build>:<name>` (~20 runes/Orb, 14 gems, plus the offline lobby's
+// icons) — at ~1 KB per bake still under 200 KB of localStorage — plus the
+// crypt room's one tile strip (crypt-room.ts, ~40 KB). Insertion-order LRU,
 // oldest-stored evicted.
-export const BAKE_CAP = 128 + STORE_CAP + 32
+export const BAKE_CAP = 128 + STORE_CAP + 48
 
 // Parsed-map memo keyed on the raw stored string (same idiom as
 // offline-state.ts): a paint looks up one bake per doll, and re-parsing a

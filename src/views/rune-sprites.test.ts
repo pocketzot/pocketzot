@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeStorage } from '../test/fake-storage'
-import { renderOrbTrophy, renderRuneRow, resolveRuneSource, sourceSprite } from './rune-sprites'
+import { renderGemRow, unnamedGems, renderOrbTrophy, renderRuneRow, resolveRuneSource, sourceSprite } from './rune-sprites'
 import { cachedGamedataBuild } from '../offline/artifact-store'
 import { resolvePlayerLoader } from '../game/tiles/atlas-dedup'
 import { bakeDoll } from '../game/tiles/avatar-bake'
 import { renderTiles } from '../game/tiles/tile-view'
+import { gemTileRef } from '../game/tiles/gem-tiles'
 
 // The row's own logic is the source policy + placeholder swap; everything
 // under it (caches, atlases, canvas) is mocked at its seam.
@@ -149,5 +150,45 @@ describe('renderRuneRow / renderOrbTrophy', () => {
 
   it('renders nothing async for an empty row', () => {
     expect(renderRuneRow([]).children).toHaveLength(0)
+  })
+})
+
+describe('renderGemRow', () => {
+  it('mounts ♦ placeholders under data-gem, a "+N" chip for the unnamed, then the note', () => {
+    const row = renderGemRow(['shimmering', 'milky-white'], { total: 4, note: '3 intact' })
+    const cells = [...row.querySelectorAll<HTMLElement>('.rune-cell')]
+    expect(cells.map((c) => c.dataset.gem)).toEqual(['shimmering', 'milky-white'])
+    expect(cells.every((c) => c.dataset.rune === undefined)).toBe(true)
+    expect(cells.map((c) => c.textContent)).toEqual(['♦', '♦']) // DCHAR_ITEM_GEM
+    expect(cells.map((c) => c.title)).toEqual(['shimmering gem', 'milky-white gem'])
+    expect(row.querySelector('.gem-row-more')?.textContent).toBe('+2')
+    expect(row.querySelector('.gem-row-note')?.textContent).toBe('3 intact')
+    expect([...row.children].map((c) => c.className).slice(-2)).toEqual(['gem-row-more', 'gem-row-note'])
+  })
+
+  it('words the chip as a count when no gem is named, and omits it when all are', () => {
+    const none = renderGemRow([], { total: 2 })
+    expect(none.querySelectorAll('.rune-cell')).toHaveLength(0)
+    expect(none.querySelector('.gem-row-more')?.textContent).toBe('2 gems')
+    expect(renderGemRow([], { total: 1 }).querySelector('.gem-row-more')?.textContent).toBe('1 gem')
+    expect(renderGemRow(['jade'], { total: 1 }).querySelector('.gem-row-more')).toBeNull()
+  })
+
+  it('never goes negative on a smaller total', () => {
+    expect(unnamedGems(['a', 'b'], 1)).toBe(0)
+    expect(unnamedGems([], undefined)).toBe(0)
+    expect(unnamedGems(['a'], 3)).toBe(2)
+  })
+
+  it('resolves gem tiles through the gem table — "mossy" is the Swamp gem here, not the dead rune', async () => {
+    vi.mocked(resolvePlayerLoader).mockResolvedValue(fakeLoader as never)
+    fakeLoader.getModule.mockResolvedValue({ GEM_SWAMP: 77, GEM_GENERIC: 70, MISC_RUNE_OF_ZOT: 1 } as never)
+    const row = renderGemRow(['mossy', 'nacreous'], { recipe })
+    await vi.waitFor(() => expect(row.querySelectorAll('.tile-stack')).toHaveLength(1))
+    const refs = vi.mocked(renderTiles).mock.calls.map((c) => c[1])
+    // An unknown word keeps its glyph — never GEM_GENERIC, the "not found" tile.
+    expect(await gemTileRef(fakeLoader as never, 'nacreous')).toBeNull()
+    expect(refs).toEqual([[{ t: 77, tex: 4 }]])
+    expect(row.querySelector<HTMLElement>('[data-gem="nacreous"]')?.textContent).toBe('♦')
   })
 })

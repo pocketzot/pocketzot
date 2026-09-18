@@ -24,6 +24,7 @@ const player = (m: Partial<PlayerMsg>) => m as PlayerMsg
 const loader = { version: 'v1', base: 'https://test.example/gamedata/v1' } as unknown as TileLoader
 const dollCell = (doll: Array<[number, number]>) => ({ doll } as unknown as Cell)
 const PICKUP = (rune: string) => `<lightgrey>You pick up the ${rune} rune and feel its power.`
+const GEM = (adj: string) => `<lightgrey>You pick up the ${adj} gem and feel its impossibly delicate weight in your hand.`
 
 beforeEach(() => { vi.clearAllMocks() })
 
@@ -82,15 +83,27 @@ describe('CharacterRecord', () => {
     expect(r.meta.orb).toBe(true)
   })
 
+  it('collects each gem once, uncounted', () => {
+    const r = played()
+    r.onMessageLine(GEM('milky-white'))
+    r.onMessageLine(GEM('milky-white'))
+    r.onMessageLine(GEM('mossy'))
+    expect(r.meta.gems).toEqual(['milky-white', 'mossy'])
+    expect(r.meta.runes).toBeUndefined() // "mossy" is a gem here, never the old rune
+    expect(countEach).not.toHaveBeenCalled()
+  })
+
   it('writes and counts nothing for a spectated game', () => {
     const r = new CharacterRecord({ ...opts, spectating: true })
     r.onPlayer(player({ name: 'Synth', species: 'Minotaur', status: [{ light: 'Orb', col: 13 }] as PlayerMsg['status'] }))
     r.onMessageLine('Welcome, Synth the Minotaur Berserker.')
     r.onMessageLine(PICKUP('golden'))
+    r.onMessageLine(GEM('jade'))
     r.onUiPush({ type: 'formatted-scroller', text: '}: 1/15 runes: slimy' })
     r.captureAvatar(dollCell([[1, 0]]), loader)
     r.recordEnding('dead')
     expect(r.meta.runes).toBeUndefined()
+    expect(r.meta.gems).toBeUndefined()
     expect(r.meta.orb).toBeUndefined()
     expect([saveAvatar, recordAvatarOutcome, count, countEach, clearSpellOrder]
       .every(f => vi.mocked(f).mock.calls.length === 0)).toBe(true)

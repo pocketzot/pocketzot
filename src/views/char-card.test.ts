@@ -34,6 +34,14 @@ vi.mock('./rune-sprites', () => ({
     d.dataset.runes = runes.join(',')
     return d
   }),
+  renderGemRow: vi.fn((gems: string[], opts: { total?: number; note?: string }) => {
+    const d = document.createElement('div')
+    d.className = 'rune-row gem-row'
+    d.dataset.gems = gems.join(',')
+    d.dataset.total = String(opts.total ?? '')
+    d.dataset.note = opts.note ?? ''
+    return d
+  }),
   renderOrbTrophy: vi.fn(() => {
     const d = document.createElement('span')
     d.className = 'rune-cell rune-orb'
@@ -323,6 +331,39 @@ describe('renderCharCard', () => {
     const body = renderCharCard({ ...model, runes: ['golden'] }).querySelector('.char-card-body')!
     expect(body.lastElementChild?.classList.contains('char-card-runes')).toBe(true)
     expect(body.querySelector('.char-card-meta')?.nextElementSibling).toBe(body.lastElementChild)
+  })
+
+  it('puts the gem row under the rune row, or alone under the meta line', () => {
+    const both = renderCharCard({ ...model, runes: ['golden'], gems: ['earthy'], gemCount: 1 })
+      .querySelector('.char-card-body')!
+    expect(both.lastElementChild?.classList.contains('char-card-gems')).toBe(true)
+    expect(both.lastElementChild?.previousElementSibling?.classList.contains('char-card-runes')).toBe(true)
+    // A count with no identities still earns the row (its "N gems" chip).
+    const counted = renderCharCard({ ...model, gemCount: 2 }).querySelector<HTMLElement>('.char-card-gems')!
+    expect(counted.dataset.gems).toBe('')
+    expect(counted.dataset.total).toBe('2')
+    expect(renderCharCard(model).querySelector('.char-card-gems')).toBeNull()
+  })
+
+  it('feeds gems from each source: xlog fgem/igem, the avatar list + blurb count', () => {
+    const x = (over: string, gems?: string[]) => xlogToCard(parseXlogLine(`${PROBE_LINE}:${over}`), null, null, null, gems)
+    expect(x('fgem=3:igem=2', ['earthy'])).toMatchObject({ gems: ['earthy'], gemCount: 3, gemNote: '2 intact' })
+    // The engine's own wordings (hiscores.cc runes_gems_desc).
+    expect(x('fgem=1:igem=1').gemNote).toBe('intact')
+    expect(x('fgem=2:igem=2').gemNote).toBe('both intact')
+    expect(x('fgem=3:igem=3').gemNote).toBe('all intact')
+    // igem is presence-written: absent = none intact, and that goes unsaid.
+    expect(x('fgem=3').gemNote).toBeUndefined()
+    // A win's vmsg already carries the parenthetical — don't say it twice.
+    expect(x('fgem=3:igem=2:vmsg=escaped with the Orb and 3 runes and 3 gems (2 intact)').gemNote).toBeUndefined()
+    expect(xlogToCard(parseXlogLine(PROBE_LINE)).gemCount).toBeUndefined()
+
+    const a = avatarToCard(makeAvatar({
+      gems: ['shining'],
+      outcome: { reason: 'won', message: 'Escaped with the Orb\n... and 10 runes\n... and 4 gems!', endedAt: 0 },
+    }))
+    expect(a).toMatchObject({ gems: ['shining'], gemCount: 4 })
+    expect(a.gemNote).toBeUndefined()
   })
 
   it('lays out the full card', () => {

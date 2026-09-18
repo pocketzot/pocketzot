@@ -285,6 +285,16 @@ describe('rune collection', () => {
     expect(list[1].runes).toEqual(['golden'])
   })
 
+  it('gems accumulate like runes: across captures, through the outcome stamp, not across a reroll', () => {
+    saveAvatar(rec({ gems: ['shimmering'] }), { turn: 5000 })
+    saveAvatar(rec({}), { turn: 5200 })
+    expect(listAllAvatars()[0].gems).toEqual(['shimmering'])
+    recordAvatarOutcome(SLOT, { reason: 'dead' }, { gems: ['shimmering', 'jade'] })
+    expect(listAllAvatars()[0].gems).toEqual(['shimmering', 'jade'])
+    saveAvatar(rec({}), { turn: 1 })
+    expect(listAllAvatars()[0]).not.toHaveProperty('gems')
+  })
+
   it('the Orb, once picked up, survives later captures and the outcome stamp', () => {
     saveAvatar(rec({ orb: true }), { turn: 5000 })
     saveAvatar(rec({}), { turn: 5200 })

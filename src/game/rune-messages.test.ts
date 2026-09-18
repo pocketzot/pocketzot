@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { hasOrbLight, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from './rune-messages'
+import {
+  hasOrbLight, parseGemCount, parseGemPickup, parseMorgueGems, parseMorgueRunes, parseRunePickup, parseWinRuneCount,
+} from './rune-messages'
 
 // Blurb shapes derived from hiscores.cc runes_gems_desc + the whitespace-
 // aligned game_ended message format (newline + dot-leader continuation).
@@ -98,5 +100,62 @@ describe('parseMorgueRunes', () => {
   it('yields an empty list when the line is absent (no runes → no line at all)', () => {
     expect(parseMorgueRunes('@: no status effects\nA: no mutations\na: nothing\n')).toEqual([])
     expect(parseMorgueRunes('')).toEqual([])
+  })
+})
+
+// items.cc _get_gem: mprf("You pick up %s and feel its impossibly delicate
+// weight in your %s.", name(DESC_THE), hand_name(true)) — followed the same
+// turn by "Press } and ! to see all the gems you have collected.", which the
+// server glues onto the same line.
+describe('parseGemPickup', () => {
+  it('reads the adjective from the joined pickup line, hand word regardless', () => {
+    expect(parseGemPickup(
+      'You pick up the shimmering gem and feel its impossibly delicate weight in your hands. Press } and ! to see all the gems you have collected.',
+    )).toBe('shimmering')
+    expect(parseGemPickup('You pick up the jade gem and feel its impossibly delicate weight in your tentacles.')).toBe('jade')
+  })
+
+  it('reads the hyphenated adjective and strips colour tags', () => {
+    expect(parseGemPickup('<lightgrey>You pick up the milky-white gem and feel its impossibly delicate weight in your paws.</lightgrey>'))
+      .toBe('milky-white')
+  })
+
+  it('ignores sightings, rune pickups and the shatter lines', () => {
+    expect(parseGemPickup('You see here a shimmering gem.')).toBeNull()
+    expect(parseGemPickup('You pick up the golden rune and feel its power.')).toBeNull()
+    expect(parseGemPickup('With a frightful flash, the power of Zot shatters your jade gem into ten thousand fragments!')).toBeNull()
+  })
+})
+
+describe('parseGemCount', () => {
+  it('reads the win and non-win clauses, with or without the intact parenthetical', () => {
+    expect(parseGemCount('Escaped with the Orb\n... and 10 runes\n... and 4 gems on Sept 16, 2026!')).toBe(4)
+    expect(parseGemCount('Escaped with the Orb\n... and 3 runes\n... and 1 gem (intact)!')).toBe(1)
+    // An escape without the Orb or runes (KILLED_BY_LEAVING) — deaths never carry the clause.
+    expect(parseGemCount('Got out of the dungeon alive\n... with 2 gems (both intact)')).toBe(2)
+  })
+
+  it('misses cleanly on gem-less blurbs', () => {
+    expect(parseGemCount('Escaped with the Orb\n... and 15 runes!')).toBeUndefined()
+    expect(parseGemCount(undefined)).toBeUndefined()
+  })
+})
+
+// notes.cc NOTE_GET_ITEM: "Got " + name(DESC_A), then " with N turn(s) to
+// spare" only while the gem's clock has time left.
+describe('parseMorgueGems', () => {
+  it('names gems from the notes in pickup order, a/an and tail-less forms included', () => {
+    expect(parseMorgueGems([
+      ' 29889 | Snake:4  | Got a serpentine rune of Zot',
+      ' 37678 | Elf:3    | Got a shimmering gem with 325 turns to spare',
+      ' 39721 | Vaults:5 | Got an ivory gem with 1 turn to spare',
+      ' 41000 | Spider:4 | Got a milky-white gem',
+      '',
+    ].join('\n'))).toEqual(['shimmering', 'ivory', 'milky-white'])
+  })
+
+  it('yields nothing from the header count or a note-less dump', () => {
+    expect(parseMorgueGems('             ... and 4 gems on Sept 16, 2026!\n}: 10/15 runes: silver\n')).toEqual([])
+    expect(parseMorgueGems('')).toEqual([])
   })
 })

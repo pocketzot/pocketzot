@@ -12,12 +12,13 @@
 import type { Avatar } from '../avatars'
 import { compactPlace, nameTitle } from '../game/char-label'
 import { parseExitBlurb } from '../game/exit-blurb'
+import { parseGemCount } from '../game/rune-messages'
 import { tagFor } from '../servers'
 import type { XlogRecord } from '../offline/xlog'
 import { morgueFileName, xlogTimeMs } from '../offline/xlog'
 import { bakedImg, paintAvatars, type DollRecipe } from './avatar-tiles'
 import { dollTileSpec } from '../game/tiles/tile-view'
-import { renderOrbTrophy, renderRuneRow } from './rune-sprites'
+import { renderGemRow, renderOrbTrophy, renderRuneRow } from './rune-sprites'
 
 export type DumpRef =
   | { kind: 'url'; href: string }    // online: morgue URL (extension included)
@@ -65,6 +66,10 @@ export interface CharCardModel {
                              // Orb is implied by result.kind 'won' / `orb`, never listed here.
                              // Order is the source's: pickup order from the store,
                              // rune_type enum order from a morgue } line
+  gems?: string[]            // gem adjectives (gem-tiles.ts), pickup order — the gem row
+  gemCount?: number          // gems FOUND per the source's own count (xlog fgem / the end
+                             // blurb); past gems.length the row adds a "+N" chip
+  gemNote?: string           // "3 intact" — offline only (xlog igem); see gemNote()
   dump?: DumpRef
   doll?: DollRecipe | null
   dollUrl?: string | null        // ready image URL (morgue sidecar) — wins over doll
@@ -196,6 +201,11 @@ export function renderCharCard(
   if (model.runes?.length) {
     const row = renderRuneRow(model.runes, { recipe: model.doll })
     row.classList.add('char-card-runes')
+    body.append(row)
+  }
+  if (model.gems?.length || model.gemCount) {
+    const row = renderGemRow(model.gems ?? [], { total: model.gemCount, note: model.gemNote, recipe: model.doll })
+    row.classList.add('char-card-gems')
     body.append(row)
   }
 
@@ -373,14 +383,16 @@ const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s)
 // `doll` is the fallback the caller can supply alongside (or instead of) the
 // sidecar URL: renderCharCard prefers dollUrl and paints the recipe live when
 // the sidecar is missing — or when its image fails to decode.
-// `runes`: the morgue `}` line's list (game-records readMorgueRunes) — the
-// exact source; callers fall back to the joined avatar entry's live-parsed
-// pickups when the morgue is gone.
+// `runes` / `gems`: the morgue's lists (game-records readMorgueCollections) —
+// the exact source; callers fall back to the joined avatar entry's
+// live-parsed pickups when the morgue can't supply one. The gem COUNT is the
+// xlog's own (`fgem`), so the row is complete even when no list is.
 export function xlogToCard(
   e: XlogRecord,
   dollUrl?: string | null,
   doll?: DollRecipe | null,
   runes?: readonly string[] | null,
+  gems?: readonly string[] | null,
 ): CharCardModel {
   const num = (k: string): number | undefined => {
     const v = e[k]
@@ -439,9 +451,25 @@ export function xlogToCard(
     origin: 'Local',
     dump: morgue ? { kind: 'idbfs', path: `/crawl/morgue/${morgue}` } : undefined,
     runes: runes?.length ? [...runes] : undefined,
+    gems: gems?.length ? [...gems] : undefined,
+    gemCount: num('fgem'),
+    gemNote: gemNote(num('fgem'), num('igem'), e['vmsg']),
     dollUrl,
     doll,
   }
+}
+
+// The intact note beside the gem row, in the engine's own words
+// (hiscores.cc runes_gems_desc: "intact" / "both intact" / "all intact" /
+// "N intact"). `igem` is presence-written — absent means zero, and zero
+// says nothing, following the engine ("don't explicitly mention that your
+// gems are all broken - sad!", item-name.cc gem_title). Skipped when the
+// card's verbose line already carries it: vmsg is built semiverbose, which
+// always appends the parenthetical on wins and escapes.
+function gemNote(found?: number, intact?: number, vmsg?: string): string | undefined {
+  if (!found || !intact || vmsg?.includes('intact)')) return undefined
+  if (intact >= found) return found === 1 ? 'intact' : found === 2 ? 'both intact' : 'all intact'
+  return `${intact} intact`
 }
 
 // --- Online adapter (avatars store) --------------------------------------------
@@ -520,6 +548,9 @@ export function avatarToCard(a: Avatar): CharCardModel {
     origin: local ? 'Local' : serverTag(a.wsUrl),
     dump: o?.dump ? { kind: 'url', href: `${o.dump}.txt` } : undefined,
     runes: a.runes?.length ? [...a.runes] : undefined,
+    gems: a.gems?.length ? [...a.gems] : undefined,
+    // The blurb's count covers gems this device never saw picked up.
+    gemCount: parseGemCount(o?.message),
     orb: a.orb,
     doll: a,
   }

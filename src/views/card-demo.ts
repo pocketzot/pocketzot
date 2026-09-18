@@ -14,6 +14,7 @@ import { avatarToCard, renderCharCard, xlogToCard, type CharCardModel } from './
 import { mountCryptShell } from './crypt-view'
 import { paintAvatars, type DollRecipe, type MarkedRecipe } from './avatar-tiles'
 import { getTileLoader } from '../game/tiles/tile-loader'
+import { gemCell, runeCell } from './rune-sprites'
 
 // A real win blurb (dev-material/winning-morgues, identity swapped) — the
 // exact hiscores.cc verbose block every server and the offline engine send.
@@ -25,6 +26,18 @@ const WIN_BLURB = [
   '             ... and 15 runes!',
   '             ',
   '             The game lasted 03:29:45 (86006 turns).',
+].join('\n')
+// runes_gems_desc's gem clause follows the rune clause; the date tail moves
+// to whichever comes last (hiscores.cc:1980).
+const GEM_WIN_BLURB = [
+  '12345678 Demo the Infernalist (level 27, 164/164 HPs)',
+  '             Began as a Deep Elf Conjurer on Sept 6, 2026.',
+  '             Was the Champion of Makhleb.',
+  '             Escaped with the Orb',
+  '             ... and 10 runes',
+  '             ... and 4 gems on Sept 16, 2026!',
+  '             ',
+  '             The game lasted 16:45:25 (56352 turns).',
 ].join('\n')
 const DEATH_BLURB_LONG = [
   '67 Demo the Sneak (level 3, -2/18 HPs)',
@@ -107,6 +120,16 @@ export function buildDemoCards(base: Avatar | null, fallback?: DollRecipe | null
         tmsg: 'escaped with the Orb and 3 runes!',
         sc: '1234567', turn: '60000', dur: '18000', end: '20260601120000S',
       })), null, offlineDoll, ['serpentine', 'decaying', 'silver']) },
+    // Gems. The online win names 3 of its 4: the fourth was "picked up on
+    // another client", known only through the blurb's count → the "+1" chip.
+    { label: 'Online win · 10 runes + 4 gems, one gem known by count only (+1 chip)',
+      model: avatarToCard(online({ species: 'Deep Elf', title: 'the Infernalist', god: 'Makhleb', xl: 27,
+        runes: ALL_RUNES.slice(0, 10), gems: ['shimmering', 'shining', 'sanguine'],
+        outcome: { reason: 'won', message: GEM_WIN_BLURB, dump: 'https://crawl.dcss.io/morgue/demo/g', endedAt: Date.now() - 2 * 86400e3 } })) },
+    // A death keeps its gems; vmsg carries no "(N intact)" on deaths, so the
+    // row's own note shows (xlog fgem/igem).
+    { label: 'Offline death · 2 gems, 1 intact (xlog fgem/igem note), no runes',
+      model: xlogToCard(parseXlogLine(xlog({ urune: '0', fgem: '2', igem: '1' })), null, offlineDoll, null, ['earthy', 'jade']) },
     { label: 'Wizmode Orb escape · *WIZ* headline tail, Orb only, 0 runes',
       model: avatarToCard(online({ title: 'the Ruthless', xl: 27,
         outcome: { reason: 'won', message: WIZ_BLURB, endedAt: Date.now() - 600e3 } })) },
@@ -136,7 +159,8 @@ export function buildDemoCards(base: Avatar | null, fallback?: DollRecipe | null
 // DEV-only styling lives here rather than style.css so the feature leaves no
 // trace in the prod bundle (main.ts loads this module behind DEV).
 const DEMO_CSS = `
-.card-demo-dolls { display: flex; gap: 1rem; align-items: flex-end; padding: 0.4rem 0.6rem 0.2rem; overflow-x: auto; }
+.card-demo-dolls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; padding: 0.4rem 0.6rem 0.2rem; }
+.card-demo-glyphs { padding: 0.6rem 0.6rem 0.2rem; }
 .card-demo-label { color: var(--text-dim); font-size: 0.7rem; margin: 0.6rem 0 -0.3rem 0.2rem; }`
 
 let openView: { view: HTMLElement; close: () => void } | null = null
@@ -154,8 +178,8 @@ async function localHumanRecipe(): Promise<DollRecipe | null> {
 }
 
 // A doll strip above the cards: the same fixtures as marked dolls at the
-// shelf (2) and crypt-grid (2.5) scales — rune fan, "+N" pip, Orb badge
-// (rune-marks.ts).
+// shelf (2) and crypt-grid (2.5) scales — rune fan, total pip, Orb badge,
+// ♦N gem chip (rune-marks.ts).
 function mountDollStrip(host: HTMLElement, recipe: DollRecipe | null): void {
   if (!recipe) return
   const dolls: MarkedRecipe[] = [
@@ -165,6 +189,11 @@ function mountDollStrip(host: HTMLElement, recipe: DollRecipe | null): void {
     { ...recipe, outcome: { reason: 'won', message: WIZ_BLURB, endedAt: 0 } },
     { ...recipe, outcome: { reason: 'dead', endedAt: 0 } },
     { ...recipe, orb: true, runes: ['serpentine'] },
+    { ...recipe, runes: ALL_RUNES.slice(0, 10), gems: ['shimmering', 'shining', 'sanguine'], outcome: { reason: 'won', message: GEM_WIN_BLURB, endedAt: 0 } },
+    { ...recipe, gems: ['earthy'], outcome: { reason: 'dead', endedAt: 0 } },
+    // The widest fan row: 3 cards, a two-digit rune pip, a two-digit chip.
+    { ...recipe, runes: ALL_RUNES, gems: ['smoky', 'shimmering', 'earthy', 'mossy', 'azure', 'jade',
+      'milky-white', 'starry', 'shining', 'ivory', 'sanguine', 'midnight', 'prismatic'] },
   ]
   for (const scale of [2, 2.5]) {
     const strip = document.createElement('div')
@@ -191,9 +220,22 @@ async function mountGallery(list: HTMLElement, base: Avatar | null): Promise<voi
   const fallback = base ? null : await localHumanRecipe()
   const cap0 = document.createElement('div')
   cap0.className = 'card-demo-label'
-  cap0.textContent = 'Doll marks · 1 rune / 3 runes / 15 + Orb / Orb only / plain / live orb run — shelf and crypt-grid scales'
+  cap0.textContent = 'Doll marks · 1 rune / 3 runes / 15 + Orb / Orb only / plain / live orb run / 10 runes + 4 gems win / 1 gem death / 15 runes + 13 gems — shelf and crypt-grid scales'
   list.append(cap0)
   mountDollStrip(list, base ? pureRecipe(base) : fallback)
+  // The glyph placeholders a cell shows before (or without) its sprite —
+  // never filled here, so they stay visible for review.
+  const cap1 = document.createElement('div')
+  cap1.className = 'card-demo-label'
+  cap1.textContent = 'Placeholders (no sprite source) · runes φ, Orb 0, gems ♦ in their item colours, an unknown (future) gem word last'
+  const glyphs = document.createElement('div')
+  glyphs.className = 'rune-row card-demo-glyphs'
+  glyphs.append(
+    ...['serpentine', 'golden', 'abyssal', 'glowing'].map((w) => runeCell(w, 0.75)),
+    runeCell('orb', 0.75),
+    ...['shimmering', 'earthy', 'azure', 'jade', 'sanguine', 'midnight', 'nacreous'].map((w) => gemCell(w, 0.75)),
+  )
+  list.append(cap1, glyphs)
   for (const { label, model, hero } of buildDemoCards(base, fallback)) {
     const cap = document.createElement('div')
     cap.className = 'card-demo-label'

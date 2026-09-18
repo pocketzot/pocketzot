@@ -14,7 +14,7 @@
 // (dev-material/character-cards.md "Step zero").
 
 import { avatarSlotKey, type Avatar } from '../avatars'
-import { parseMorgueRunes } from '../game/rune-messages'
+import { parseMorgueGems, parseMorgueRunes } from '../game/rune-messages'
 import { bakedDollUrl } from '../game/tiles/avatar-bake'
 import { dollTileSpec } from '../game/tiles/tile-view'
 import { OFFLINE_GAME_ID, OFFLINE_WS_URL } from './offline-state'
@@ -153,28 +153,32 @@ export async function readDollSidecars(
   return out
 }
 
-// The runes named in each record's morgue (`}` line — parseMorgueRunes), one
-// read transaction. Only records whose xlog says they hold a rune (`urune`)
-// are read at all: morgues run ~100 KB each, and most games end rune-less.
-// Records whose morgue is missing — or has no rune line (an RC `dump_order`
-// without the overview screen drops it; a truncated import) — are absent
-// from the map, so the caller falls back to the avatar join's live-parsed
-// pickups.
-export async function readMorgueRunes(
+// The runes and gems named in each record's morgue (runes: the `}` line —
+// parseMorgueRunes; gems: the notes — parseMorgueGems), one read
+// transaction. Only records whose xlog says they hold either (`urune` /
+// `fgem`) are read at all: morgues run ~100 KB each, and most games end with
+// neither. A list the morgue can't supply — file missing, truncated import,
+// an RC `dump_order` without the overview screen (runes) or the notes (gems)
+// — comes back EMPTY, and a record with both empty is absent from the map;
+// the caller falls back per list to the avatar join's live-parsed pickups.
+export interface MorgueCollection { runes: string[]; gems: string[] }
+export async function readMorgueCollections(
   recs: readonly XlogRecord[],
-): Promise<Map<XlogRecord, string[]>> {
+): Promise<Map<XlogRecord, MorgueCollection>> {
   const wanted = recs
-    .filter((rec) => Number(rec['urune']) > 0)
+    .filter((rec) => Number(rec['urune']) > 0 || Number(rec['fgem']) > 0)
     .map((rec) => ({ rec, path: morguePath(rec) }))
     .filter((w): w is { rec: XlogRecord; path: string } => w.path !== null)
-  const out = new Map<XlogRecord, string[]>()
+  const out = new Map<XlogRecord, MorgueCollection>()
   if (wanted.length === 0) return out
   const files = await readOfflineFilesAt(wanted.map((w) => w.path))
   const dec = new TextDecoder()
   for (const { rec, path } of wanted) {
     const bytes = files.get(path)
-    const runes = bytes?.length ? parseMorgueRunes(dec.decode(bytes)) : []
-    if (runes.length > 0) out.set(rec, runes)
+    if (!bytes?.length) continue
+    const text = dec.decode(bytes)
+    const found = { runes: parseMorgueRunes(text), gems: parseMorgueGems(text) }
+    if (found.runes.length > 0 || found.gems.length > 0) out.set(rec, found)
   }
   return out
 }

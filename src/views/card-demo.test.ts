@@ -8,6 +8,10 @@ vi.mock('./rune-sprites', () => ({
   renderRuneRow: vi.fn((runes: string[]) => {
     const d = document.createElement('div'); d.className = 'rune-row'; d.dataset.n = String(runes.length); return d
   }),
+  renderGemRow: vi.fn((gems: string[], opts: { total?: number }) => {
+    const d = document.createElement('div'); d.className = 'gem-row'
+    d.dataset.n = String(Math.max(gems.length, opts.total ?? 0)); return d
+  }),
   renderOrbTrophy: vi.fn(() => document.createElement('span')),
 }))
 
@@ -30,5 +34,9 @@ describe('buildDemoCards', () => {
     expect(by('Unparseable').result.verbose).toBe('Slain by an orc\nOn D:9')
     for (const c of cards) expect(renderCharCard(c.model, { hero: c.hero })).toBeInstanceOf(HTMLElement)
     expect(renderCharCard(by('Online win')).querySelector<HTMLElement>('.rune-row')?.dataset.n).toBe('15')
+    // 3 named gems + the blurb's count of 4: the row pads to the count.
+    expect(by('Online win · 10 runes')).toMatchObject({ gemCount: 4, gems: ['shimmering', 'shining', 'sanguine'] })
+    expect(renderCharCard(by('Online win · 10 runes')).querySelector<HTMLElement>('.gem-row')?.dataset.n).toBe('4')
+    expect(by('Offline death · 2 gems')).toMatchObject({ gemCount: 2, gemNote: '1 intact' })
   })
 })
