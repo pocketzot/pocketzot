@@ -11,13 +11,12 @@ Notable changes to PocketZot, newest first.
 
 ## 2026-09-17
 
-- Monster list: if it's blocking something on the map, swipe it to
-  the other side, or drag it to peek behind and let it snap back.
+- Monster list: if it's blocking something on the map, you can now
+  swipe it to the other side, or drag it to peek behind and let it
+  snap back.
 - The monster list now grows wider when the chat chip is hidden.
 - Offline lobby polish.
-- Online lobby: on servers that report saved games (crawl.akrasiac.org,
-  cbro.berotato.org), the play button shows the server's description of
-  the character you'd resume, as the server words it.
+- Other improvements.
 
 ## 2026-09-16
 
