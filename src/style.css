@@ -1217,37 +1217,23 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Accent on a name means "your character" in both lobbies (the play row
-   here, the offline slot rows) — the spectate list's strangers are neutral. */
+/* Accent on a name means "your character" (the offline slot rows) — the
+   spectate list's strangers are neutral. */
 #lobby-list .lobby-game-user { color: var(--text); }
 #lobby-list .lobby-game-row.is-idle .lobby-game-user { color: var(--text-dim); }
 
-/* Headline play button as the character in progress (lobby.ts makePlayRow).
-   Stable and trunk rows are identical but for the version chip, which
-   carries the buttons' own tell (see .lobby-btn-trunk): filled = stable,
-   hollow = trunk. Row-level tells were tried and dropped 2026-09-17 (clear
-   ground, dotted/dashed border): a subtle difference nothing explains reads
-   as a glitch — keep the tell on the word that names it. */
-.lobby-play-row { border-color: var(--accent); }
-.lobby-btn-secondary.has-save { border-color: var(--accent); color: var(--text); }
-.lobby-play-row .lobby-game-toprow { justify-content: space-between; }
-.lobby-play-version {
-  /* The text is the server's own game name; a wordy one truncates rather
-     than crowding out the character's name. */
-  flex: 0 0 auto;
-  max-width: 45%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 0.72rem;
-  font-weight: bold;
-  white-space: nowrap;
-  padding: 0.1rem 0.45rem;
-  border: 1px solid var(--accent);
-  border-radius: 3px;
-  background: var(--accent);
-  color: var(--bg);
+/* A game the server reports a save for (lobby.ts makeGameBtn): a headline
+   button carries the server's description as a second line, a version-list
+   button only the accent border. */
+.lobby-btn-primary.has-save { text-align: left; }
+.lobby-btn-save {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: normal;
+  white-space: normal;
 }
-.lobby-play-row-trunk .lobby-play-version { background: transparent; color: var(--accent); }
+.lobby-btn-secondary.has-save { border-color: var(--accent); color: var(--text); }
 .lobby-game-info { font-size: 0.85rem; color: var(--text-dim); }
 .lobby-game-idle { flex: 0 0 auto; white-space: nowrap; font-size: 0.8rem; color: var(--text-dim); }
 .lobby-game-idle:empty { display: none; }
