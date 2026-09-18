@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Avatar } from '../avatars'
-import { cachedFingerprint, resolvePlayerLoader } from '../game/tiles/atlas-dedup'
+import { bakeViaLocalPack, cachedFingerprint, resolvePlayerLoader } from '../game/tiles/atlas-dedup'
 import { bakedDollUrl, dropBakedDoll, ensureDollBaked } from '../game/tiles/avatar-bake'
 import type { TileLoader } from '../game/tiles/tile-loader'
 import { paintAvatars } from './avatar-tiles'
@@ -13,6 +13,7 @@ vi.mock('../game/tiles/atlas-dedup', () => ({
   resolvePlayerLoader: vi.fn(),
   cachedFingerprint: vi.fn(() => null),
   seedLocalPlayerAtlas: vi.fn(async () => {}),
+  bakeViaLocalPack: vi.fn(async () => null),
 }))
 vi.mock('../game/tiles/avatar-bake', () => ({
   bakedDollUrl: vi.fn(() => null),
@@ -29,6 +30,7 @@ vi.mock('../game/tiles/tile-view', () => ({
   },
 }))
 const resolveMock = vi.mocked(resolvePlayerLoader)
+const viaPackMock = vi.mocked(bakeViaLocalPack)
 const cachedFpMock = vi.mocked(cachedFingerprint)
 const bakedUrlMock = vi.mocked(bakedDollUrl)
 const dropBakeMock = vi.mocked(dropBakedDoll)
@@ -49,6 +51,7 @@ function dolls(container: HTMLElement): string[] {
 
 beforeEach(() => {
   resolveMock.mockReset()
+  viaPackMock.mockReset().mockResolvedValue(null)
   cachedFpMock.mockReset().mockReturnValue(null)
   bakedUrlMock.mockReset().mockReturnValue(null)
   dropBakeMock.mockReset()
@@ -148,6 +151,42 @@ describe('paintAvatars', () => {
     // spec per the dollTileSpec mock: [cell.doll] = [[['a']]]
     expect(ensureBakedMock).toHaveBeenCalledWith(LOADER, 'fp1', [[['a']]])
     expect(container.children[0].tagName).toBe('DIV') // this paint still shows the live render
+  })
+
+  it('places a pack-baked foreign-era doll without resolving its own atlas', async () => {
+    // A stable-server recipe with the offline pack on device: bakeViaLocalPack
+    // re-addresses it by name and hands back a bake — the server's atlas is
+    // never resolved, and the doll places as an <img> in list order.
+    cachedFpMock.mockImplementation((_h, version) => (version === 'v1' ? 'fp-0.34' : null))
+    viaPackMock.mockImplementation(async (_h, version) => (version === 'v1' ? { url: 'data:pack', fp: 'fp-0.34' } : null))
+    resolveMock.mockResolvedValue(LOADER)
+    const container = document.createElement('div')
+    await paintAvatars(container, [avatar('a', 'v1'), avatar('b', 'v2')], 2, 'x')
+    expect(viaPackMock).toHaveBeenCalledWith('https://x', 'v1', 'fp-0.34', [[['a']]])
+    expect(resolveMock).toHaveBeenCalledTimes(1) // b only
+    expect(resolveMock).toHaveBeenCalledWith('https://x', 'v2')
+    const img = container.children[0] as HTMLImageElement
+    expect(img.tagName).toBe('IMG')
+    expect(img.src).toBe('data:pack')
+    expect(container.children[1].tagName).toBe('DIV')
+    expect(ensureBakedMock).not.toHaveBeenCalledWith(LOADER, 'fp-0.34', expect.anything())
+  })
+
+  it('self-heals a broken pack bake onto the atlas path, not back through the pack', async () => {
+    // A stored bake handed back by bakeViaLocalPack (fp uncached at paint
+    // start) that fails to decode: drop it and render off an atlas — never
+    // re-bake, so a bake that keeps coming out broken can't loop.
+    viaPackMock.mockResolvedValue({ url: 'data:stale', fp: 'fp1' })
+    resolveMock.mockResolvedValue(LOADER)
+    const container = document.createElement('div')
+    await paintAvatars(container, [avatar('a', 'v1')], 1, 'x')
+    const img = container.children[0]
+    expect(img.tagName).toBe('IMG')
+    img.dispatchEvent(new Event('error'))
+    await vi.waitFor(() => expect(dolls(container)).toEqual(['a']))
+    expect(dropBakeMock).toHaveBeenCalledWith('fp1', [[['a']]])
+    expect(viaPackMock).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('img')).toBeNull()
   })
 
   it('never requests a bake without a fingerprint', async () => {

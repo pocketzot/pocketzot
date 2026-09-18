@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeStorage } from '../../test/fake-storage'
-import { BAKE_CAP, bakeDoll, bakedDollUrl, dropBakedDoll, ensureDollBaked, isBakeableLoader, storeBakedDoll } from './avatar-bake'
-import type { TileLoader, TileSprite } from './tile-loader'
+import { BAKE_CAP, bakeDoll, bakedDollUrl, dropBakedDoll, ensureDollBaked, isBakeableLoader, remapSpecByName, storeBakedDoll } from './avatar-bake'
+import type { TileinfoModule, TileLoader, TileSprite } from './tile-loader'
 import type { TileRef } from './tile-view'
 
 const spec = (t: number): TileRef[] => [{ t, tex: 3 }]
@@ -58,6 +58,32 @@ describe('isBakeableLoader', () => {
   it('accepts origin-relative bases only', () => {
     expect(isBakeableLoader({ base: '/gamedata/local' } as TileLoader)).toBe(true)
     expect(isBakeableLoader({ base: 'https://crawl.dcss.io/gamedata/abc' } as TileLoader)).toBe(false)
+  })
+})
+
+describe('remapSpecByName', () => {
+  // Two eras of a generated tileinfo-player: the same names, shifted ids
+  // (a tile inserted ahead of BODY), one dropped tile, and an alias sharing
+  // its base's id — the shapes tile_list_processor.cc emits.
+  const mod = (o: Record<string, number>): TileinfoModule => o as unknown as TileinfoModule
+  const era34 = mod({ MONS_A: 100, BODY: 101, BODY_CYAN: 101, ARMATAUR: 102 })
+  const trunk = mod({ MONS_A: 100, GALE: 101, BODY: 102, BODY_CYAN: 102 })
+
+  it('re-addresses every layer by name, carrying the layer offsets over', () => {
+    const out = remapSpecByName(era34, trunk, [{ t: 100, tex: 3 }, { t: 101, tex: 3, xofs: 2, ymax: 20 }])
+    expect(out).toEqual([{ t: 100, tex: 3 }, { t: 102, tex: 3, xofs: 2, ymax: 20 }])
+  })
+
+  it('maps an aliased id through the base name, not the alias', () => {
+    // Insertion order puts BODY before BODY_CYAN; both exist in trunk anyway,
+    // but the first name is the one every era is guaranteed to export.
+    const out = remapSpecByName(mod({ BODY: 5, BODY_ALIAS: 5 }), mod({ BODY: 9 }), [{ t: 5, tex: 3 }])
+    expect(out).toEqual([{ t: 9, tex: 3 }])
+  })
+
+  it('is null when any layer has no name or the name is gone', () => {
+    expect(remapSpecByName(era34, trunk, [{ t: 100, tex: 3 }, { t: 102, tex: 3 }])).toBeNull() // ARMATAUR dropped
+    expect(remapSpecByName(era34, trunk, [{ t: 999, tex: 3 }])).toBeNull()                     // unnamed id
   })
 })
 

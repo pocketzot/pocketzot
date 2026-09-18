@@ -20,7 +20,9 @@
 // dead dir at all.
 
 import { cachedGamedataBuild } from '../../offline/artifact-store'
+import { bakeDoll, bakeKey, bakedDollUrl, remapSpecByName, storeBakedDoll } from './avatar-bake'
 import { TEX, getTileLoader, type TileLoader } from './tile-loader'
+import type { TileRef } from './tile-view'
 
 const FP_KEY = 'pocketzot:atlas-fp'
 // NUL can't appear in origins or version dir names (same trick as avatars.ts).
@@ -100,10 +102,21 @@ export async function playerAtlasFingerprint(src: Pick<TileLoader, 'getModule'>)
 // re-resolves (and the browser HTTP cache makes a re-created loader's atlas
 // reload cheap).
 const groupRep = new Map<string, { httpBase: string; version: string }>()
+// The seeded pack's fingerprint, for bakeViaLocalPack; null until a seed
+// succeeds this session.
+let localPack: string | null = null
+// Also session-scoped, for bakeViaLocalPack: fingerprint → a version whose
+// tileinfo-player loaded (its module source of choice), and the
+// (fingerprint, spec) pairs the pack has no names for.
+const moduleRep = new Map<string, { httpBase: string; version: string }>()
+const unbakeable = new Set<string>()
 
 // Test-only: clear the session group claims between cases.
 export function resetAtlasGroups(): void {
   groupRep.clear()
+  moduleRep.clear()
+  unbakeable.clear()
+  localPack = null
 }
 
 // Seed the offline tiles pack (/gamedata/local/, downloaded via the offline
@@ -129,7 +142,65 @@ export async function seedLocalPlayerAtlas(): Promise<void> {
     // atlas (atlasOk) and drop the claim on failure, so preferring local is
     // safe even if its atlas were to turn out unreadable.
     groupRep.set(fp, { httpBase: '', version: 'local' })
+    localPack = fp
   } catch { /* pack unreadable or unfingerprintable — paint proceeds without it */ }
+}
+
+// Bake a recipe whose player-table layout is NOT the pack's — the common
+// case, since the pack is one trunk build and most saved characters are
+// from a stable server: their fingerprints can never agree (0.34.1 → trunk
+// shifts ~170 lines of dc-player.txt), so the group claim never lets them
+// adopt the pack, they never bake, and every launch re-resolves them off
+// their server's cross-origin atlas. The ids are re-addressed by tile name
+// (avatar-bake.ts remapSpecByName) through the recipe's own tileinfo-player
+// — a script load the fingerprint needs anyway, ~130 KB gzipped for the
+// chain against ~1.2 MB + decode for the atlas it replaces — and the bake
+// is stored under the recipe's OWN (fingerprint, spec) key, so later paints
+// hit the ordinary baked short-circuit with no remap at all.
+//
+// Null (caller takes the live path) when: no pack is seeded; the recipe is
+// unfingerprintable; the fingerprints match (the live path then adopts the
+// pack and bakes directly — no remap needed); a layer's name is missing from
+// the pack; or the bake itself fails. Drawn with the pack's art for those
+// names, like every offline character — a redrawn sprite shows the pack's
+// version, which is the accepted policy for bakes (they also outlive pack
+// updates).
+//
+// The name table is read from any live same-fingerprint version, not
+// necessarily the recipe's own: an equal fingerprint is an identical id →
+// rect table, so the module is interchangeable the way the atlas is. This
+// keeps the dead-dir rescue intact — a pruned build whose group a live
+// sibling has claimed (or already baked through) must not get its dead dir
+// probed first, which on a blackholed host is a TCP timeout per paint, since
+// the bake that would end the probing can never land off a dead dir.
+export async function bakeViaLocalPack(httpBase: string, version: string, fp: string | null, spec: TileRef[]): Promise<{ url: string; fp: string } | null> {
+  if (localPack == null) return null
+  try {
+    fp ??= await ensureFingerprint(httpBase, version)
+    if (fp == null || fp === localPack) return null
+    const existing = bakedDollUrl(fp, spec)
+    if (existing != null) return { url: existing, fp }
+    // Unmappable within this session stays unmappable (the pack doesn't
+    // change under a running page): don't re-load the module every paint.
+    const key = bakeKey(fp, spec)
+    if (unbakeable.has(key)) return null
+    const rep = moduleRep.get(fp) ?? groupRep.get(fp) ?? { httpBase, version }
+    const src = getTileLoader(rep.httpBase, rep.version)
+    const local = getTileLoader('', 'local')
+    const [srcMod, dstMod] = await Promise.all([src.getModule('player'), local.getModule('player')])
+    moduleRep.set(fp, rep)
+    const localSpec = remapSpecByName(srcMod, dstMod, spec)
+    if (!localSpec) {
+      unbakeable.add(key)
+      return null
+    }
+    const url = await bakeDoll(local, localSpec)
+    if (!url) return null
+    storeBakedDoll(fp, spec, url)
+    return { url, fp }
+  } catch {
+    return null
+  }
 }
 
 // Ensure a version's fingerprint is in the persistent cache, computing it
@@ -148,6 +219,20 @@ export async function primeFingerprint(httpBase: string, version: string, force 
   } catch { /* unfingerprintable — captures fall back to fp-less entries */ }
 }
 
+// A version's fingerprint from the cache, else computed from its own
+// tileinfo and cached; null when unfingerprintable.
+async function ensureFingerprint(httpBase: string, version: string): Promise<string | null> {
+  const cached = cachedFingerprint(httpBase, version)
+  if (cached != null) return cached
+  try {
+    const fp = await playerAtlasFingerprint(getTileLoader(httpBase, version))
+    storeFingerprint(httpBase, version, fp)
+    return fp
+  } catch {
+    return null
+  }
+}
+
 function atlasOk(l: TileLoader): Promise<boolean> {
   return l.ensureLoaded(TEX.PLAYER).then(() => true, () => false)
 }
@@ -157,15 +242,7 @@ function atlasOk(l: TileLoader): Promise<boolean> {
 // representative over fetching this version's own atlas. Returns null when no
 // compatible atlas is reachable (caller skips the doll, as before dedup).
 export async function resolvePlayerLoader(httpBase: string, version: string): Promise<TileLoader | null> {
-  let fp = cachedFingerprint(httpBase, version)
-  if (fp == null) {
-    try {
-      fp = await playerAtlasFingerprint(getTileLoader(httpBase, version))
-      storeFingerprint(httpBase, version, fp)
-    } catch {
-      fp = null
-    }
-  }
+  const fp = await ensureFingerprint(httpBase, version)
   if (fp == null) {
     // Unfingerprintable (tileinfo unreachable or unrecognizable): the
     // pre-dedup per-version path. If the version dir is dead this fails too

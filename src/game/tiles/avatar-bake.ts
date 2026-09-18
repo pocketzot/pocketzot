@@ -18,7 +18,7 @@
 // same-origin atlas next resolves.
 
 import { STORE_CAP } from '../../avatars'
-import type { TileLoader } from './tile-loader'
+import type { TileinfoModule, TileLoader } from './tile-loader'
 import { CELL, spritePlacement, type TileRef } from './tile-view'
 
 const BAKE_KEY = 'pocketzot:avatar-bakes'
@@ -64,7 +64,7 @@ function persist(cache: Record<string, string>): void {
   } catch {}
 }
 
-function bakeKey(fp: string, spec: TileRef[]): string {
+export function bakeKey(fp: string, spec: TileRef[]): string {
   // djb2 over the spec JSON — same-shaped specs always stringify identically
   // (TileRef literals from dollTileSpec, stable key order).
   const s = JSON.stringify(spec)
@@ -120,6 +120,37 @@ export async function ensureDollBaked(loader: TileLoader, fp: string, spec: Tile
     const url = await bakeDoll(loader, spec)
     if (url) storeBakedDoll(fp, spec, url)
   } catch { /* no bake this time — live rendering is unaffected */ }
+}
+
+// Re-address a spec from one era's player table to another's by tile NAME.
+// Ids are per-era (tile_list_processor.cc numbers each `exports.<NAME> =
+// val++` in dc-player.txt order, so any added or dropped tile shifts every id
+// after it), but the generated module exports a name for every id, and a
+// name is what stays put across eras: 0.34.1 → trunk moves ~170 lines of
+// dc-player.txt yet keeps every surviving name. Aliases (`val = exports.X =
+// exports.BASE; val++`) share the base's id; the reverse map keeps the FIRST
+// name per id, i.e. the base every era exports. Null when any layer has no
+// name or the name is missing from `dst` (a dropped tile, e.g. ARMATAUR
+// after trunk's Gale Centaur rename) — one unmappable layer is a wrong doll,
+// not a doll with a hole.
+const nameById = new WeakMap<TileinfoModule, Map<number, string>>()
+export function remapSpecByName(src: TileinfoModule, dst: TileinfoModule, spec: TileRef[]): TileRef[] | null {
+  let rev = nameById.get(src)
+  if (!rev) {
+    rev = new Map()
+    for (const [k, v] of Object.entries(src)) {
+      if (typeof v === 'number' && !rev.has(v)) rev.set(v, k)
+    }
+    nameById.set(src, rev)
+  }
+  const out: TileRef[] = []
+  for (const r of spec) {
+    const name = rev.get(r.t)
+    const t = name != null ? dst[name] : undefined
+    if (typeof t !== 'number') return null
+    out.push({ ...r, t })
+  }
+  return out
 }
 
 // Composite a doll spec at native atlas resolution (32×32; display scaling is

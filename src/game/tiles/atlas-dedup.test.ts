@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeStorage } from '../../test/fake-storage'
 import { cachedGamedataBuild } from '../../offline/artifact-store'
 import {
+  bakeViaLocalPack,
   cachedFingerprint,
   playerAtlasFingerprint,
   primeFingerprint,
@@ -10,6 +11,7 @@ import {
   seedLocalPlayerAtlas,
   storeFingerprint,
 } from './atlas-dedup'
+import { bakeDoll, bakedDollUrl } from './avatar-bake'
 import { getTileLoader, type TileLoader } from './tile-loader'
 
 // resolvePlayerLoader reaches the network only through getTileLoader — mock it
@@ -23,8 +25,15 @@ vi.mock('./tile-loader', () => ({
 vi.mock('../../offline/artifact-store', () => ({
   cachedGamedataBuild: vi.fn(async () => null),
 }))
+// bakeViaLocalPack composites through bakeDoll (canvas — none in happy-dom);
+// the cache and the name remap stay real.
+vi.mock('./avatar-bake', async (orig) => ({
+  ...(await orig<typeof import('./avatar-bake')>()),
+  bakeDoll: vi.fn(async () => 'data:baked'),
+}))
 const getTileLoaderMock = vi.mocked(getTileLoader)
 const buildMock = vi.mocked(cachedGamedataBuild)
+const bakeDollMock = vi.mocked(bakeDoll)
 
 interface Rect { w: number; h: number; ox: number; oy: number; sx: number; sy: number; ex: number; ey: number }
 
@@ -38,16 +47,19 @@ function rect(seed: number): Rect {
 function fakeLoader(opts: {
   start?: number
   table?: Rect[]
+  names?: string[]  // exported tile names, in id order from `start`
   atlasFails?: boolean
   moduleFails?: boolean
 } = {}): TileLoader {
   const start = opts.start ?? 5000
   const table = opts.table ?? [rect(1), rect(2), rect(3)]
+  const player = { get_tile_info: (i: number) => table[i - start] } as Record<string, unknown>
+  opts.names?.forEach((n, i) => { player[n] = start + i })
   return {
     getModule: vi.fn(async (name: string) => {
       if (opts.moduleFails) throw new Error('tileinfo 404')
       if (name === 'main') return { TILE_MAIN_MAX: start, get_tile_info: () => undefined }
-      return { get_tile_info: (i: number) => table[i - start] }
+      return player
     }),
     ensureLoaded: vi.fn(async () => {
       if (opts.atlasFails) throw new Error('atlas 404')
@@ -74,6 +86,7 @@ beforeEach(() => {
   resetAtlasGroups()
   getTileLoaderMock.mockReset()
   buildMock.mockReset().mockResolvedValue(null)
+  bakeDollMock.mockReset().mockResolvedValue('data:baked')
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -315,5 +328,86 @@ describe('seedLocalPlayerAtlas', () => {
     // The recipe falls back to its own (cross-origin) atlas as before.
     const own = getTileLoaderMock('https://x', 'v1')
     expect(await resolvePlayerLoader('https://x', 'v1')).toBe(own)
+  })
+})
+
+describe('bakeViaLocalPack', () => {
+  // A stable-era recipe against a trunk pack: one tile inserted ahead of BODY
+  // shifts its id, so the layouts fingerprint apart and only a name lookup
+  // can find BODY in the pack.
+  const stable = (): TileLoader => fakeLoader({ table: [rect(1), rect(2)], names: ['HEAD', 'BODY'] })
+  const pack = (): TileLoader => fakeLoader({ table: [rect(1), rect(3), rect(2)], names: ['HEAD', 'NEW', 'BODY'] })
+  const recipe = [{ t: 5000, tex: 3 }, { t: 5001, tex: 3, yofs: 1 }]
+
+  it('is null before a pack is seeded', async () => {
+    registry({ 'https://x|v1': stable() })
+    expect(await bakeViaLocalPack('https://x', 'v1', null, recipe)).toBeNull()
+    expect(getTileLoaderMock).not.toHaveBeenCalled()
+  })
+
+  it('bakes a foreign-era recipe off the pack by name, stored under its own key', async () => {
+    buildMock.mockResolvedValue('b1')
+    const local = pack()
+    const remote = stable()
+    registry({ '|local': local, 'https://x|v1': remote })
+    await seedLocalPlayerAtlas()
+    const baked = await bakeViaLocalPack('https://x', 'v1', null, recipe)
+    // Drawn from the pack, at the pack's ids, offsets carried over.
+    expect(bakeDollMock).toHaveBeenCalledWith(local, [{ t: 5000, tex: 3 }, { t: 5002, tex: 3, yofs: 1 }])
+    // The recipe's server atlas is never touched; its fingerprint got cached
+    // on the way (the modules were loaded anyway) and comes back with the url.
+    expect(remote.ensureLoaded).not.toHaveBeenCalled()
+    const fp = cachedFingerprint('https://x', 'v1')
+    expect(fp).not.toBeNull()
+    expect(baked).toEqual({ url: 'data:baked', fp })
+    expect(bakedDollUrl(fp!, recipe)).toBe('data:baked')
+    // Next paint: the ordinary baked short-circuit, no second bake.
+    expect(await bakeViaLocalPack('https://x', 'v1', fp, recipe)).toEqual({ url: 'data:baked', fp })
+    expect(bakeDollMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("reads the name table off a claimed same-fingerprint sibling, never a dead dir", async () => {
+    // The dead-dir rescue: a pruned build whose live sibling holds the group
+    // claim. Its own tileinfo must not be probed — the sibling's table is
+    // identical by fingerprint.
+    buildMock.mockResolvedValue('b1')
+    const dead = fakeLoader({ table: [rect(1), rect(2)], names: ['HEAD', 'BODY'], moduleFails: true, atlasFails: true })
+    const sibling = stable()
+    registry({ '|local': pack(), 'https://x|vDead': dead, 'https://x|vLive': sibling })
+    await seedLocalPlayerAtlas()
+    const fp = await playerAtlasFingerprint(sibling)
+    storeFingerprint('https://x', 'vDead', fp)
+    expect(await resolvePlayerLoader('https://x', 'vLive')).toBe(sibling) // claims the group
+    expect(await bakeViaLocalPack('https://x', 'vDead', fp, recipe)).toEqual({ url: 'data:baked', fp })
+    expect(dead.getModule).not.toHaveBeenCalled()
+  })
+
+  it('is null for a recipe the pack has no names for, and does not re-load its module', async () => {
+    buildMock.mockResolvedValue('b1')
+    const remote = fakeLoader({ table: [rect(1), rect(2)], names: ['HEAD', 'ARMATAUR'] })
+    registry({ '|local': pack(), 'https://x|v1': remote })
+    await seedLocalPlayerAtlas()
+    expect(await bakeViaLocalPack('https://x', 'v1', null, recipe)).toBeNull()
+    expect(bakeDollMock).not.toHaveBeenCalled()
+    const loads = vi.mocked(remote.getModule).mock.calls.length
+    expect(await bakeViaLocalPack('https://x', 'v1', null, recipe)).toBeNull()
+    expect(vi.mocked(remote.getModule).mock.calls.length).toBe(loads)
+  })
+
+  it('is null for a same-layout recipe (the live path adopts the pack directly)', async () => {
+    buildMock.mockResolvedValue('b1')
+    registry({ '|local': pack(), 'https://x|vT': pack() })
+    await seedLocalPlayerAtlas()
+    expect(await bakeViaLocalPack('https://x', 'vT', null, recipe)).toBeNull()
+    expect(bakeDollMock).not.toHaveBeenCalled()
+  })
+
+  it('is null, storing nothing, when the bake itself fails', async () => {
+    buildMock.mockResolvedValue('b1')
+    registry({ '|local': pack(), 'https://x|v2': stable() })
+    await seedLocalPlayerAtlas()
+    bakeDollMock.mockRejectedValue(new Error('atlas 404'))
+    expect(await bakeViaLocalPack('https://x', 'v2', null, recipe)).toBeNull()
+    expect(bakedDollUrl(cachedFingerprint('https://x', 'v2')!, recipe)).toBeNull()
   })
 })

@@ -1,7 +1,6 @@
 import type { Avatar } from '../avatars'
 import { bakedDollUrl, dropBakedDoll, ensureDollBaked } from '../game/tiles/avatar-bake'
-import { cachedFingerprint, resolvePlayerLoader, seedLocalPlayerAtlas } from '../game/tiles/atlas-dedup'
-import type { TileLoader } from '../game/tiles/tile-loader'
+import { bakeViaLocalPack, cachedFingerprint, resolvePlayerLoader, seedLocalPlayerAtlas } from '../game/tiles/atlas-dedup'
 import { CELL, renderTiles, dollTileSpec } from '../game/tiles/tile-view'
 import { marksFor, wrapWithRuneMarks } from './rune-marks'
 
@@ -101,17 +100,44 @@ export async function paintAvatars(
   // cache filled by earlier live resolves of this version.
   const fpOf = (e: typeof entries[number]): string | null =>
     e.fp ?? cachedFingerprint(e.httpBase, e.version)
-  // Resolve one entry live: place its tile-stack, and bake a thumbnail for
-  // next time (ensureDollBaked no-ops for cross-origin loaders and existing
-  // bakes; fire-and-forget — the paint never waits on a bake).
-  const resolveLive = async (e: typeof entries[number], i: number): Promise<TileLoader | null> => {
-    await seeded
+  // Resolve one entry off an atlas: place its tile-stack, and bake a
+  // thumbnail for next time (ensureDollBaked no-ops for cross-origin loaders
+  // and existing bakes; fire-and-forget — the paint never waits on a bake).
+  const resolveAtlas = async (e: typeof entries[number], i: number): Promise<boolean> => {
     const loader = await resolvePlayerLoader(e.httpBase, e.version)
-    if (!loader) return null
+    if (!loader) return false
     place(i, renderTiles(loader, e.spec, scale))
     const fp = fpOf(e)  // a cache-filling resolve may have just minted it
     if (fp != null) void ensureDollBaked(loader, fp, e.spec)
-    return loader
+    return true
+  }
+  // A stored bake that no longer decodes would otherwise be a permanently
+  // broken box (baked placements skip live resolution): drop it, remove the
+  // element (the wrapper when marked), and re-render via `heal`.
+  const selfHealing = (img: HTMLElement, e: typeof entries[number], i: number, fp: string, heal: () => Promise<boolean>): HTMLElement => {
+    img.addEventListener('error', () => {
+      dropBakedDoll(fp, e.spec)
+      ;(placed[i] ?? img).remove()
+      placed[i] = undefined
+      void heal()
+    })
+    return img
+  }
+  // Resolve one entry live. First try baking it off the on-device pack by
+  // tile name (atlas-dedup bakeViaLocalPack): a foreign-era recipe — most
+  // saved characters, see there — then places as a bake without its server's
+  // atlas ever loading, and hits the baked short-circuit from the next paint
+  // on. A pack bake can be a pre-existing stored one (fp uncached at paint
+  // start), so it self-heals too — onto the atlas path, never back through
+  // the pack, so a bake that keeps coming out broken can't loop.
+  const resolveLive = async (e: typeof entries[number], i: number): Promise<boolean> => {
+    await seeded
+    const viaPack = await bakeViaLocalPack(e.httpBase, e.version, fpOf(e), e.spec)
+    if (viaPack) {
+      place(i, selfHealing(bakedImg(viaPack.url, scale), e, i, viaPack.fp, () => resolveAtlas(e, i)))
+      return true
+    }
+    return resolveAtlas(e, i)
   }
   const resolved = await Promise.all(entries.map(async (e, i) => {
     // Baked thumbnail first: instant, and independent of any atlas being
@@ -120,17 +146,7 @@ export async function paintAvatars(
     const fp = fpOf(e)
     const baked = fp != null ? bakedDollUrl(fp, e.spec) : null
     if (fp != null && baked != null) {
-      const img = bakedImg(baked, scale)
-      // Self-heal: a stored data-URL that no longer decodes would otherwise
-      // be a permanently broken box (the baked path skips live resolution).
-      // Drop the bad bake and re-render this doll live.
-      img.addEventListener('error', () => {
-        dropBakedDoll(fp, e.spec)
-        ;(placed[i] ?? img).remove() // the wrapper when marked, else the img itself
-        placed[i] = undefined
-        void resolveLive(e, i)
-      })
-      place(i, img)
+      place(i, selfHealing(bakedImg(baked, scale), e, i, fp, () => resolveLive(e, i)))
       return 'baked' as const
     }
     return resolveLive(e, i)
