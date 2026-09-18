@@ -133,7 +133,12 @@ async function showOfflineGame(name: string): Promise<void> {
   // capture's character isn't yours and must not mint a phantom shelf entry.
   const gameId = params.get('engine') === 'fake' ? '' : OFFLINE_GAME_ID
   if (gameId) {
-    count('play-offline', gameStartFlags())
+    // J gates the Asyncify retirement (dev-material/jspi-migration.md).
+    // typeof guard: iOS Lockdown Mode removes WebAssembly entirely.
+    count('play-offline', {
+      ...gameStartFlags(),
+      jspi: typeof WebAssembly === 'object' && 'Suspending' in WebAssembly,
+    })
     setPref('loginOfflineOpen', null)  // playing offline outranks an old collapse; back to auto
   }
   state = 'game'

@@ -26,6 +26,7 @@ export interface CountFlags {
   standalone?: boolean     // W: display-mode standalone (installed-PWA launch)
   swControlled?: boolean   // C: SW controller present at boot
   userControls?: boolean   // U: user-defined control set active
+  jspi?: boolean           // J: WebAssembly JSPI available (play-offline)
 }
 
 const sent = new Set<CountedEvent>()
@@ -52,7 +53,7 @@ function send(event: string, flags: CountFlags, value?: number): void {
     if (event === 'boot') flags = { ...bootFlags(), ...flags }
     const f = (flags.ascii ? 'A' : '')
       + (flags.standalone ? 'W' : '') + (flags.swControlled ? 'C' : '')
-      + (flags.userControls ? 'U' : '')
+      + (flags.userControls ? 'U' : '') + (flags.jspi ? 'J' : '')
     const d = value !== undefined && Number.isFinite(value)
       ? `&d=${Math.round(value)}` : ''
     const pwa = new URLSearchParams(location.search).get('src') === 'pwa'

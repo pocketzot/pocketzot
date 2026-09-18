@@ -65,7 +65,9 @@ describe('counter', () => {
     const count = await freshCounter()
     count('boot', { swControlled: true, standalone: true })
     count('play', { userControls: true, ascii: true, standalone: true })
-    expect(sends).toEqual(['/api/e?e=boot&f=WC', '/api/e?e=play&f=AWU'])
+    count('play-offline', { jspi: true, ascii: true })
+    expect(sends).toEqual(['/api/e?e=boot&f=WC', '/api/e?e=play&f=AWU',
+      '/api/e?e=play-offline&f=AJ'])
   })
 
   it('appends the event value as d= and omits it when absent', async () => {
