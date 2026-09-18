@@ -3,17 +3,15 @@
 // — plus the sort/join helpers and the doll-sidecar machinery the records
 // browser builds its list from. A finished game's doll is a PNG file beside
 // its morgue (…doll.png): materializeDollSidecars freezes it there off the
-// avatar store's bake once, and from then on the file IS the record's doll —
-// deterministic by filename, exported with the backup pack, alive long after
-// the avatar store's capped history rolls the character off. The
-// avatars-store joins stay for the two live surfaces: joinDollRecipe feeds
-// the materializer, liveDollRecipe the save a lobby slot still holds.
-// Morgues and sidecars physically live in the records overlay, not the
-// engine's mount — save-transfer.ts routes by path, so every path here is
-// still the /crawl/morgue/... one the engine wrote. Reading is safe by
-// construction wherever the offline lobby is mounted (nothing else owns the
-// mount there); a mid-game read would just see the last persist checkpoint.
-// Paths verified live (dev-material/character-cards.md "Step zero").
+// avatar store's bake once, engine-stopped, and from then on the file IS the
+// record's doll — deterministic by filename, exported with the backup pack,
+// alive long after the avatar store's capped history rolls the character
+// off. The avatars-store joins stay for the two live surfaces: joinDollRecipe
+// feeds the materializer, liveDollRecipe the save a lobby slot still holds.
+// Reading is safe by construction wherever the offline lobby is mounted
+// (nothing else owns the mount there); a mid-game read would just see the
+// last persist checkpoint. Paths verified live
+// (dev-material/character-cards.md "Step zero").
 
 import { avatarSlotKey, type Avatar } from '../avatars'
 import { parseMorgueRunes } from '../game/rune-messages'
@@ -105,13 +103,13 @@ export function dollSidecarPath(rec: XlogRecord): string | null {
 // (avatar-bake.ts — offline captures eager-bake, so one nearly always
 // exists) beside the morgue. Idempotent — existing sidecars are skipped, and
 // a miss (nothing joins, bake not present yet) just retries on the next
-// call. The write lands in the records overlay (save-transfer.ts), which the
-// engine never mounts — so unlike the mount mutations on this surface it
-// needs no engine-stopped guard: an engine booting mid-write can't reconcile
-// a sidecar away.
+// call. Engine-stopped-only, like every mutation on this surface — and
+// because the caller typically fires this without awaiting it, `stillStopped`
+// lets it re-assert that right before the write (see below).
 export async function materializeDollSidecars(
   recs: readonly XlogRecord[],
   avatars: readonly Avatar[],
+  stillStopped?: () => boolean,
 ): Promise<void> {
   const wanted = recs
     .map((rec) => ({ rec, path: dollSidecarPath(rec) }))
@@ -129,6 +127,11 @@ export async function materializeDollSidecars(
     if (data !== null) writes.push({ path, mode: 0o100664, mtimeMs: Date.now(), data })
   }
   if (writes.length === 0) return
+  // The existence read above takes real time — long enough for a lobby tap
+  // to boot the engine, whose next syncfs reconcile would silently delete a
+  // sidecar written after its IDBFS mount populated (the same clobber
+  // boot.ts documents for __pzSave.import). Re-check before committing.
+  if (stillStopped && !stillStopped()) return
   await writeOfflineFiles(writes)
 }
 

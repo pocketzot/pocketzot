@@ -15,7 +15,7 @@ import {
   validateOfflineName, OFFLINE_NAME_MAX, type OfflineChar,
 } from '../offline/offline-state'
 import {
-  buildExportPackFile, fetchEngineBuild, migrateRecordFiles,
+  buildExportPackFile, fetchEngineBuild,
   readOfflineFiles, sharePack, unpackSave, writeOfflineFiles,
 } from '../offline/save-transfer'
 import {
@@ -432,16 +432,14 @@ export function buildOfflineLobbyView(
     // A failed probe keeps the row's last state — nothing new to browse.
     const recs = await readGameRecords().catch(() => null)
     if (recs === null || !view.isConnected) return
-    // Move the morgues the engine wrote since the last visit out of its
-    // mount into the records overlay (save-transfer.ts) — the engine is
-    // stopped while this view is up (a slot tap mid-pass makes it yield its
-    // mount delete — see migrateRecordFiles), and this is the pass that keeps
-    // its boot hydration free of finished-game files — then freeze newly-
-    // finished (or newly-imported) games' dolls into their sidecars
-    // (game-records.ts) while the avatar store still holds them. Before the
-    // row appears, so the records browser can't open ahead of its dolls.
-    await migrateRecordFiles(() => !launched).catch(() => {})
-    await materializeDollSidecars(recs, listAllAvatars()).catch(() => {})
+    // Freeze newly-finished (or newly-imported) games' dolls into their
+    // morgue sidecars (game-records.ts) while the avatar store still holds
+    // them. The engine is stopped while this view is up, but a slot tap can
+    // boot it mid-materialize — the predicate makes a write that would land
+    // after the engine's IDBFS mount yield instead of getting clobbered by
+    // its next syncfs. Before the row appears, so the records browser can't
+    // open ahead of its dolls.
+    await materializeDollSidecars(recs, listAllAvatars(), () => !launched).catch(() => {})
     if (!view.isConnected) return
     setRecords(recs)
   }
