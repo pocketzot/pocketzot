@@ -2706,18 +2706,20 @@ html.map-hold, html.map-hold * {
   image-rendering: pixelated;
   background: #000;
 }
-/* .hud-place-chip is visually undecorated on purpose: like the message-log
-   and monster-list taps, the minimap toggle is an unadorned tap surface,
-   documented in ABOUT.md's Gestures (also surfaced as Settings → Help →
-   Gestures). A dotted-underline affordance was tried twice and removed —
-   permanent HUD chrome isn't worth a learn-once fact. The class is
-   StatsView's own tap-target hook (its constructor delegates the tap;
-   consumers use setOnPlaceTap). The padding/negative-margin pair grows the
-   hit area without moving the text — abbreviated names ("@D:1") are
-   otherwise a small target. */
+/* .hud-place-chip is StatsView's tap-target hook for the minimap toggle
+   (its constructor delegates the tap; consumers use setOnPlaceTap), the
+   gesture documented in ABOUT.md's Gestures (also surfaced as Settings →
+   Help → Gestures). Unlike the message-log and monster-list taps — which
+   expand already-visible content — this one reveals an otherwise-hidden
+   feature, so it carries a dotted underline as a standing tap affordance.
+   The muted lightgrey (#babdb6 @ 50%) keeps it from competing with the
+   text. The padding/negative-margin pair grows the hit area without moving
+   the text — abbreviated names ("@D:1") are otherwise a small target. */
 .hud-place-chip {
   padding: 0.5rem;
   margin: -0.5rem;
+  text-decoration: underline dotted rgba(186, 189, 182, 0.5);
+  text-underline-offset: 2px;
   /* inline-block: a plain inline's padding isn't reliably hit-testable where
      it overhangs the parent's border box (WebKit ignored the right-padding
      strip); an atomic inline hit-tests its whole padded box. Verified no text
@@ -2728,7 +2730,7 @@ html.map-hold, html.map-hold * {
   position: relative;
 }
 
-/* Unlike the place chip, the settings gear is deliberately visible: it's the
+/* The settings gear is deliberately visible: it's the
    in-game entry to Settings, the one surface a lost player must find without
    first reading the (in-Settings) Gestures help. margin-left:auto parks it at
    the id line's right edge; the padding with cancelling negative margins grows
