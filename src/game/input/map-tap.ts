@@ -6,7 +6,10 @@
 // left-click mapping: movement stays on the d-pad, so a stray map tap can
 // never move the character or fire. In the `X` level map, where the engine
 // ignores hover, the drag instead pans the view locally (onPan; policy in
-// map-pan.ts) and a tap walks the cursor there (map-jump.ts).
+// map-pan.ts) and a tap walks the cursor there (map-jump.ts). In normal
+// play a drag has no wire meaning at all, so it opens the level map instead
+// (onDrag → game-view sends `X`) and carries on as that pan once the engine
+// has switched.
 
 // Hold duration. Under the platform long-press defaults (iOS 500,
 // Android 400): those guard costly or modal actions, while describe is
@@ -18,12 +21,25 @@ export const LONG_PRESS_MS = 300
 // the gesture is a drag: the long-press timer is cancelled and (while
 // targeting) the hover stream follows the finger instead.
 export const SLOP_PX = 12
+// Drag distance before onDrag fires. Deliberately well past SLOP_PX: a
+// hold that drifts 12 px before the long-press lands is cancelled silently
+// today, and must stay that way — converting it would trade a missed
+// describe for a full-screen mode switch. Between the two radii nothing
+// happens. About one zoomed tile, three ASCII cells.
+export const DRAG_PX = 32
 
 // Mirror of enums.mouse_mode in the reference client. Only the modes the
 // gesture gates need are named; the engine sends the index (input_mode msg).
 const COMMAND = 1
 const TARGET = 2
 const TARGET_PATH = 4
+
+// A drag may open the level map only from the plain command prompt: the
+// `X` it sends rides the normal key pipeline, so at a --more--, a prompt or
+// inside a direction chooser it would be answered as that key instead.
+export function canOpenLevelMap(mode: number | undefined): boolean {
+  return mode === COMMAND
+}
 
 // game.js can_target(): hover/aim only works while the engine runs a
 // direction chooser (`x` examine included — it runs MOUSE_MODE_TARGET).
@@ -63,16 +79,37 @@ export interface MapGestureOpts {
   // the X level map pans locally on it (map-pan.ts); in TARGET modes the
   // drag is the hover stream and the caller ignores this.
   onPan?(delta: { x: number; y: number }): void
+  // Once per gesture, when the finger first passes DRAG_PX from touch-down:
+  // the drag is now deliberate. Optional — game-view opens the `X` level
+  // map on it in normal play (and ignores it in every other mode, where a
+  // drag already means hover or pan).
+  onDrag?(): void
+}
+
+export interface MapGestures {
+  // Re-measure the grid under a still-held finger and pan the touch-down
+  // anchor back under it in one step. For the drag that opened the level
+  // map: the hit tester was captured at touch-down against the normal-play
+  // grid, and X mode rescales and refits it (game-view enterXMode), so
+  // every later lookup would land on the wrong cell. Call after that fit.
+  // Keeping the touch-down anchor (rather than re-anchoring at the finger)
+  // makes the rescale a zoom-out about the finger: the grabbed cell stays
+  // put and the rest shrinks toward it. No-op once the finger has lifted.
+  regrab(): void
 }
 
 // Binds to a stable ancestor of #map-grid (mapWrap in game-view, like the
 // zoom and render-toggle gestures) so it survives the in-place ASCII↔tiles
 // view swap. Callbacks own the input_mode/spectating gating; the recognizer
 // only does geometry and timing.
-export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
+export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): MapGestures {
   let activePointer: number | null = null
   let startX = 0
   let startY = 0
+  // Latest finger position, for regrab.
+  let lastX = 0
+  let lastY = 0
+  let dragged = false
   let timer: number | null = null
   let lastHover: { x: number; y: number } | null = null
   let hit: CellHitTester | null = null
@@ -94,7 +131,18 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
     lastHover = null
     hit = null
     anchor = null
+    dragged = false
     release()
+  }
+
+  // The grab step shared by pointermove and regrab: shift the view so the
+  // anchor sits under the finger at (x, y). Only past the slop (timer gone)
+  // and only when the caller passed onPan (anchor is set only then).
+  const grab = (x: number, y: number): void => {
+    const now = hit?.(x, y) ?? null
+    if (timer == null && anchor && now && (now.x !== anchor.x || now.y !== anchor.y)) {
+      opts.onPan!({ x: anchor.x - now.x, y: anchor.y - now.y })
+    }
   }
 
   const hoverCell = (cell: { x: number; y: number } | null): void => {
@@ -121,8 +169,8 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
     // would pan (seen in desktop WebKit). Capture makes both deliver here.
     try { el.setPointerCapture(e.pointerId) } catch { /* test MouseEvent (no id) or detached */ }
     hit = opts.hitTester()
-    startX = e.clientX
-    startY = e.clientY
+    startX = lastX = e.clientX
+    startY = lastY = e.clientY
     const cell = hit?.(startX, startY) ?? null
     anchor = opts.onPan ? cell : null
     // Hover fires immediately on touch — instant aim feedback, and a
@@ -141,19 +189,22 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
 
   el.addEventListener('pointermove', (e) => {
     if (activePointer === null || (e.pointerId ?? 0) !== activePointer) return
+    lastX = e.clientX
+    lastY = e.clientY
     const dx = e.clientX - startX
     const dy = e.clientY - startY
-    if (timer != null && dx * dx + dy * dy > SLOP_PX * SLOP_PX) {
+    const dist2 = dx * dx + dy * dy
+    if (timer != null && dist2 > SLOP_PX * SLOP_PX) {
       window.clearTimeout(timer)
       timer = null
     }
-    const now = hit?.(e.clientX, e.clientY) ?? null
-    hoverCell(now)
-    // Past the slop (timer gone) the drag is also a grab — see onPan
-    // (anchor is set only when the caller passed one).
-    if (timer == null && anchor && now && (now.x !== anchor.x || now.y !== anchor.y)) {
-      opts.onPan!({ x: anchor.x - now.x, y: anchor.y - now.y })
+    if (!dragged && dist2 > DRAG_PX * DRAG_PX) {
+      dragged = true
+      opts.onDrag?.()
     }
+    hoverCell(hit?.(e.clientX, e.clientY) ?? null)
+    // Past the slop the drag is also a grab — see onPan.
+    grab(e.clientX, e.clientY)
   })
 
   el.addEventListener('pointerup', (e) => {
@@ -170,4 +221,12 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): void {
   // window hooks are insurance that the hold class can never stick.
   window.addEventListener('pointerup', release)
   window.addEventListener('pointercancel', release)
+
+  return {
+    regrab(): void {
+      if (activePointer === null) return
+      hit = opts.hitTester()
+      grab(lastX, lastY)
+    },
+  }
 }

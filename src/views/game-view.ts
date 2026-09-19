@@ -19,7 +19,7 @@ import { openSettings } from './settings-view'
 import { isOverlayOpen, closeTopOverlay } from './overlay'
 import { handleKeydown, CK_UP, CK_DOWN, CK_PGUP, CK_PGDN, CK_HOME, CK_END } from '../game/input/keyboard'
 import { createShiftToggle } from '../game/input/shift-state'
-import { attachMapGestures, canDescribe, canHover } from '../game/input/map-tap'
+import { attachMapGestures, canDescribe, canHover, canOpenLevelMap } from '../game/input/map-tap'
 import { attachCornerSwipe } from '../game/input/corner-swipe'
 import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { keepLocalCenter } from '../game/input/map-pan'
@@ -827,7 +827,7 @@ export function buildGameView(
   // No left-click mapping at all, so a stray tap can never move or fire;
   // in normal play a tap is wire-silent. Gating mirrors game.js
   // can_target()/can_describe(); spectators never send.
-  attachMapGestures(mapWrap, {
+  const mapGestures = attachMapGestures(mapWrap, {
     hitTester: () => mapView.hitTester(),
     onHover: (cell) => {
       if (spectating || !canHover(currentInputMode)) return
@@ -860,6 +860,17 @@ export function buildGameView(
       if (!mapView.setViewCenter(next)) return
       mapView.panRender()
       scheduleMinimapRepaint()
+    },
+    // Normal play: a drag has no wire meaning (hover is gated off above),
+    // so it opens the `X` level map, where the same drag pans. The pan
+    // resumes when the engine's cursor arrives (enterXMode regrabs the
+    // finger after the rescale); moves until then are lost, which is one
+    // round trip. Lifting first just leaves the level map open, unpanned.
+    // Command-prompt only (canOpenLevelMap): the key rides the normal
+    // pipeline, so a user keymap on X applies as it would to the kbd's X.
+    onDrag: () => {
+      if (spectating || inXMode || !canOpenLevelMap(currentInputMode)) return
+      conn.send({ msg: 'input', text: 'X' })
     },
   })
 
@@ -2410,6 +2421,11 @@ export function buildGameView(
     // construction by setRenderMode), and the scale shrinks each cell by
     // X_MODE_SCALE so the freed HUD/log area fills with more cells.
     scheduleFit()
+    // A drag that opened this map is still on the screen: re-measure and
+    // pan under it once the fit has rebuilt the grid. rAF callbacks run in
+    // registration order, so this lands right after scheduleFit's, in the
+    // same frame, before paint (a no-op when no finger is down).
+    requestAnimationFrame(() => mapGestures.regrab())
     // Stash-search activation opens an X-mode preview with the destination
     // cursor: swap the results menu out for the full map + d-pad so the
     // player can see where they'd travel and confirm with Enter. Restored
