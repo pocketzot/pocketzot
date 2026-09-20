@@ -1149,14 +1149,26 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   color: var(--text-dim);
 }
 
+/* Same grammar as the login screen's .login-group-label (size, weight,
+   trailing rule) minus its chevron — these sections don't collapse. The
+   weight is explicit because the element is an h2. */
 .lobby-section-title {
-  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 400;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   /* Adds to .lobby-scroll's 0.75rem gap: more space above a section title
      than below it, so the title binds to its own section's content. */
   margin-top: 0.4rem;
+}
+.lobby-section-title::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
 }
 
 .lobby-section-divider {
