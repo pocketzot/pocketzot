@@ -31,6 +31,16 @@
      paintCursorIfHere) hardcodes the same value. */
   --map-cursor: #fce94f;
   --border:    rgba(245, 158, 11, 0.12);
+  /* The accent's jobs, per the HIG Color/Buttons pages ("avoid using the
+     same color to mean different things"; "to emphasize primary actions,
+     apply color to the background rather than to symbols or text"): a FILL
+     is a view's one primary action; small marks are state (selected, unread,
+     ✓, focus); links; the wordmark. Never a label, title or name — names
+     lead by weight. --accent-line is the border of a secondary button that
+     sits beside a primary (trunk, Install, a version with a save). */
+  --accent-line: rgba(245, 158, 11, 0.35);
+  --accent-tint: rgba(245, 158, 11, 0.12);  /* selected-state fill */
+  --border-card: rgba(245, 158, 11, 0.22);  /* modal card outline, a step above --border */
 
   --font-mono: ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --font-ui:   system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -223,7 +233,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   color: var(--text);
 }
 .login-moved-msg { margin: 0; }
-.login-moved strong { color: var(--accent); font-weight: 600; }
+.login-moved strong { font-weight: 600; }
 .login-moved-link {
   display: inline-block;
   margin: 0.5rem 0;
@@ -599,6 +609,9 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
 
 .login-account-tag {
   grid-area: tag;
+  /* Accent here is the primary-action mark at card strength (see
+     --accent-line): for a returning player these cards ARE the way in —
+     Connect is folded away — and a full fill per card would shout. */
   background: rgba(245, 158, 11, 0.15);
   color: var(--accent);
   border-radius: 3px;
@@ -671,7 +684,8 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
 .login-add-section > summary::-webkit-details-marker { display: none; }
 /* Leading disclosure chevron, same right/down state pair (and the same
    border-drawn glyph) as the section headers above it — one grammar per page. */
-.login-add-section > summary::before {
+.login-add-section > summary::before,
+.lobby-more-games > summary::before {
   content: "";
   display: inline-block;
   width: 0.5em;
@@ -683,7 +697,8 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   opacity: 0.6;  /* same tier as the section-header chevrons */
   transform: rotate(-45deg);
 }
-.login-add-section[open] > summary::before { transform: translateY(-0.2em) rotate(45deg); }
+.login-add-section[open] > summary::before,
+.lobby-more-games[open] > summary::before { transform: translateY(-0.2em) rotate(45deg); }
 .login-add-section[open] > summary { margin-bottom: 0.6rem; }
 
 .login-spectate-select {
@@ -775,16 +790,10 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
 }
 
 .login-btn {
+  /* the fill itself: the shared rule at .lobby-btn-primary */
   width: 100%;
-  background: var(--accent);
-  border: none;
-  border-radius: 4px;
-  color: var(--bg);
-  font-family: var(--font-mono);
   font-size: 1rem;
-  font-weight: bold;
   padding: 0.7rem;
-  cursor: pointer;
 }
 
 .login-btn:disabled {
@@ -807,7 +816,8 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   .login-btn.login-busy:disabled { animation: none; }
 }
 
-.login-btn-spectate {
+/* Two classes: the shared fill rule sits later in the file (.lobby-btn-primary). */
+.login-btn.login-btn-spectate {
   background: transparent;
   color: var(--text-dim);
   border: 1px solid var(--border);
@@ -925,33 +935,32 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  padding: 0.4rem 0.6rem;
-  cursor: pointer;
-}
-
-/* Guest identity badge. Pill shape distinguishes it from the back button next
-   to it. Usually static (offline lobby, spectator bar) — but in the lobby of a
-   server with somewhere to switch to it is a button opening the server menu,
-   so only the non-button form disclaims tappability. */
-.lobby-account-chip.is-guest {
-  cursor: default;
   background: var(--surface);
   border: none;
   border-radius: 999px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+/* Every header identity chip (account, guest, offline device, spectator bar)
+   is the one filled pill above; the pill shape distinguishes it from the back
+   button next to it. The guest form is usually static (offline lobby,
+   spectator bar) — but in the lobby of a server with somewhere to switch to
+   it is a button opening the server menu, so only the non-button form
+   disclaims tappability. */
+.lobby-account-chip.is-guest {
+  cursor: default;
   color: var(--text-dim);
-  padding: 0.3rem 0.7rem;
 }
 button.lobby-account-chip.is-guest { cursor: pointer; }
 
-.lobby-chip-user { color: var(--accent); }
+/* No accent in a chip (see --accent-line): your account name leads by weight. */
+.lobby-chip-user { color: var(--text); font-weight: 600; }
 .lobby-chip-sep  { color: var(--text-dim); }
-.lobby-chip-tag  { color: var(--accent); }
+.lobby-chip-tag  { color: var(--text); }
 .lobby-chip-role {
   color: var(--text-dim);
 }
@@ -961,6 +970,9 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   margin-left: 0.1rem;
   font-size: 0.7rem;
 }
+
+/* The corner badge rides the pill's curve, not its bounding box's corner. */
+.lobby-account-chip .unread-dot-corner { top: -1px; right: 6px; }
 
 .lobby-account-chip[aria-expanded="true"] {
   background: var(--surface2);
@@ -1004,19 +1016,23 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   visibility: hidden;
   margin-right: 0.5em;
 }
-.lobby-server-item.is-current::before { visibility: visible; }
-.lobby-server-item.is-current { color: var(--accent); }
+.lobby-server-item.is-current::before { visibility: visible; color: var(--accent); }
 
+/* The filled primary, one per view (see --accent-line). Sizes stay with
+   each class; .login-btn's are above. */
+.login-btn,
 .lobby-btn-primary {
   background: var(--accent);
   border: none;
   border-radius: 4px;
   color: var(--bg);
   font-family: var(--font-mono);
-  font-size: 0.95rem;
   font-weight: bold;
-  padding: 0.6rem 1rem;
   cursor: pointer;
+}
+.lobby-btn-primary {
+  font-size: 0.95rem;
+  padding: 0.6rem 1rem;
   align-self: flex-start;
 }
 
@@ -1040,8 +1056,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
    later source order (equal specificity). */
 .lobby-btn-trunk {
   background: transparent;
-  border: 1px solid var(--accent);
-  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  color: var(--text);
 }
 
 /* Ghost nav button used for "← Back"-style header actions in the lobby and
@@ -1121,9 +1137,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   list-style: none;
 }
 
+/* The leading chevron is the login expanders' (.login-add-section). */
 .lobby-more-games > summary::-webkit-details-marker { display: none; }
-.lobby-more-games > summary::before { content: "▸ "; }
-.lobby-more-games[open] > summary::before { content: "▾ "; }
 
 /* Advisory line under the expanded version list — only rendered when the
    server offers pre-cutoff versions (see renderGameButtons in lobby.ts). */
@@ -1210,16 +1225,17 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   min-width: 0;
 }
 .lobby-game-user {
-  color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Accent on a name means "your character" (the offline slot rows) — the
-   spectate list's strangers are neutral. */
-#lobby-list .lobby-game-user { color: var(--text); }
+/* Weight on a name means "your character" (the offline slot rows) — the
+   spectate list's strangers are regular. */
+#lobby-list .lobby-game-user { font-weight: 400; }
 #lobby-list .lobby-game-row.is-idle .lobby-game-user { color: var(--text-dim); }
 
 /* A game the server reports a save for (lobby.ts makeGameBtn): a headline
@@ -1233,15 +1249,14 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   font-weight: normal;
   white-space: normal;
 }
-.lobby-btn-secondary.has-save { border-color: var(--accent); color: var(--text); }
+.lobby-btn-secondary.has-save { border-color: var(--accent-line); color: var(--text); }
 .lobby-game-info { font-size: 0.85rem; color: var(--text-dim); }
 .lobby-game-idle { flex: 0 0 auto; white-space: nowrap; font-size: 0.8rem; color: var(--text-dim); }
 .lobby-game-idle:empty { display: none; }
 
-.lobby-game-spectators {
-  color: var(--accent);
-  opacity: 0.85;
-}
+/* The row's one highlight is brightness, not accent — a stranger's game
+   is content. */
+.lobby-game-spectators { color: var(--text); }
 
 .lobby-game-version {
   font-style: italic;
@@ -1464,11 +1479,8 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 .offline-device-btn:active { background: var(--surface2); }
 .offline-device-btn:disabled { opacity: 0.5; cursor: default; }
-/* The download/update action is the row's call to action — accent it. */
-.offline-device-btn.is-accent {
-  color: var(--accent);
-  border-color: rgba(245, 158, 11, 0.35);
-}
+/* The download/update action is the row's call to action. */
+.offline-device-btn.is-accent { border-color: var(--accent-line); }
 
 /* ── Offline options (RC) file editor (views/rc-editor.ts) ───
    Full-screen fixed column over the offline lobby: slim header, flex-fill
@@ -1488,7 +1500,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   align-items: baseline;
   gap: 0.5rem;
 }
-.rc-editor-title { color: var(--accent); font-size: 1rem; }
+.rc-editor-title { color: var(--text); font-size: 1rem; }
 .rc-editor-path { color: var(--text-dim); font-size: 0.8rem; }
 .rc-editor-text {
   flex: 1;
@@ -1528,11 +1540,13 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
    visually level with the "Save" label beside it (cf. .menu-ctrl-glyph). */
 .rc-editor-esc { font-size: 1.25rem; line-height: 1; padding-block: 0.4rem; }
 .rc-editor-save {
-  color: var(--accent);
-  border-color: rgba(245, 158, 11, 0.35);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: bold;
 }
-.rc-editor-esc:active,
-.rc-editor-save:active { background: var(--surface2); }
+.rc-editor-esc:active { background: var(--surface2); }
+.rc-editor-save:active { opacity: 0.85; }
 .rc-editor-save:disabled { opacity: 0.5; cursor: default; }
 
 /* Post-game exit dialog (forwarded from the game view via GameExit). */
@@ -1554,7 +1568,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   background: var(--surface);
   /* Firmer border + drop shadow so the card reads as floating above the
      dimmed lobby behind it. */
-  border: 1px solid rgba(245, 158, 11, 0.22);
+  border: 1px solid var(--border-card);
   border-radius: 10px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   padding: 1.25rem;
@@ -1629,7 +1643,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border: 1px solid rgba(245, 158, 11, 0.22);
+  border: 1px solid var(--border-card);
   border-radius: 10px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   font-family: var(--font-mono);
@@ -1643,7 +1657,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.doc-title { color: var(--accent); font-size: 1rem; }
+.doc-title { color: var(--text); font-size: 1rem; }
 .doc-close {
   padding: 0.35rem 0.6rem;
   font-family: var(--font-mono);
@@ -1667,7 +1681,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 }
 .doc-body h1, .doc-body h2, .doc-body h3 { line-height: 1.3; }
 .doc-body h1 { font-size: 1.2rem; margin: 1.2rem 0 0.6rem; color: var(--text); }
-.doc-body h2 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--accent); }
+.doc-body h2 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--text); }
 .doc-body h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; color: var(--text); }
 .doc-body p { margin: 0 0 0.8rem; }
 .doc-body ul { margin: 0 0 0.9rem; padding-left: 1.2rem; }
@@ -4975,7 +4989,7 @@ html.map-hold, html.map-hold * {
   gap: 0.9rem;
   max-width: 22rem;
   background: var(--surface);
-  border: 1px solid rgba(245, 158, 11, 0.22);
+  border: 1px solid var(--border-card);
   border-radius: 10px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   padding: 1.5rem 1.75rem;
@@ -5049,7 +5063,7 @@ html.map-hold, html.map-hold * {
 }
 .settings-h {
   font-size: 0.95rem;
-  color: var(--accent);
+  color: var(--text);
   margin: 0.5rem 0 0.4rem;
 }
 /* Breathing room between stacked sections on the home page */
@@ -5082,7 +5096,7 @@ html.map-hold, html.map-hold * {
 }
 /* Selected = accent border + amber fill, matching the .settings-seg active
    segment so selection reads the same everywhere on the page. */
-.set-row.active .set-row-main { border-color: var(--accent); background: rgba(245, 158, 11, 0.12); }
+.set-row.active .set-row-main { border-color: var(--accent); background: var(--accent-tint); }
 .set-radio { color: var(--text-dim); flex-shrink: 0; }
 .set-row.active .set-radio { color: var(--accent); }
 .set-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -5137,17 +5151,22 @@ html.map-hold, html.map-hold * {
   cursor: pointer;
 }
 .settings-btn:active { background: var(--surface); }
-.settings-btn-primary { border-color: var(--accent); color: var(--accent); }
+.settings-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: bold;
+}
+.settings-btn-primary:active { background: var(--accent); opacity: 0.85; }
 
 /* Map display picker: a .seg (see below) at settings-btn size. The active
-   segment gets a fill so it reads as state, not as .settings-btn-primary's
-   press-me accent border. */
+   segment gets a tint so it reads as state. */
 .settings-seg { margin-top: 0.9rem; }
 .settings-seg .settings-btn {
   background: transparent;
   color: var(--text-dim);
 }
-.settings-seg .settings-btn.active { background: rgba(245, 158, 11, 0.12); }
+.settings-seg .settings-btn.active { background: var(--accent-tint); }
 
 /* Discrete sliders: the page's second control vocabulary — segments are
    state adjectives, dotted sliders are ordered magnitudes (sizes, counts).
@@ -5829,20 +5848,29 @@ html.map-hold, html.map-hold * {
 
 /* ── Records browser (views/records-view.ts) ─────────────────
    "Past games": full char-cards off the logfile, on the crypt-view shell.
-   The sort pills live in the pinned header, right-aligned opposite Back. */
-/* margin-left:auto pins the pills to the right edge — .crypt-header has no
-   justify-content, so without it they'd sit flush against ← Back. */
-.records-sort { display: flex; gap: 0.4rem; margin-left: auto; }
+   The sort lives in the pinned header, right-aligned opposite Back: a filled
+   segmented control in the header chips' family (.lobby-account-chip) — the
+   2px track padding comes off the segments' so both are one height. */
+/* margin-left:auto pins the control to the right edge — .crypt-header has no
+   justify-content, so without it it'd sit flush against ← Back. */
+.records-sort {
+  display: flex;
+  margin-left: auto;
+  padding: 2px;
+  background: var(--surface);
+  border-radius: 999px;
+}
 .records-sort-btn {
   background: none;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 999px;
   color: var(--text-dim);
-  font-size: 0.75rem;
-  padding: 0.25rem 0.7rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: calc(0.35rem - 2px) 0.7rem;
   cursor: pointer;
 }
-.records-sort-btn.is-active { color: var(--accent); border-color: var(--accent); }
+.records-sort-btn.is-active { background: var(--surface2); color: var(--accent); }
 .records-list {
   display: flex;
   flex-direction: column;
