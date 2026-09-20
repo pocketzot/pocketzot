@@ -1655,7 +1655,20 @@ export function buildGameView(
         // which lacks redraw()'s m_view_loaded gate — tileweb.cc). The
         // 'newchar' counter keys on the welcome line instead; see
         // tryResolveBackground.
-        if (msg.clear) store.clear()
+        if (msg.clear) {
+          store.clear()
+          // `[`/`]` in the level map arrive as a cleared map (tile_new_level
+          // → clear_minimap), and a tap-walk landing held for the vgrdc
+          // policy below then names a cell on the level just left. It can't
+          // wait for the cursor report to retire it: place_cursor defers
+          // CURSOR_MAP until AFTER a pending full map (tileweb.cc "if map is
+          // going to be updated, send the cursor after that"), and sends
+          // none at all when the arrival cell has the old cursor's coords —
+          // the held view then showed the new level around the old level's
+          // stair. The spectator-join clear (above) drops a hold too; that
+          // only re-centers on the cursor.
+          mapJumper.reset()
+        }
         // vgrdc is the server's complete view-centering signal (present on a
         // map message whenever it matters — roughly half of them in
         // practice); setViewCenter returns true only on a real pan. The
