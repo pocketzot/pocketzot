@@ -223,11 +223,14 @@ export function buildOfflineLobbyView(
       else actionsEl.append(nameForm)
     }
     // The gate note prices the next launch tap, so it hangs off the launch
-    // controls: under the bar, or — with the bar gone — under the SAVED
-    // GAMES heading as the list's caption. Never alone above the heading,
-    // where it prices nothing in particular.
+    // controls: a caption under the bar, or — with the bar gone — a boxed
+    // notice under the SAVED GAMES heading (a bare line there read as the
+    // heading's caption; a box under the bar read as a second, disabled
+    // button). Never alone above the heading, where it prices nothing in
+    // particular.
     const noteAnchor = hasSaves ? savesTitleEl : actionsEl
     if (gateNoteEl.previousElementSibling !== noteAnchor) noteAnchor.after(gateNoteEl)
+    gateNoteEl.classList.toggle('is-boxed', hasSaves)
     newBtn.hidden = hasSaves || nameFormOpen
     newRow.hidden = !hasSaves || nameFormOpen
     actionsEl.hidden = hasSaves
@@ -624,10 +627,18 @@ export function buildOfflineLobbyView(
               // the button isn't showing. Say so before the tap, not after it
               // fails.
               : migratesSaves(r)
-                ? `Finishing also installs DCSS ${r.updateVersion} and updates your saved games — use ${downloadBtn.textContent} below`
+                // Short like its siblings, and versionless so it holds one
+                // line at phone width whatever the version string ("0.36-a0"
+                // wrapped it): the game-data row it points at names the
+                // version; this keeps the consent fact and the pointer.
+                ? `Updates your saved games — use ${downloadBtn.textContent} below`
                 : `Finishes a ${TILES_SIZE_LABEL} download first`)
             : null
-    gateNoteEl.textContent = note ?? ''
+    // The text rides an inner span — the boxed part (.offline-gate-note in
+    // style.css says why the element itself can't be).
+    const box = document.createElement('span')
+    box.textContent = note ?? ''
+    gateNoteEl.replaceChildren(box)
     gateNoteEl.hidden = note === null
   }
 

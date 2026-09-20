@@ -1413,11 +1413,24 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   font-size: 0.75rem;
   line-height: 1.4;
   color: var(--text-dim);
-  /* The cards' content inset (border + row padding), so the price hangs off
-     the controls rather than off the page margin. */
+  /* Under the New game bar: a caption at the bar's content inset (border +
+     padding), so the price hangs off the control, not off the page margin. */
   padding-left: calc(0.75rem + 1px);
   margin-top: -0.15rem;
 }
+/* Under the SAVED GAMES heading (placeNewGame sets .is-boxed): a boxed notice
+   hugging its text — a bare line there read as the heading's caption ("Saved
+   games: installs 22 MB"). The box is the inner span: the element itself is a
+   .lobby-scroll child, which that column's tablet rule holds at width 100%. */
+.offline-gate-note.is-boxed { padding-left: 0; margin-top: 0; }
+.offline-gate-note.is-boxed > span {
+  display: inline-block;
+  padding: 0.4rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.offline-gate-note.is-boxed > span::before { content: "ⓘ  "; }
 
 /* Device cards (offline lobby): settings-style rows — glyph column, two-line
    label, right-aligned compact actions or a whole-row tap (.offline-nav-row)
