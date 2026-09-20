@@ -147,8 +147,9 @@ export function buildOfflineLobbyView(
   const nameError = view.querySelector<HTMLElement>('#offline-name-error')!
 
   // Stems of the slots currently shown — the new-character collision check
-  // and per-row actions key off this. Records-only when the probe is
-  // unavailable (listOfflineSaves → null).
+  // and per-row actions key off this. Records-only until the mount-time probe
+  // lands (seeded from them at the bottom of this function), and after it too
+  // when the probe is unavailable (listOfflineSaves → null).
   let knownStems = new Set<string>()
   // One boot per mount: every path out of this view unmounts it, so a second
   // tap on any slot/start button would just double-boot the engine.
@@ -254,12 +255,38 @@ export function buildOfflineLobbyView(
     for (const b of nameForm.querySelectorAll('button')) b.disabled = disabled
   }
 
-  function showNameForm(): void {
+  // The form opens holding the last finished game's name — the logfile's
+  // last entry (`records`, Past games below) — when no saved game has it.
+  // File order, never sortRecords' end-time order: the engine only appends
+  // and an import replaces the file whole, so the tail IS the last game,
+  // while `end` is local wall-clock (xlog.ts) and runs backwards across a
+  // timezone change or DST fallback. Dying and going again under the same
+  // name is the common trip, and crawl's own startup menu does the same
+  // (remember_name, startup.cc). Selected, so typing replaces it. Only ever
+  // that one name —
+  // never fall back to an older free one: this field becomes the save's
+  // permanent identity, and a name from weeks ago is a guess. The logfile is
+  // the source rather than a client key because it rides along in backups and
+  // a creation cancelled before a character exists (a likely typo) never
+  // reaches it.
+  //
+  // Awaiting the mount-time read is what confines the fill to it: a later
+  // re-read (a records-browser delete, a backup import) has no path back into
+  // an open form. focus() above stays synchronous inside the tap so phones
+  // still raise the keyboard (gatedRun) — only the fill waits.
+  async function showNameForm(): Promise<void> {
     nameFormOpen = true
     newBtn.hidden = true
     newRow.hidden = true
     nameForm.hidden = false
     nameInput.focus()
+    await recordsReady
+    if (!nameFormOpen || nameInput.value !== '') return
+    const last = records[records.length - 1]?.['name']
+    if (!last || validateOfflineName(last) !== null) return
+    if (knownStems.has(slotStem(last))) return
+    nameInput.value = last
+    nameInput.select()
   }
 
   // Cancel / Escape: back to the control the form replaced. The typed name
@@ -298,8 +325,9 @@ export function buildOfflineLobbyView(
   nameForm.addEventListener('submit', async (e) => {
     e.preventDefault()
     // The collision check below needs the mount-time probe to have landed —
-    // knownStems is empty until then, and a fast submit of an existing name
-    // would silently resume that character instead of erroring.
+    // knownStems is records-only until then, so a save with no record yet (an
+    // imported one) would let a fast submit of that name silently resume the
+    // character instead of erroring.
     await savesReady
     // Cancelled while this waited: stop here. (It could not launch anyway —
     // closeNameForm reset the input, so validation below would fail — but it
@@ -451,7 +479,8 @@ export function buildOfflineLobbyView(
       openRecords()
     }
   })
-  void refreshRecords()
+  // Held so the name form can wait on exactly this read (showNameForm).
+  const recordsReady = refreshRecords()
 
   // The entries' icons are the reference main menu's own (startup.cc entries
   // table: GAME_TYPE_NORMAL → TILEG_STARTUP_STONESOUP, GAME_TYPE_HIGH_SCORES
@@ -831,7 +860,8 @@ export function buildOfflineLobbyView(
   // lobby with no way to start a game is worse than one whose bar turns
   // into a row a moment late. It also settles the gate note's anchor and the
   // menu card's shape before the readiness and records reads can land.
-  placeNewGame(Object.keys(getOfflineChars()).length > 0)
+  knownStems = new Set(Object.keys(getOfflineChars()))
+  placeNewGame(knownStems.size > 0)
   const savesReady = refreshSaves()
 
   if (exit) maybeShowExitDialog(view, exit)

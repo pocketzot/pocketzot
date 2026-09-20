@@ -3,12 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeStorage } from '../test/fake-storage'
 import { buildOfflineLobbyView } from './offline-lobby'
 import { loadOfflineSlots, type OfflineChar } from '../offline/offline-state'
+import { readGameRecords } from '../offline/game-records'
+import type { XlogRecord } from '../offline/xlog'
 import { downloadOfflineData, probeReadiness, type Readiness } from '../offline/artifact-store'
 
 // "New game"'s two homes, the name form, and the menu card — the view's
-// state logic, driven through its three async seams. The sprite path is
-// inert under happy-dom (no Cache API → resolveRuneSource answers null) and
-// the records read fails safe at its call site.
+// state logic, driven through its async seams. The sprite path is inert
+// under happy-dom (no Cache API → resolveRuneSource answers null).
+vi.mock('../offline/game-records', async (orig) => ({
+  ...(await orig<typeof import('../offline/game-records')>()),
+  readGameRecords: vi.fn(async () => []),
+  materializeDollSidecars: vi.fn(async () => {}),
+}))
 vi.mock('../offline/offline-state', async (orig) => ({
   ...(await orig<typeof import('../offline/offline-state')>()),
   loadOfflineSlots: vi.fn(),
@@ -39,15 +45,25 @@ const shown = (q: string): boolean => {
   return true
 }
 
-async function mount(opts: { saves?: string[]; seeded?: string[]; readiness?: Readiness } = {}): Promise<void> {
+// The logfile's entries for `names`, oldest first.
+const endedRecs = (names: string[]): XlogRecord[] => names.map((name) => ({ name }))
+
+// Mount with the mocks a test has already set up. Tests that need one seam
+// left pending set that mock themselves and call this directly.
+const mountNow = async (onPlay: () => void = vi.fn()): Promise<void> => {
+  view = buildOfflineLobbyView(onPlay, vi.fn())
+  document.body.append(view)
+  await settle()
+}
+
+async function mount(opts: { saves?: string[]; seeded?: string[]; ended?: string[]; readiness?: Readiness } = {}): Promise<void> {
   if (opts.seeded) {
     localStorage.setItem('pocketzot:offline-chars', JSON.stringify(slots(...opts.seeded).chars))
   }
+  vi.mocked(readGameRecords).mockResolvedValue(endedRecs(opts.ended ?? []))
   vi.mocked(loadOfflineSlots).mockResolvedValue(slots(...(opts.saves ?? [])))
   vi.mocked(probeReadiness).mockResolvedValue(opts.readiness ?? READY)
-  view = buildOfflineLobbyView(vi.fn(), vi.fn())
-  document.body.append(view)
-  await settle()
+  await mountNow()
 }
 
 beforeEach(() => { vi.stubGlobal('localStorage', fakeStorage()) })
@@ -177,6 +193,114 @@ describe('offline lobby: name form', () => {
     $('#offline-name-form').dispatchEvent(new Event('submit', { cancelable: true }))
     await settle()
     expect(onPlay).toHaveBeenCalledWith('Zed')
+  })
+})
+
+describe('offline lobby: name prefill', () => {
+  const input = () => $<HTMLInputElement>('#offline-name')
+  // The fill waits on the mount-time logfile read, so every open settles.
+  const openNew = async (q: string): Promise<void> => { $(q).click(); await settle() }
+
+  it('opens holding the last finished game\'s name, selected', async () => {
+    await mount({ ended: ['Ysolde', 'Bram'] })
+    await openNew('#offline-new')
+    expect(input().value).toBe('Bram')
+    expect([input().selectionStart, input().selectionEnd]).toEqual([0, 4])
+  })
+
+  it('takes the logfile\'s last entry, not the latest end stamp', async () => {
+    // `end` is local wall-clock: Bram finished last, on a clock that had
+    // since moved back (westward travel, DST fallback).
+    vi.mocked(readGameRecords).mockResolvedValue([
+      { name: 'Ysolde', end: '20260619100000S' },
+      { name: 'Bram', end: '20260619080000S' },
+    ])
+    vi.mocked(loadOfflineSlots).mockResolvedValue(slots())
+    vi.mocked(probeReadiness).mockResolvedValue(READY)
+    await mountNow()
+    await openNew('#offline-new')
+    expect(input().value).toBe('Bram')
+  })
+
+  it('still offers it after a different character was played since', async () => {
+    await mount({ saves: ['Ysolde'], ended: ['Bram'] })
+    await openNew('#offline-new-row')
+    expect(input().value).toBe('Bram')
+  })
+
+  it('stays empty when a saved game has that name — no fallback to an older one', async () => {
+    await mount({ saves: ['MyGuy'], ended: ['Ysolde', 'My Guy'] })
+    await openNew('#offline-new-row')
+    expect(input().value).toBe('')
+  })
+
+  it('checks the slot records while the probe is still out', async () => {
+    // knownStems is seeded from the records at mount, so a name whose save the
+    // probe hasn't confirmed yet still blocks the fill.
+    localStorage.setItem('pocketzot:offline-chars', JSON.stringify(slots('Bram').chars))
+    vi.mocked(readGameRecords).mockResolvedValue(endedRecs(['Bram']))
+    vi.mocked(loadOfflineSlots).mockReturnValue(new Promise(() => {}))
+    vi.mocked(probeReadiness).mockResolvedValue(READY)
+    await mountNow()
+    await openNew('#offline-new-row')
+    expect(input().value).toBe('')
+  })
+
+  it('fills a free name while the probe is still out', async () => {
+    localStorage.setItem('pocketzot:offline-chars', JSON.stringify(slots('Bram').chars))
+    vi.mocked(readGameRecords).mockResolvedValue(endedRecs(['Ysolde']))
+    vi.mocked(loadOfflineSlots).mockReturnValue(new Promise(() => {}))
+    vi.mocked(probeReadiness).mockResolvedValue(READY)
+    await mountNow()
+    await openNew('#offline-new-row')
+    expect(input().value).toBe('Ysolde')
+  })
+
+  // Mounted with the logfile read still out; the returned function lands it.
+  async function mountBeforeRecords(): Promise<(recs: XlogRecord[]) => void> {
+    let land!: (recs: XlogRecord[]) => void
+    vi.mocked(readGameRecords).mockReturnValue(new Promise((res) => { land = res }))
+    vi.mocked(loadOfflineSlots).mockResolvedValue(slots())
+    vi.mocked(probeReadiness).mockResolvedValue(READY)
+    await mountNow()
+    return land
+  }
+
+  it('fills an untouched open form when the logfile read lands late', async () => {
+    const land = await mountBeforeRecords()
+    $('#offline-new').click()
+    expect(input().value).toBe('')
+    land(endedRecs(['Bram']))
+    await settle()
+    expect(input().value).toBe('Bram')
+  })
+
+  it('leaves a typed name alone when the read lands late', async () => {
+    const land = await mountBeforeRecords()
+    $('#offline-new').click()
+    input().value = 'Zed'
+    land(endedRecs(['Bram']))
+    await settle()
+    expect(input().value).toBe('Zed')
+  })
+
+  it('leaves a form cancelled before the read lands closed and empty', async () => {
+    const land = await mountBeforeRecords()
+    $('#offline-new').click()
+    $('#offline-name-cancel').click()
+    land(endedRecs(['Bram']))
+    await settle()
+    expect(input().value).toBe('')
+    expect(shown('#offline-name-form')).toBe(false)
+  })
+
+  it('reopens prefilled after a cancel', async () => {
+    await mount({ ended: ['Bram'] })
+    await openNew('#offline-new')
+    input().value = 'Zed'
+    $('#offline-name-cancel').click()
+    await openNew('#offline-new')
+    expect(input().value).toBe('Bram')
   })
 })
 
