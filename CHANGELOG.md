@@ -9,6 +9,11 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-20
+
+- Android: dragging the X-mode map to pan it now works. Apparently
+  it was only working on iOS until now.
+
 ## 2026-09-17
 
 - Monster list: if it's blocking something on the map, you can now
