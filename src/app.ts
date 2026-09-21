@@ -7,6 +7,7 @@ import { buildGameView, type SpectateTarget } from './views/game-view'
 import { disposeView } from './views/view-dispose'
 import type { TileLoader } from './game/tiles/tile-loader'
 import { OFFLINE_GAME_ID } from './offline/offline-state'
+import { jspiSupported } from './offline/artifact-store'
 import { activeGameStart, attemptResume, clearGameStart, loadPersistedResume, markProactiveClose } from './reconnect'
 import { count, type CountFlags } from './counter'
 import { getActiveControlSet } from './game/input/control-sets'
@@ -134,11 +135,7 @@ async function showOfflineGame(name: string): Promise<void> {
   const gameId = params.get('engine') === 'fake' ? '' : OFFLINE_GAME_ID
   if (gameId) {
     // J gates the Asyncify retirement (dev-material/jspi-migration.md).
-    // typeof guard: iOS Lockdown Mode removes WebAssembly entirely.
-    count('play-offline', {
-      ...gameStartFlags(),
-      jspi: typeof WebAssembly === 'object' && 'Suspending' in WebAssembly,
-    })
+    count('play-offline', { ...gameStartFlags(), jspi: jspiSupported() })
     setPref('loginOfflineOpen', null)  // playing offline outranks an old collapse; back to auto
   }
   state = 'game'

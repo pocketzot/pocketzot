@@ -48,7 +48,7 @@ export function bootOffline(params: URLSearchParams, name: string): OfflineBoot 
   const perf = params.has('perf') || import.meta.env.DEV
   const port: EnginePort = params.get('engine') === 'fake'
     ? new FakeEnginePort(params.get('fixture') ?? undefined)
-    : new WorkerEnginePort(perf, name)
+    : new WorkerEnginePort(perf, name, params.get('jspi') !== '0')
 
   const real = port instanceof WorkerEnginePort
   const conn = new LocalConnection()

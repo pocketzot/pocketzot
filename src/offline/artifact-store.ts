@@ -46,8 +46,22 @@ const COMPLETE_KEYS: Record<string, string> = {
 // boot fetches — one list per artifact, so boot and the readiness download
 // can't drift apart on paths. Prewarm is optional at deploy time but
 // all-or-nothing once its manifest is present.
-export const ENGINE_GLUE = ['/offline/crawl.js']
-export const ENGINE_WASM = ['/offline/crawl.wasm.gz', '/offline/crawl.wasm']
+//
+// The engine ships as two builds of one source tree (engine repo,
+// wasm/Makefile.emscripten VARIANT): Asyncify, which runs everywhere, and
+// JSPI, which needs WebAssembly.Suspending (Chrome 137, Firefox 139, Safari
+// 27). Measured 2026-09-20 on one tree: crawl.wasm 23.9 → 12.1 MB (gzipped
+// 6.8 → 4.3), the boot-time db build 10.3 → 3.6 s and a 100-turn rest 197 →
+// 44 ms under node, same-seed game logic identical line for line. Only the
+// glue + wasm differ — crawl.data and the prewarm pack are byte-identical
+// across the two (install.sh refuses the pair otherwise) and ship once.
+// Asyncify keeps the original paths: a shell that predates the split (SW-
+// cached, or a pinned older tab) keeps finding a complete set there.
+export type EngineVariant = 'asyncify' | 'jspi'
+export const ENGINE_SETS: Record<EngineVariant, { glue: string[]; wasm: string[] }> = {
+  asyncify: { glue: ['/offline/crawl.js'], wasm: ['/offline/crawl.wasm.gz', '/offline/crawl.wasm'] },
+  jspi: { glue: ['/offline/jspi/crawl.js'], wasm: ['/offline/jspi/crawl.wasm.gz'] },
+}
 export const ENGINE_DATA = ['/offline/crawl.data.gz', '/offline/crawl.data']
 export const PREWARM_MANIFEST = ['/offline/prewarm/manifest.json']
 export const PREWARM_BIN = ['/offline/prewarm/prewarm.bin.gz', '/offline/prewarm/prewarm.bin']
@@ -184,6 +198,11 @@ export class ArtifactError extends Error {
 // "nothing left to fetch".
 const isAbsent = (e: unknown): boolean => e instanceof ArtifactError && e.status === 404
 
+// A 200 with an html body is the SPA fallback for a missing file, never the
+// artifact: treated as a 404, and never cached (it would stick).
+const isSpaFallback = (res: Response): boolean =>
+  (res.headers.get('content-type') ?? '').includes('text/html')
+
 // Cache-first lookup of one artifact; tries `paths` in order (gzipped name
 // first, plain fallback for older installs). Never caches an HTML body — a
 // SPA-fallback 200 for a missing file must not become a sticky cache entry.
@@ -202,7 +221,7 @@ async function matchOrFetch(
   for (const p of paths) {
     const res = await fetch(p).catch(() => null)
     if (!res || !res.ok) { lastStatus = res?.status ?? 0; continue }
-    if ((res.headers.get('content-type') ?? '').includes('text/html')) { lastStatus = 404; continue }
+    if (isSpaFallback(res)) { lastStatus = 404; continue }
     if (cache) await cache.put(p, res.clone()).catch(() => { /* quota — serve uncached */ })
     return { res, from: 'net' }
   }
@@ -308,16 +327,78 @@ async function anyCached(cache: Cache, alts: string[]): Promise<boolean> {
   return false
 }
 
-// Are the three boot-critical artifacts in the cache? Boot asks this before
+// typeof guard: iOS Lockdown Mode removes WebAssembly entirely.
+export const jspiSupported = (): boolean =>
+  typeof WebAssembly === 'object' && 'Suspending' in WebAssembly
+
+// Which engine this boot/download uses — asked ONCE per flow, and every
+// glue/wasm fetch after it goes through that variant's lists only. Never
+// fold the two sets into one alternatives list: a glue from one and a wasm
+// from the other is an instantiation failure (the import tables differ), and
+// matchOrFetch would happily assemble that pair out of a partly-evicted
+// cache.
+//
+// A cached piece of either set pins its variant: boot is pinned to the cached
+// build (engine.worker.ts openArtifactCache), and the deploy's other variant
+// may be a different build. So a device that gains JSPI under a cached
+// Asyncify set (an OS update) moves over at its next engine update, when the
+// download clears the store first — not before. With nothing cached, a
+// capable device probes the JSPI glue; a deploy that ships none (a confirmed
+// 404 — SPA-fallback html counts) means Asyncify, while a failure to find
+// out propagates like any other unreachable artifact.
+//
+// `supported` is where ?jspi=0 (boot.ts) lands, and it covers BOOT only: the
+// lobby's download still installs by capability, so a forced-Asyncify boot
+// fetches its pair off the network the first time (then both sets sit in
+// the store and the param picks). Deliberate — this module can't read the
+// page URL (the worker shares it), and a dev flag isn't worth the plumbing.
+export async function resolveEngineVariant(
+  cache: Cache | null,
+  stats: FetchStats,
+  supported = jspiSupported(),
+): Promise<EngineVariant> {
+  if (!supported) return 'asyncify'
+  if (cache) {
+    for (const v of ['jspi', 'asyncify'] as const) {
+      if (await anyCached(cache, [...ENGINE_SETS[v].glue, ...ENGINE_SETS[v].wasm])) return v
+    }
+  }
+  try {
+    // With a store the probe IS the glue download (the caller's fetch then
+    // hits the cache). Without one the body would be fetched twice and
+    // counted twice in the boot line's netBytes — ask for headers only.
+    if (cache) await fetchArtifact(cache, stats, ...ENGINE_SETS.jspi.glue)
+    else await headArtifact(ENGINE_SETS.jspi.glue[0])
+    return 'jspi'
+  } catch (e) {
+    if (isAbsent(e)) return 'asyncify'
+    throw e
+  }
+}
+
+// Existence check under matchOrFetch's rules (a network failure is status 0).
+async function headArtifact(path: string): Promise<void> {
+  const res = await fetch(path, { method: 'HEAD' }).catch(() => null)
+  if (!res) throw new ArtifactError(0, path)
+  if (!res.ok) throw new ArtifactError(res.status, path)
+  if (isSpaFallback(res)) throw new ArtifactError(404, path)
+}
+
+// Is a bootable engine in the cache — the shared data pack plus the whole
+// glue+wasm pair of a variant this device can run? Boot asks this before
 // falling through to the network, where the deploy serves only its current
 // build (engine.worker.ts openArtifactCache). Prewarm is not part of the
 // question: it's optional at deploy time and re-seeds itself.
-export async function bootArtifactsCached(cache: Cache | null): Promise<boolean> {
-  if (!cache) return false
-  for (const alts of [ENGINE_GLUE, ENGINE_WASM, ENGINE_DATA]) {
-    if (!await anyCached(cache, alts)) return false
+export async function bootArtifactsCached(
+  cache: Cache | null,
+  supported = jspiSupported(),
+): Promise<boolean> {
+  if (!cache || !await anyCached(cache, ENGINE_DATA)) return false
+  for (const v of (supported ? ['jspi', 'asyncify'] : ['asyncify']) as EngineVariant[]) {
+    if (await anyCached(cache, ENGINE_SETS[v].glue) && await anyCached(cache, ENGINE_SETS[v].wasm))
+      return true
   }
-  return true
+  return false
 }
 
 // The build id stamped on the cached engine set (undefined = never stamped,
@@ -331,9 +412,12 @@ export async function cachedEngineBuild(cache: Cache | null): Promise<string | u
 // the marker. Called after any flow that attempted the full set (worker
 // boot, explicit download); returns false when something is missing (quota
 // dropped a put) so callers can surface it.
-export async function markEngineSetComplete(cache: Cache | null): Promise<boolean> {
+export async function markEngineSetComplete(
+  cache: Cache | null,
+  supported = jspiSupported(),
+): Promise<boolean> {
   if (!cache) return false
-  if (!await bootArtifactsCached(cache)) return false
+  if (!await bootArtifactsCached(cache, supported)) return false
   // Prewarm is optional at deploy time, but a cached manifest with no pack
   // is a partial set — require the pair together.
   if (await anyCached(cache, PREWARM_MANIFEST) && !await anyCached(cache, PREWARM_BIN)) return false
@@ -515,9 +599,10 @@ export async function downloadOfflineData(
   onProgress('Downloading engine…')
   const { engine: cache, gamedata } = await openOfflineStores(version)
   if (!cache) throw new Error('cache storage unavailable')
+  const set = ENGINE_SETS[await resolveEngineVariant(cache, stats)]
   await Promise.all([
-    fetchArtifact(cache, stats, ...ENGINE_GLUE),
-    fetchArtifact(cache, stats, ...ENGINE_WASM),
+    fetchArtifact(cache, stats, ...set.glue),
+    fetchArtifact(cache, stats, ...set.wasm),
     fetchArtifact(cache, stats, ...ENGINE_DATA),
   ])
   onProgress('Downloading first-run data…')
@@ -607,12 +692,18 @@ export async function removeOfflineData(): Promise<boolean> {
 // only has its engine half. Declared rather than fetched — the number has to
 // be on screen the instant the probe says "not installed", and asking the
 // deploy for it would cost a round trip to say what barely changes between
-// builds. Measured off a full local install (Content-Length sums, see
-// measureOfflineData): 13,147,300 bytes of engine across 8 entries and
-// 9,812,565 of tiles across 20 — 12.5 + 9.4 = 21.9 MiB, which is what
-// formatBytes prints as "22 MB" once the set is on the device. Keep these
-// agreeing with that; recheck when the engine build changes shape.
-export const INSTALL_SIZE_LABEL = '22 MB'
+// builds. Measured off full local installs (Content-Length sums, see
+// measureOfflineData), 2026-09-20: 9,832,216 bytes of tiles either way, plus
+// 10,724,267 of engine on the JSPI set — 19.6 MiB total — or 13,262,973 on
+// the Asyncify set (its wasm is 2.5 MB larger gzipped) — 22.0 MiB. Those are
+// what formatBytes prints as "20 MB" / "22 MB" once the set is on the
+// device. Keep these agreeing with that; recheck when the engine build
+// changes shape. Keyed on capability, not on a probe of the deploy, so it
+// reads 2 MB low on a JSPI browser against an Asyncify-only deploy
+// (install.sh without wasm/dist-jspi — the JSPI retraction state). Accepted:
+// the label only shows before anything is installed, and threading deploy
+// contents into both views costs more than that error.
+export const INSTALL_SIZE_LABEL = jspiSupported() ? '20 MB' : '22 MB'
 export const TILES_SIZE_LABEL = '9 MB'
 
 // Bytes on the device, split the way the download is: engine (the wasm

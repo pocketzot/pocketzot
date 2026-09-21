@@ -236,9 +236,10 @@ function nudge(): void {
 // version handling.
 
 import {
-  bootArtifactsCached, cachedEngineBuild, ENGINE_DATA, ENGINE_GLUE, ENGINE_WASM,
+  bootArtifactsCached, cachedEngineBuild, ENGINE_DATA, ENGINE_SETS,
   fetchArtifact, fetchArtifactResponse, fetchVersion, gunzipIfNeeded, gunzipStreamIfNeeded,
-  markEngineSetComplete, newStats, openOfflineStores, PREWARM_BIN, PREWARM_MANIFEST,
+  jspiSupported, markEngineSetComplete, newStats, openOfflineStores, PREWARM_BIN,
+  PREWARM_MANIFEST, resolveEngineVariant,
 } from './artifact-store'
 
 const workerLog = (text: string): void => post({ type: 'log', text })
@@ -258,9 +259,9 @@ const workerLog = (text: string): void => post({ type: 'log', text })
 // would fail the same way. So on a miss (and only then — this costs a
 // round-trip we otherwise skip) check the deploy, and send a skewed device
 // to the lobby's Update rather than mixing builds behind its back.
-async function openArtifactCache(): Promise<Cache | null> {
+async function openArtifactCache(jspi: boolean): Promise<Cache | null> {
   const { engine } = await openOfflineStores(null, workerLog)
-  if (engine && !await bootArtifactsCached(engine)) {
+  if (engine && !await bootArtifactsCached(engine, jspi)) {
     const [stored, deploy] = await Promise.all([cachedEngineBuild(engine), fetchVersion()])
     if (deploy.state === 'ok' && stored !== undefined && stored !== deploy.build)
       // Doesn't name the lobby's button: which one is showing depends on
@@ -336,6 +337,7 @@ async function seedCaches(fs: CrawlFS, cache: Cache | null): Promise<void> {
 async function instantiateWasmFrom(
   res: Response,
   cache: Cache | null,
+  wasmPaths: string[],
   info: WebAssembly.Imports,
 ): Promise<WebAssembly.WebAssemblyInstantiatedSource> {
   if (typeof WebAssembly.instantiateStreaming === 'function') {
@@ -350,14 +352,14 @@ async function instantiateWasmFrom(
       // then it owns the teardown).
       void stream?.cancel().catch(() => { /* locked or errored */ })
       workerLog(`streaming wasm compile failed (${String(e)}) — retrying buffered`)
-      const buf = await gunzipIfNeeded(await fetchArtifact(cache, newStats(), ...ENGINE_WASM))
+      const buf = await gunzipIfNeeded(await fetchArtifact(cache, newStats(), ...wasmPaths))
       return WebAssembly.instantiate(buf, info)
     }
   }
   return WebAssembly.instantiate(await gunzipIfNeeded(await res.arrayBuffer()), info)
 }
 
-async function start(name: string): Promise<void> {
+async function start(name: string, jspi: boolean): Promise<void> {
   // Boot-phase progress: the mini-server turns these into message-log lines,
   // covering the pre-first-output window (download, wasm instantiation, cache
   // seeding) that would otherwise be a silent black screen. This first line
@@ -373,8 +375,15 @@ async function start(name: string): Promise<void> {
   let wasmRes: Response | null = null
   let dataBuffer: ArrayBuffer
   let glueSetsCrawlDir = false
+  // Outlives the try for instantiateWasmFrom's buffered retry.
+  let wasmPaths: string[]
   try {
-    cache = await openArtifactCache()
+    cache = await openArtifactCache(jspi)
+    // Asyncify or JSPI build — picked once, see resolveEngineVariant.
+    const variant = await resolveEngineVariant(cache, stats, jspi)
+    const engineSet = ENGINE_SETS[variant]
+    wasmPaths = engineSet.wasm
+    workerLog(`engine variant: ${variant}`)
     // All three artifacts go through the cache path; data is handed to the
     // glue as bytes (getPreloadedPackage) and the wasm as an unconsumed
     // Response streamed into instantiation, so the glue performs no fetches
@@ -384,8 +393,8 @@ async function start(name: string): Promise<void> {
     // module bypasses its middleware entirely while behaving identically in
     // production.
     const [glueBuf, wasmResponse, dataBuf] = await Promise.all([
-      fetchArtifact(cache, stats, ...ENGINE_GLUE),
-      fetchArtifactResponse(cache, stats, ...ENGINE_WASM),
+      fetchArtifact(cache, stats, ...engineSet.glue),
+      fetchArtifactResponse(cache, stats, ...engineSet.wasm),
       fetchArtifact(cache, stats, ...ENGINE_DATA).then(gunzipIfNeeded),
     ])
     wasmRes = wasmResponse
@@ -494,7 +503,7 @@ async function start(name: string): Promise<void> {
         // export wiring, e.g. a skewed cached glue/wasm pair) must land here
         // as a boot error, not in the unhandledrejection crash net whose
         // "resume to pick up" advice is wrong for a boot that never started.
-        void instantiateWasmFrom(res!, cache, info)
+        void instantiateWasmFrom(res!, cache, wasmPaths, info)
           .then((result) => receiveInstance(result.instance, result.module))
           .catch((e: unknown) => {
             postErrorExit('error', `Offline engine failed to start: ${String(e)}`)
@@ -521,7 +530,7 @@ async function start(name: string): Promise<void> {
   // the readiness marker, so an organic online boot counts as "downloaded"
   // on the readiness surface. Verification matters: fetchArtifact swallows
   // quota failures on cache.put, so fetch-success alone proves nothing.
-  void markEngineSetComplete(cache).then((complete) => {
+  void markEngineSetComplete(cache, jspi).then((complete) => {
     if (!complete) workerLog('artifact set incomplete after boot (storage quota?) — not marked offline-ready')
   }).catch((e: unknown) => {
     // Must not escape: an unhandled rejection here reaches the crash net
@@ -537,6 +546,6 @@ self.onmessage = (e: MessageEvent<WorkerInMsg>) => {
   const m = e.data
   if (m.type === 'start') {
     perfOn = m.perf === true
-    void start(m.name)
+    void start(m.name, m.jspi !== false && jspiSupported())
   } else feed(m)
 }

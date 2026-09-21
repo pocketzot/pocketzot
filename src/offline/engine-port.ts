@@ -41,7 +41,9 @@ export interface EnginePort {
 // Messages between WorkerEnginePort and engine.worker.ts.
 export type WorkerInMsg =
   // name: the character/save-slot name for the engine's -name argv.
-  | { type: 'start'; perf?: boolean; name: string }
+  // jspi:false = ?jspi=0, force the Asyncify build on a JSPI-capable browser
+  // (same-device A/B; resolveEngineVariant in artifact-store.ts).
+  | { type: 'start'; perf?: boolean; jspi?: boolean; name: string }
   | { type: 'control'; json: string }
   | { type: 'keys'; text: string }
   // Boot-watchdog rescue: the worker inspects the engine's suspension state
@@ -195,6 +197,7 @@ export class WorkerEnginePort implements EnginePort {
     private readonly perf: boolean,
     // Character name = save slot: becomes the engine's -name argv.
     private readonly name: string,
+    private readonly jspi = true,
   ) {}
 
   start(): void {
@@ -247,7 +250,7 @@ export class WorkerEnginePort implements EnginePort {
         console.log('[engine]', `heap ${(m.bytes / 1048576).toFixed(1)} MB${prev ? ` (was ${(prev / 1048576).toFixed(1)})` : ''}`)
       }
     }
-    this.post({ type: 'start', perf: this.perf, name: this.name })
+    this.post({ type: 'start', perf: this.perf, jspi: this.jspi, name: this.name })
   }
 
   sendControl(json: string): void {

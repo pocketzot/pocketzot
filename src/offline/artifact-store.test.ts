@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeCaches, type FakeCache } from '../test/fake-caches'
 import {
-  ARTIFACT_CACHE, GAMEDATA_CACHE, cachedGamedataBuild, downloadOfflineData,
+  ARTIFACT_CACHE, GAMEDATA_CACHE, bootArtifactsCached, cachedGamedataBuild, downloadOfflineData,
   fetchArtifact, fetchArtifactResponse, fetchVersion, formatBytes,
   gunzipStreamIfNeeded, markEngineSetComplete,
   measureOfflineData, newStats, openOfflineStores, openVersionedCache,
-  probeReadiness, removeOfflineData,
+  probeReadiness, removeOfflineData, resolveEngineVariant,
 } from './artifact-store'
 
 // Route-map fetch stub: exact-path lookup, 404 otherwise. A `null` value
@@ -237,6 +237,71 @@ describe('markEngineSetComplete', () => {
     expect(await markEngineSetComplete(c as unknown as Cache)).toBe(false)
     await c.put('/offline/prewarm/prewarm.bin.gz', new Response('pack'))
     expect(await markEngineSetComplete(c as unknown as Cache)).toBe(true)
+  })
+})
+
+describe('engine variants', () => {
+  const JSPI_DEPLOY: Routes = {
+    '/offline/jspi/crawl.js': { body: 'jspi glue' },
+    '/offline/jspi/crawl.wasm.gz': { body: 'jspi wasm' },
+  }
+
+  it('never picks JSPI on a browser without it, whatever is deployed or cached', async () => {
+    stubFetch(JSPI_DEPLOY)
+    const c = await artifactCache()
+    await c.put('/offline/jspi/crawl.js', new Response('jspi glue'))
+    expect(await resolveEngineVariant(c as unknown as Cache, newStats(), false)).toBe('asyncify')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('probes the JSPI glue on an empty cache, and caches what it probed', async () => {
+    stubFetch(JSPI_DEPLOY)
+    const c = await artifactCache()
+    expect(await resolveEngineVariant(c as unknown as Cache, newStats(), true)).toBe('jspi')
+    expect(await c.match('/offline/jspi/crawl.js')).toBeTruthy()
+  })
+
+  it('falls back to Asyncify when the deploy ships no JSPI build (404 or SPA html)', async () => {
+    stubFetch({})
+    expect(await resolveEngineVariant(await artifactCache() as unknown as Cache, newStats(), true)).toBe('asyncify')
+    stubFetch({ '/offline/jspi/crawl.js': { body: '<html>', type: 'text/html' } })
+    expect(await resolveEngineVariant(await artifactCache() as unknown as Cache, newStats(), true)).toBe('asyncify')
+  })
+
+  it('probes with HEAD when there is no store, so the glue body is fetched once', async () => {
+    stubFetch(JSPI_DEPLOY)
+    const stats = newStats()
+    expect(await resolveEngineVariant(null, stats, true)).toBe('jspi')
+    expect(fetch).toHaveBeenCalledWith('/offline/jspi/crawl.js', { method: 'HEAD' })
+    expect(stats.netFetches).toBe(0)
+    stubFetch({})
+    expect(await resolveEngineVariant(null, newStats(), true)).toBe('asyncify')
+  })
+
+  it('propagates an unreachable probe instead of guessing a variant', async () => {
+    stubFetch({ '/offline/jspi/crawl.js': null })
+    await expect(resolveEngineVariant(await artifactCache() as unknown as Cache, newStats(), true))
+      .rejects.toThrow(/unreachable/)
+  })
+
+  it('stays on a cached Asyncify set without touching the network', async () => {
+    stubFetch(JSPI_DEPLOY)
+    const c = await seedEngineSet()
+    expect(await resolveEngineVariant(c as unknown as Cache, newStats(), true)).toBe('asyncify')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('counts a set bootable only as a whole pair this browser can run', async () => {
+    const c = await artifactCache()
+    await c.put('/offline/crawl.data.gz', new Response('data'))
+    // Glue from one variant + wasm from the other is not an engine.
+    await c.put('/offline/jspi/crawl.js', new Response('jspi glue'))
+    await c.put('/offline/crawl.wasm.gz', new Response('wasm'))
+    expect(await bootArtifactsCached(c as unknown as Cache, true)).toBe(false)
+    await c.put('/offline/jspi/crawl.wasm.gz', new Response('jspi wasm'))
+    expect(await bootArtifactsCached(c as unknown as Cache, true)).toBe(true)
+    // …and a JSPI pair is nothing to a browser that can't run it.
+    expect(await bootArtifactsCached(c as unknown as Cache, false)).toBe(false)
   })
 })
 
