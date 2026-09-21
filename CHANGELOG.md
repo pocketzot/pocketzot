@@ -11,12 +11,16 @@ Notable changes to PocketZot, newest first.
 
 ## 2026-09-20
 
-- Dragging the X-mode map to pan should now work on Android, instead
-  of only on iOS.
+- X-mode: dragging the map to pan should now work on Android,
+  instead of only on iOS.
+- X-mode: fixed an issue with map centering when adjusting depth
+  with `[`/`]`.
+- Offline: released a new build of the engine that uses new
+  WebAssembly tech to run several times faster for startup, level
+  gen, and other heavy loads. Available on iOS 27, and Android
+  with current Chrome/Firefox.
 - Offline: the name used in your last game is now pre-filled if
   the slot is available.
-- X-mode: fixed an issue with map centering when adjusting level
-  with `[`/`]`.
 
 ## 2026-09-17
 
