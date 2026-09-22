@@ -2744,6 +2744,30 @@ html.map-hold, html.map-hold * {
 #game-view.spell-row .minimap-lens {
   padding-bottom: calc(var(--msglog-box-h) + var(--spell-rail-h) + 0.25rem);
 }
+/* X-mode corner inset (game-view xmodeMinimap): the minimap renderer at a
+   small fixed box, bottom-left over the map, stacked on the describe strip
+   via --xdesc-h (the strip's peak height this X session — a grow-only
+   ResizeObserver in game-view). Translucent, no box: unexplored cells stay
+   clear, so the level's silhouette floats over the map (a dark-scrim
+   variant was A/B'd on phone and lost). Passive: taps fall through to the
+   map (tap-walk / drag-pan). */
+.minimap-inset {
+  grid-area: map;
+  position: absolute;
+  left: 0;
+  bottom: var(--xdesc-h, 0px);
+  z-index: 3;
+  padding: 0.25rem;
+  pointer-events: none;
+  line-height: 0;  /* no descender gap under the inline canvas */
+}
+.minimap-inset .minimap-canvas {
+  background: transparent;
+  opacity: 0.75;
+}
+/* A spectator's lens survives the watched player entering X (enterXMode);
+   the inset would then draw a small minimap over the big one. */
+#map-wrap:has(> .minimap-lens) ~ .minimap-inset { display: none; }
 .minimap-canvas {
   /* The bitmap is integer device-px per cell; keep upscaling (if any)
      hard-edged. Deliberately borderless: the explored region reads its own
@@ -4722,7 +4746,8 @@ html.map-hold, html.map-hold * {
      so the scrim edge should track the text. Portrait reports 0 side
      insets, collapsing this to the base left:0. */
   #game-messages,
-  #xdesc-strip {
+  #xdesc-strip,
+  .minimap-inset {
     left: var(--safe-left);
   }
 

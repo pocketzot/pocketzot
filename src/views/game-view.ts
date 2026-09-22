@@ -22,7 +22,7 @@ import { createShiftToggle } from '../game/input/shift-state'
 import { attachMapGestures, canDescribe, canHover, canOpenLevelMap } from '../game/input/map-tap'
 import { attachCornerSwipe } from '../game/input/corner-swipe'
 import { MapJumper, clampToBox } from '../game/input/map-jump'
-import { keepLocalCenter } from '../game/input/map-pan'
+import { cursorInView, keepLocalCenter } from '../game/input/map-pan'
 import { uiColor, escHtml, dcssToHtml } from '../game/dcss-colors'
 import { htmlToRuns, exportScreenPng, screenSlug, type DcssRun } from './screen-export'
 import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
@@ -269,6 +269,13 @@ export function buildGameView(
   // The place chip toggles the minimap. StatsView owns the chip's DOM and
   // tap detection (see its constructor); we only supply the behavior.
   statsView.setOnPlaceTap(() => minimapOpen ? closeMinimap() : openMinimap())
+  // X-mode corner inset: the same renderer, small and passive (touches pass
+  // through to the map — pointer-events:none in style.css). Mounted for the
+  // life of X mode by enterXMode/exitXMode; repaints ride
+  // scheduleMinimapRepaint.
+  const xmodeMinimap = new MinimapView(store, {
+    className: 'minimap-inset', maxCellCss: 3, growToView: false,
+  })
   statsView.setOnSettingsTap(() => openSettings())
   // Declared ahead of ChatView (not with its map/log siblings below): the
   // chipAllowed veto reads its display, and the ChatView constructor runs an
@@ -720,6 +727,19 @@ export function buildGameView(
   xdescActions.className = 'xdesc-actions'
   xdescActions.style.display = 'none'
   xdescStrip.append(xdescLines, xdescActions)
+  // The X-mode minimap inset stacks on top of the strip (style.css
+  // .minimap-inset). Publish the strip's PEAK height this X session, not its
+  // live one: trunk rebuilds the strip per cursor move with 0–4 describe
+  // lines, and tracking that bounced the inset up and down on every step.
+  // Grow-only means at most a few early rises; exitXMode resets it.
+  let xdescPeakH = 0
+  const setXdescPeak = (h: number): void => {
+    xdescPeakH = h
+    view.style.setProperty('--xdesc-h', `${h}px`)
+  }
+  new ResizeObserver(() => {
+    if (xdescStrip.offsetHeight > xdescPeakH) setXdescPeak(xdescStrip.offsetHeight)
+  }).observe(xdescStrip)
 
   function xdescReset(): void {
     xdescLines.textContent = ''
@@ -1181,6 +1201,9 @@ export function buildGameView(
     requestAnimationFrame(() => {
       fitQueued = false
       mapView.fitToContainer()
+      // A re-fit resizes the viewport — the inset's you-are-here rect, and
+      // its size box (a fraction of the map area) on rotation.
+      scheduleMinimapRepaint()
     })
   }
   const fontScaleObserver = new ResizeObserver(() => {
@@ -2293,6 +2316,7 @@ export function buildGameView(
           if (msg.loc) mapJumper.onCursor(msg.loc)
           if (msg.loc && !inXMode) enterXMode()
           else if (!msg.loc && inXMode) exitXMode()
+          scheduleMinimapRepaint()  // the inset's cursor ring
         } else if (!msg.loc && inXMode) {
           exitXMode()
         }
@@ -2416,6 +2440,10 @@ export function buildGameView(
     hud.style.display = 'none'
     renderSpellRail()  // drop the rail row (and the log's map overlay) for the examine map
     touchControls.enterXMode()
+    // Hidden until its first paint (scheduleFit below schedules it) — a
+    // fresh canvas would flash its 300×150 default.
+    xmodeMinimap.element.hidden = true
+    view.appendChild(xmodeMinimap.element)
     mapView.setFontScale(X_MODE_SCALE)
     // Zoom mode is left untouched: tiles already had zoom-on (forced at
     // construction by setRenderMode), and the scale shrinks each cell by
@@ -2451,6 +2479,8 @@ export function buildGameView(
     view.classList.remove('x-mode')
     syncMoreDisplay()  // a pending --more-- returns to the inline log row
     xdescReset()
+    xmodeMinimap.element.remove()
+    setXdescPeak(0)
     touchControls.exitXMode()
     mapView.setFontScale(1.0)
     scheduleFit()
@@ -3854,16 +3884,33 @@ export function buildGameView(
     )
   }
 
+  // Size box: a fraction of the map area, so the inset scales with the
+  // phone and flips shape on rotation. With maxCellCss 3 a full 80×70
+  // level lands around 120×105 CSS px on a portrait phone.
+  // Hidden while the whole explored level is already on screen — it would
+  // only repeat the map in miniature (common in ASCII X on a small level).
+  // It reappears as soon as a pan, `[`/`]` or tiles' narrower view leaves
+  // part of the level off-screen.
+  function repaintXmodeMinimap(): void {
+    const view = mapView.viewRect()
+    const b = store.mfBounds()
+    const fits = !!b && cursorInView({ x: b.left, y: b.top }, view)
+      && cursorInView({ x: b.right, y: b.bottom }, view)
+    xmodeMinimap.element.hidden = fits || !xmodeMinimap.paint(
+      view, mapWrap.clientWidth * 0.38, mapWrap.clientHeight * 0.24, cursorLoc)
+  }
+
   // Message-driven repaints coalesce through rAF: a movement turn delivers
   // player + map in one batch, and without this each message would repaint
-  // (and restyle) the lens separately.
+  // (and restyle) the lens separately. Serves both hosts.
   let minimapRepaintQueued = false
   function scheduleMinimapRepaint(): void {
-    if (!minimapOpen || minimapRepaintQueued) return
+    if ((!minimapOpen && !inXMode) || minimapRepaintQueued) return
     minimapRepaintQueued = true
     requestAnimationFrame(() => {
       minimapRepaintQueued = false
       if (minimapOpen) repaintMinimap()
+      if (inXMode) repaintXmodeMinimap()
     })
   }
 

@@ -65,9 +65,27 @@ describe('MinimapView.paint', () => {
     expect(mm.element.querySelector('canvas')!.width).toBe(24 * 10)
   })
 
-  it('does not throw with an empty store or zero-size bounds', () => {
+  it('reports nothing painted for an empty store or zero-size bounds', () => {
     const mm = new MinimapView(new MapStore())
-    expect(() => mm.paint(null, 400, 600)).not.toThrow()
-    expect(() => mm.paint(null, 0, 0)).not.toThrow()
+    expect(mm.paint(null, 400, 600)).toBe(false)
+    expect(mm.paint(null, 0, 0)).toBe(false)
+  })
+
+  it('inset options: capped cell size, no growth past the crop', () => {
+    const store = new MapStore()
+    store.merge([
+      { x: 10, y: 5, g: '.', mf: 1 },
+      { x: 30, y: 20, g: '#', mf: 2 },
+    ])
+    const mm = new MinimapView(store, { className: 'minimap-inset', maxCellCss: 3, growToView: false })
+    // Same crop and view rect as the growth test above: the box would allow
+    // 17px/cell (capped to 3 here), and the region stays the 23×18 crop.
+    expect(mm.paint({ x: 8, y: 3, w: 33, h: 21 }, 400, 600, { x: 12, y: 6 })).toBe(true)
+    expect(mm.element.className).toBe('minimap-inset')
+    expect(mm.cellPx).toBe(3)
+    expect(mm.originX).toBe(9)
+    expect(mm.originY).toBe(4)
+    expect(mm.element.querySelector('canvas')!.width).toBe(23 * 3)
+    expect(mm.element.querySelector('canvas')!.height).toBe(18 * 3)
   })
 })
