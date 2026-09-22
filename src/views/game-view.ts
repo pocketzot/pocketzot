@@ -28,6 +28,7 @@ import { htmlToRuns, exportScreenPng, screenSlug, type DcssRun } from './screen-
 import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
 import { extractSkillHotkeys } from './skill-hotkeys'
 import { reflowSkillCrt, plainText } from './skill-reflow'
+import { reflowOverview, isDungeonOverview } from './overview-reflow'
 import { TEX, getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
 import { formatDcssVersion, isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
@@ -2602,6 +2603,7 @@ export function buildGameView(
     // (msg.quote, feats[].quote) and god power lists, which must not be
     // reflowed (dialogue-format quote lines look like label rows). game-over
     // is one fixed-width terminal block — leave it alone.
+    if (msg.type === 'formatted-scroller') rawBody = reflowOverview(rawBody)
     if (msg.type !== 'game-over') rawBody = unwrapHangingIndents(unpadMutationCategory(rawBody))
     if (msg.type === 'describe-god') {
       // describe-god has no `title`/`text` — name is the heading, and the
@@ -2743,10 +2745,10 @@ export function buildGameView(
     })
     // The share-culture screens — the `%` overview (scroller tag "resists",
     // output.cc), the Ctrl-O dungeon overview (untagged: dgn_overview never
-    // set_tags, so it's recognised by its heading, byte-identical in 0.34.1
-    // and trunk — dgn-overview.cc:249), and the end screen — are exportable
-    // as a PNG at their native 80-column layout, from the wire text rather
-    // than the reflowed rawBody the phone renders. Deliberately an
+    // set_tags, so it's recognised by its heading, isDungeonOverview), and
+    // the end screen — are exportable as a PNG at their native 80-column
+    // layout, from the wire text rather than the reflowed rawBody the phone
+    // renders. Deliberately an
     // allowlist: every other scroller is a multi-page document (help, notes,
     // Ctrl-P history…) that nobody shares and that would render an absurdly
     // tall canvas, so unknown/future screens ship chip-less by default.
@@ -2761,7 +2763,7 @@ export function buildGameView(
       const exportText = msg.title?.trim() ? `${msg.title}\n\n${exportBody}` : exportBody
       const firstLine = stripDcss(exportText).split('\n').find((l) => l.trim())?.trim() ?? ''
       const exportable = msg.type === 'game-over' || msg.tag === 'resists'
-        || /Dungeon Overview/.test(firstLine)
+        || isDungeonOverview(exportBody)
       if (exportable && exportText.trim()) {
         // Scrollers usually carry no `title` — the heading is the text's own
         // first line (the `%` overview's "Name the Title (Species Class)…"),

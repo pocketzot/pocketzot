@@ -788,6 +788,32 @@ describe('ui-push / ui-pop overlay stack', () => {
     expect(line?.querySelector('span')?.getAttribute('style')).toMatch(/color/)
   })
 
+  it('renders the dungeon overview sections as cell grids', () => {
+    const h = setup()
+    // Opens-only scroller text (scroller.cc:122), trimmed from a real frame.
+    const text = [
+      '<lightgrey>                    <white>Dungeon Overview and Level Annotations<lightgrey>',
+      '',
+      '<green>Branches:<lightgrey> (press <white>G<lightgrey> to reach them)',
+      '<yellow>Dungeon<lightgrey> <darkgrey>(9/15)<lightgrey>            <yellow> Temple<lightgrey> <darkgrey>(1/1)<lightgrey> D:6        <yellow>   Lair<lightgrey> <darkgrey>(2/5)<lightgrey> D:8',
+      '',
+      '<green>Altars:<lightgrey> (press <white>_<lightgrey> to reach them)',
+      '<darkgrey>Ashenzari<lightgrey>          <white>Cheibriados<lightgrey>            <darkgrey>Dithmenos<lightgrey>           <yellow>Trog<lightgrey>',
+      '<darkgrey>Zin<lightgrey>                <darkgrey>The Shining One<lightgrey>        ',
+    ].join('\n')
+    h.dispatch({ msg: 'ui-push', type: 'formatted-scroller', text })
+    const grids = [...overlay(h).querySelectorAll<HTMLElement>('.overlay-cells--grid')]
+    expect(grids.map(g => [...g.children].map(c => c.textContent))).toEqual([
+      ['Dungeon (9/15)', 'Temple (1/1) D:6', 'Lair (2/5) D:8'],
+      ['Ashenzari', 'Cheibriados', 'Dithmenos', 'Trog', 'Zin', 'The Shining One'],
+    ])
+    // Tracks are sized to the widest cell.
+    expect(grids[1].style.getPropertyValue('--cell-ch')).toBe('15ch')
+    // Cells keep their own colour; nothing in the overview pans sideways.
+    expect(grids[1].children[3].querySelector('span')?.getAttribute('style')).toMatch(/color/)
+    expect(overlay(h).querySelectorAll('.overlay-line--nowrap')).toHaveLength(0)
+  })
+
   it('routes the other server table shapes correctly (no hanging-indent marks)', () => {
     const h = setup()
     // Real layout shapes from the reference source that must NOT be marked

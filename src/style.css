@@ -3370,6 +3370,17 @@ html.map-hold, html.map-hold * {
 
 .overlay-line { min-height: 1lh; white-space: pre-wrap; }
 .overlay-line--nowrap { white-space: pre; }
+/* Re-gridded 80-column cell rows (GRID_MARK lines, overview-reflow.ts).
+   Tracks are sized to the widest cell, so a wide cell drops the grid to fewer
+   columns rather than spilling into its neighbour; min() lets a cell wider
+   than the body wrap inside one full-width track. */
+.overlay-cells--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--cell-ch), 100%), 1fr));
+  column-gap: 1.5ch;
+}
+.overlay-cells--flow { display: flex; flex-wrap: wrap; column-gap: 2.5ch; }
+.overlay-cells--flow > span { white-space: pre; }
 /* Unwrapped `Label: description` blocks (unwrapHangingIndents). Wrapped
    text hangs at the row's own description column (--hang-col, derived from
    the wire's label + padding; monospace so ch units line up exactly), giving

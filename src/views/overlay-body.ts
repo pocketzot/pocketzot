@@ -203,6 +203,21 @@ function trailingGroupStart(s: string): number {
 // key-help rows) are skipped by the [^<] guard.
 export const HANG_MARK = '\u0001'
 
+// A line `GRID_MARK + kind + (CELL_SEP + cell)*` renders as one block of
+// cells instead of a text line: 'grid' = equal columns sized to the widest
+// cell, as many as fit; 'flow' = cells wrapping inline. Each cell is
+// self-contained wire text. Built by overview-reflow.ts.
+export const GRID_MARK = '\u0002'
+export const CELL_SEP = '\u0003'
+
+function renderCellBlock(line: string, highlight: string): string {
+  const [kind, ...cells] = line.slice(GRID_MARK.length).split(CELL_SEP)
+  const widest = Math.max(...cells.map(c => stripDcss(c).length))
+  const style = kind === 'grid' ? ` style="--cell-ch:${widest}ch"` : ''
+  const spans = cells.map(c => `<span>${applyHighlight(dcssToHtml(c), highlight)}</span>`).join('')
+  return `<div class="overlay-line overlay-cells overlay-cells--${kind}"${style}>${spans}</div>`
+}
+
 // The `label:` + padding prefix of a formatter row: m[1] the label, m[2] the
 // padding, m[0].length the description column. The formatter's `%-*s` pad
 // (MAX_ARTP_NAME_LEN + 1 = 11) pads but never separates, so a label that
@@ -311,6 +326,11 @@ export function joinIndentedRuns(text: string): string {
 // screen; the describe-* panels keep the per-line heuristic (terminal=false).
 export function renderBodyLines(rawBody: string, highlight: string, terminal = false): string {
   return balanceColorTagsAcrossLines(rawBody).split('\n').map(line => {
+    // propagateDarkgreyColor may prepend tags, as for HANG_MARK below.
+    const cellsAt = line.indexOf(GRID_MARK)
+    if (cellsAt >= 0 && /^(?:<[^<>]+>)*$/.test(line.slice(0, cellsAt))) {
+      return renderCellBlock(line.slice(cellsAt), highlight)
+    }
     // Lines marked by unwrapHangingIndents wrap with a hanging indent.
     // propagateDarkgreyColor may have prepended tags, so the mark isn't
     // necessarily at index 0. The marked line keeps its original
