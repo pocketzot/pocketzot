@@ -803,6 +803,16 @@ export function buildGameView(
     return true
   }
 
+  // Newest lines kept in the strip. Every message while the level map is up
+  // is temporary (viewmap.cc: msgwin_temporary_mode spans the session), and
+  // only a cursor move's _describe_cell rolls them back — so feedback from
+  // a key that doesn't move the cursor ("Okay, then." per cancelled G,
+  // canned_msg(MSG_OK)) piles up until then, in crawl too. The reference
+  // clips that pile to its fixed-height message window; this is our clip.
+  // 5 = a full describe's plain lines (Location, Here:, items, feature,
+  // cloud; the prompt rides the actions row), so a describe never loses one.
+  const XDESC_MAX_LINES = 5
+
   function xdescAdd(text: string, channel?: number): void {
     // The keyboard-hint prompt becomes the tappable row; match a substring
     // of the wire text (same-turn messages can arrive glued onto one line),
@@ -814,6 +824,7 @@ export function buildGameView(
       line.className = 'xdesc-line'
       line.innerHTML = dcssToHtml(text)
       xdescLines.appendChild(line)
+      while (xdescLines.childElementCount > XDESC_MAX_LINES) xdescLines.firstElementChild!.remove()
     }
     xdescStrip.style.display = ''
   }

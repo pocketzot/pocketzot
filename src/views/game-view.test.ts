@@ -403,6 +403,19 @@ describe('X-mode describe strip', () => {
     expect(strip(h).textContent).not.toContain('kobold')
   })
 
+  it('keeps only the newest lines when feedback piles up without a cursor move', () => {
+    const h = setup()
+    enterX(h)
+    h.dispatch(describeBatch(0, 'A kobold.', 'Floor.'))
+    // Each cancelled G prompt adds one temporary "Okay, then." (canned_msg
+    // MSG_OK); no cursor move, so no rollback clears them.
+    for (let i = 0; i < 8; i++) h.dispatch({ msg: 'msgs', messages: [{ text: 'Okay, then.' }] })
+    const lines = [...strip(h).querySelectorAll('.xdesc-line')].map((l) => l.textContent)
+    expect(lines).toEqual(Array(5).fill('Okay, then.'))
+    // The real log still takes every line, so the exit rollback count holds.
+    expect(msgTexts(h).filter((t) => t === 'Okay, then.').length).toBe(8)
+  })
+
   it('clears and hides on X-mode exit, leaving the real log rolled back clean', () => {
     const h = setup()
     h.dispatch({ msg: 'msgs', messages: [{ text: 'You enter the dungeon.' }] })
