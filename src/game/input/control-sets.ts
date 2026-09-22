@@ -244,16 +244,27 @@ function builtinStandard(): ControlSet {
     id: STANDARD_ID,
     name: 'Standard',
     builtin: true,
+    // Revised 2026-09-22 (a silent swap for everyone on Standard; custom
+    // sets are frozen copies and unaffected). @ is the fight tab: f aims,
+    // p fires at the nearest (the ranged Tab), V evokes wands. Gone from it:
+    // v (primary attack — Ctrl+d-pad already attacks in a direction) and x
+    // (examine — moved to >, beside X: a tapped cell + Enter travels there,
+    // directn.cc do_look_around). > is items + finding your way: e/c are
+    // the unified equip/unequip (0.33+; older servers answer "Unknown
+    // command" — w/P/R/W/T were five keys for what these two do, and a
+    // custom set restores them), ^F ^O G ! mark and find, X x < > go.
+    // The X level map's own keys (exclusions, [ ]) live in x-mode-keys.ts,
+    // never here.
     tabs: [
       { name: '@', cols: 4, slots: [
         k('Tab'), t('5'), t('i'), t('o'),
-        t('q'), t('r'), t('f'), t('v'),
-        t('a'), t("'"), t('x'), t(','),
+        t('q'), t('r'), t('f'), t('p'),
+        t('a'), t('V'), t("'"), t(','),
       ] },
       { name: '>', cols: 4, slots: [
-        t('w'), t('R'), t('t'), t('P'),
-        t('d'), k('^F'), t('G'), k('^O'),
-        t('X'), t('e'), t('<'), t('>'),
+        t('e'), t('d'), t('c'), t('t'),
+        k('^F'), t('G'), k('^O'), t('!'),
+        t('X'), t('x'), t('<'), t('>'),
       ] },
       { name: '?', cols: 4, slots: INFO_SLOTS() },
     ],

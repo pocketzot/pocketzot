@@ -35,13 +35,15 @@ describe('built-in sets', () => {
     }
   })
 
-  it('pins the standard @ tab layout exactly', () => {
-    const at = builtinSets()[0].tabs[0]
+  it('pins the standard @ and > tab layouts exactly', () => {
+    const [at, go] = builtinSets()[0].tabs
     expect(at.name).toBe('@')
     expect(at.slots[0]).toEqual({ key: 9 })  // Tab = auto-fight
-    // Slot 8 is ' (weapon swap a/b), not e — equip stays reachable on the > tab.
     expect(at.slots.slice(1).map(s => s!.text)).toEqual(
-      ['5', 'i', 'o', 'q', 'r', 'f', 'v', 'a', "'", 'x', ','])
+      ['5', 'i', 'o', 'q', 'r', 'f', 'p', 'a', 'V', "'", ','])
+    expect(go.name).toBe('>')
+    expect(go.slots.map(s => s!.text ?? `^${String.fromCharCode(64 + s!.key!)}`)).toEqual(
+      ['e', 'd', 'c', 't', '^F', 'G', '^O', '!', 'X', 'x', '<', '>'])
   })
 })
 
@@ -148,7 +150,8 @@ describe('export / import string format', () => {
 
   it('is human-readable', () => {
     const str = encodeControlSet(builtinSets()[0])
-    expect(str).toContain("@4:{Tab} 5 i o q r f v a ' x ,")
+    expect(str).toContain("@4:{Tab} 5 i o q r f p a V ' ,")
+    expect(str).toContain('>4:e d c t {^F} G {^O} ! X x < >')
     expect(str).toContain('{v1|Standard|')
     // set-name spaces stay literal (only key tokens need {sp})
     expect(encodeControlSet(customSet({ name: 'My keys' }))).toContain('{v1|My keys|')
