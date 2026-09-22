@@ -38,7 +38,7 @@ import { mergeRunes, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '..
 import { count, countEach } from '../counter'
 import { downloadPackFile } from '../offline/save-transfer'
 import { hasOrbLight, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from '../game/rune-messages'
-import { looksLikeWelcome, parseWelcome } from '../game/char-label'
+import { compactPlace, looksLikeWelcome, parseWelcome } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
 import {
   renderBodyLines, propagateDarkgreyColor, unwrapHangingIndents, joinIndentedRuns,
@@ -1716,6 +1716,9 @@ export function buildGameView(
         if (msg.xl !== undefined) charMeta.xl = msg.xl
         if (msg.place !== undefined) charMeta.place = msg.place
         if (msg.depth !== undefined) charMeta.depth = msg.depth
+        if (msg.place !== undefined || msg.depth !== undefined) {
+          touchControls.setXModePlace(compactPlace(charMeta.place ?? '', charMeta.depth))
+        }
         tryResolveBackground() // name/species may have just arrived; see welcomeLine
         if (msg.pos) {
           store.playerPos = { x: msg.pos.x, y: msg.pos.y }

@@ -14,6 +14,7 @@ import {
   CONTROLS_CHANGED_EVENT, GRID_ROWS, getActiveControlSet, slotLabel, slotTitle,
 } from './control-sets'
 import type { ControlSet, ControlTabDef, SlotDef } from './control-sets'
+import { X_MODE_KEYS } from './x-mode-keys'
 
 type SendFn = (msg: ClientMsg) => void
 // The three control tabs keep stable positional ids (micro/macro/info =
@@ -76,6 +77,10 @@ export interface TouchControls {
   element: HTMLElement
   enterXMode(): void
   exitXMode(): void
+  // Label for the X-mode header's level stepper: the compact place of the
+  // level being VIEWED (the stepper block in buildTouchControls has the wire
+  // facts). Cheap; call on every player place/depth change.
+  setXModePlace(label: string): void
   // Tracks "steering a cursor" state (root class `cursor-mode`) for the
   // non-X server cursors (x examine, targeting); X mode's own class covers
   // the level-map cursor. Deliberately unstyled (the map cursor is its own
@@ -99,8 +104,9 @@ export interface TouchControls {
 
 // Arrow + numpad keycodes; shift = run-variant; ctrl = open-door / attack-stationary.
 // Center is the wait/confirm slot; sends '.' as text so it both waits one turn in
-// normal play and accepts the cursor target in X mode. Exported so the settings
-// d-pad specimen renders the same faces as the live pad.
+// normal play and accepts the target while aiming (inert in the X level map —
+// see buildDpad). Exported so the settings d-pad specimen renders the same
+// faces as the live pad.
 export const DPAD_LAYOUT: DpadDef[][] = [
   [
     { label: '↖', plain: CK_HOME,  shifted: CK_SHIFT_HOME,  ctrled: CK_CTRL_HOME  },
@@ -416,6 +422,10 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
   let ctrlActive = false
   let activeTab: TabKey = 'micro'
   let controlSet!: ControlSet  // assigned by applyControlSet() before first read
+  // While the X level map is up the panel shows its own two-row key set
+  // (renderXModeContent) in place of the whole strip; activeTab is
+  // untouched, so exit restores the tab the player left.
+  let inXMode = false
 
   // Forward declarations — assigned during DOM construction below
   let shiftBtn!: HTMLButtonElement
@@ -724,8 +734,11 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
         btn.className = 'tc-dpad-btn' + (r === 1 && c === 1 ? ' wait' : '')
         btn.textContent = def.label
         if ('text' in def) {
-          // Single-fire: a held wait would burn turns blind.
-          bindTap(btn, () => sendDpad(def))
+          // Single-fire: a held wait would burn turns blind. Inert in the X
+          // level map, where the whole pad is hidden (style.css): `.` is
+          // CMD_MAP_GOTO_TARGET (cmd-keys.h:352), a travel — the X row's
+          // Enter is the one confirm, and a hidden pad must stay silent.
+          bindTap(btn, () => { if (!inXMode) sendDpad(def) })
         } else {
           // Hold = run: the touch-down's plain step, then ONE shifted keycode
           // at the hold threshold. In normal play CK_SHIFT_<dir> is
@@ -792,10 +805,57 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
     // the spells tab is the one on screen (render() per harvest was otherwise
     // constructed and immediately discarded).
     tab.style.display = spellTabVisible() ? '' : 'none'
-    if (activeTab !== 'spells') return
+    if (activeTab !== 'spells' || inXMode) return  // X's key set owns the content area
     const grid = opts.spellTab?.hasSpells() ? opts.spellTab.render() : null
     if (grid) { contentEl.innerHTML = ''; contentEl.appendChild(grid) }
     else renderTab('micro')
+  }
+
+  // The X level map's fixed key grid (x-mode-keys.ts). Keys go through
+  // sendTabKey, so the footer modifiers apply exactly as on a tab grid.
+  // Two full-width rows; the d-pad, header and footer are hidden meanwhile
+  // (style.css x-mode rules). Top: Esc | `[` name `]` | Enter — `[` / `]`
+  // step through the levels the character knows, and the boxed level name
+  // between them is the `G` button (the engine answers `G` with its "Where
+  // to?" branch menu). The name is fed by setXModePlace: the engine re-sends
+  // player place/depth for the VIEWED level on every level change (traced
+  // 2026-09-21: `[` → player{depth} → map{clear, player_on_level:false}).
+  // Bottom: X_MODE_KEYS + the abc▴ keyboard for the rare rest.
+  let xPlace = ''
+  function renderXModeContent(): void {
+    contentEl.innerHTML = ''
+    const key = (label: string, title: string, fire: () => void, cls = ''): HTMLButtonElement => {
+      const btn = document.createElement('button')
+      btn.className = 'tc-btn' + (cls ? ' ' + cls : '')
+      btn.textContent = label
+      btn.title = title
+      btn.setAttribute('aria-label', title)
+      bindTap(btn, fire)
+      return btn
+    }
+    const text = (t: string) => () => { send({ msg: 'input', text: t }); clearOneshot() }
+    const top = document.createElement('div')
+    top.className = 'tc-row'
+    const placeBtn = key(xPlace, 'Go to level', text('G'), 'tc-place')
+    placeBtn.classList.toggle('long', xPlace.length >= 10)
+    top.append(
+      key('⎋', 'Escape', () => { send({ msg: 'key', keycode: 27 }); clearOneshot() }, 'glyph'),
+      key('[', 'Previous level', text('['), 'tc-step'),
+      placeBtn,
+      key(']', 'Next level', text(']'), 'tc-step'),
+      key('⏎', 'Enter', () => { send({ msg: 'key', keycode: 13 }); clearOneshot() }, 'glyph'),
+    )
+    const bottom = document.createElement('div')
+    bottom.className = 'tc-row'
+    for (const k of X_MODE_KEYS) bottom.appendChild(key(k.label, k.title, () => sendTabKey(k.slot)))
+    bottom.appendChild(key('abc▴', 'Open keyboard input', openKbd, 'tri tc-kbd-x'))
+    contentEl.append(top, bottom)
+  }
+
+  // The panel body for the current mode: the X key set, else the active tab.
+  function renderPanel(): void {
+    if (inXMode) renderXModeContent()
+    else renderTab(activeTab)
   }
 
   function renderContent(tabDef: ControlTabDef): void {
@@ -837,7 +897,7 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
   function applyControlSet(): void {
     controlSet = getActiveControlSet()
     rebuildTabs()
-    renderTab(activeTab)
+    renderPanel()
   }
 
   function onControlsChanged(): void {
@@ -861,13 +921,28 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
   }
 
   function enterXMode(): void {
+    inXMode = true
     root.classList.add('x-mode')
     clearAllMods()
+    renderPanel()
   }
 
   function exitXMode(): void {
+    inXMode = false
     root.classList.remove('x-mode')
     clearAllMods()
+    renderPanel()
+  }
+
+  function setXModePlace(label: string): void {
+    xPlace = label
+    const btn = contentEl.querySelector<HTMLElement>('.tc-place')
+    if (!btn) return  // not in X: renderXModeContent reads xPlace on entry
+    btn.textContent = label
+    // `.long`: the two longest labels (Necropolis, Desolation) step down a
+    // font size, style.css — a habit from the header-width slot this key
+    // outgrew; kept so a narrow sidebar can't clip them.
+    btn.classList.toggle('long', label.length >= 10)
   }
 
   function setCursorMode(on: boolean): void {
@@ -891,5 +966,5 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
   // isKbdOpen also demands rendered geometry: overlay layouts can hide the
   // whole controls root while a manually-opened kbd stays display:flex —
   // an invisible kbd must not swallow the back gesture's dismissal.
-  return { element: root, enterXMode, exitXMode, setCursorMode, setOverlayMode, openKbd, closeKbd, isKbdOpen: () => kbdEl.style.display !== 'none' && kbdEl.getClientRects().length > 0, refreshSpellTab, consumeShift, destroy }
+  return { element: root, enterXMode, exitXMode, setXModePlace, setCursorMode, setOverlayMode, openKbd, closeKbd, isKbdOpen: () => kbdEl.style.display !== 'none' && kbdEl.getClientRects().length > 0, refreshSpellTab, consumeShift, destroy }
 }

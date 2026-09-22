@@ -4050,10 +4050,12 @@ html.map-hold, html.map-hold * {
 }
 
 /* Cursor modes (X level map / x examine / targeting) deliberately add NO
-   d-pad styling: the modes are brief and self-initiated, and the map cursor
-   appearing/moving is its own feedback. The x-mode/cursor-mode root classes
-   still track the state; a shelved corner-bracket "reticle" treatment that
-   attaches to them lives in dev-material/cursor-mode-reticle.md. */
+   d-pad decoration: the modes are brief and self-initiated, and the map
+   cursor appearing/moving is its own feedback. The x-mode/cursor-mode root
+   classes still track the state; a shelved corner-bracket "reticle"
+   treatment that attaches to them lives in
+   dev-material/cursor-mode-reticle.md. (X mode replaces the strip
+   outright — see the "X level map" block below.) */
 
 /* Spectator bar: occupies the same `touch` slot the d-pad would, so swapping
    from playing to spectating doesn't change overall vertical layout.
@@ -4236,6 +4238,34 @@ html.map-hold, html.map-hold * {
 
 .tc-tab:active,
 .tc-tab.pressed { background: var(--tc-press); color: var(--accent); }
+
+/* X level map: the strip becomes two full-width rows (touch.ts
+   renderXModeContent) — d-pad, tab header and modifier footer all hidden.
+   The rows take the d-pad's cell height, so the strip loses its third row
+   to the map (~5 rows at the 0.7 map scale). `[` `]` sit at full key size
+   on purpose: the level check ("what was down these stairs?") is the set's
+   reason to exist, and in the header track they were the smallest keys on
+   screen (the 2026-09-21 first build). */
+#touch-controls.x-mode .tc-dpad,
+#touch-controls.x-mode .tc-header,
+#touch-controls.x-mode .tc-footer { display: none; }
+#touch-controls.x-mode .tc-row { min-height: var(--tc-dpad); }
+/* No width override: the portrait tablet cap (.tc-panel max-width +
+   margin-left:auto, above) keeps the rows a 20rem block under the right
+   thumb rather than 100px keys across an iPad — the other hand pans the
+   map. Phones are narrower than the cap, so they get the full width. */
+
+/* The level name is the `G` button: a bordered face marks it as tappable
+   among plain keys; it takes double width because it carries a word. */
+#touch-controls.x-mode .tc-place {
+  flex: 2;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--tc-label) 45%, transparent);
+}
+/* Necropolis / Desolation, the two longest labels; touch.ts sets .long. */
+#touch-controls.x-mode .tc-place.long { font-size: 0.8rem; }
 
 /* Content area: tab-specific buttons */
 .tc-content {

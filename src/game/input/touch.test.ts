@@ -118,6 +118,71 @@ describe('control-set-driven rendering', () => {
   })
 })
 
+describe('X level-map key set', () => {
+  const texts = (sent: ClientMsg[]) => sent.map(m => m.msg === 'input' ? m.text : `key:${(m as { keycode?: number }).keycode}`)
+
+  it('swaps the panel to the X keys and back to the tab the player left', () => {
+    const { tc } = setup()
+    tc.element.querySelector<HTMLElement>('.tc-tab[data-tab="info"]')!.click()
+    const before = tabButtons(tc.element).map(b => b.textContent)
+
+    tc.setXModePlace('D:2')  // arrives before X on any real session
+    tc.enterXMode()
+    expect(tabButtons(tc.element).map(b => b.textContent))
+      .toEqual(['⎋', '[', 'D:2', ']', '⏎', '!', 'e', 'E', 'R', '<', '>', 'abc▴'])
+
+    tc.exitXMode()
+    expect(tabButtons(tc.element).map(b => b.textContent)).toEqual(before)
+  })
+
+  it('sends each key as its level-map command; the level name is G', () => {
+    const { tc, sent } = setup()
+    tc.enterXMode()
+    for (const b of tabButtons(tc.element)) if (b.textContent !== 'abc▴') b.click()
+    expect(texts(sent)).toEqual(['key:27', '[', 'G', ']', 'key:13', '!', 'e', 'E', 'R', '<', '>'])
+  })
+
+  it('the abc▴ key opens the keyboard overlay', () => {
+    const { tc } = setup()
+    tc.enterXMode()
+    tabButtons(tc.element).find(b => b.textContent === 'abc▴')!.click()
+    expect(tc.isKbdOpen()).toBe(true)
+  })
+
+  it('the level label follows setXModePlace, live and across entries', () => {
+    const { tc } = setup()
+    tc.enterXMode()
+    tc.setXModePlace('Depths:4')
+    const place = () => tc.element.querySelector<HTMLElement>('.tc-place')!
+    expect(place().textContent).toBe('Depths:4')
+    tc.exitXMode()
+    tc.setXModePlace('Necropolis')  // while out of X: stored for the next entry
+    tc.enterXMode()
+    expect(place().textContent).toBe('Necropolis')
+    expect(place().classList.contains('long')).toBe(true)
+    tc.setXModePlace('Vaults:5')
+    expect(place().classList.contains('long')).toBe(false)
+  })
+
+  it('the d-pad centre is inert in X (its "." is travel-to-cursor) and live again after', () => {
+    const { tc, sent } = setup()
+    const centre = tc.element.querySelector<HTMLElement>('.tc-dpad-btn.wait')!
+    tc.enterXMode()
+    centre.click()
+    expect(sent).toEqual([])
+    tc.exitXMode()
+    centre.click()
+    expect(texts(sent)).toEqual(['.'])
+  })
+
+  it('a control-set change while in X keeps the X keys up', () => {
+    const { tc } = setup()
+    tc.enterXMode()
+    setActiveControlSet(saveThreeColSet())
+    expect(tabButtons(tc.element)).toHaveLength(12)
+  })
+})
+
 // The bindTap guard: controls engage on touchstart or on click (mouse) — but
 // never from a click that rides on recent touch activity, which is how iOS's
 // tap heuristics can hand a log-scroll drag to a control it traced over
