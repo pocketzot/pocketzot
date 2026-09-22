@@ -9,6 +9,22 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
+## 2026-09-22
+
+- X-mode (the `X` level map) now has its own control set: the touch
+  strip becomes two rows of full-size keys — Esc, `[`, the level name
+  (tap it for `G`, go to level), `]`, Enter — over `!` `e` `E` `R` `<`
+  `>` and the keyboard. The d-pad is not shown there: tap the map to
+  move the cursor, drag to pan.
+- Standard control set revised. The `@` tab gains `p` (auto-fire at
+  the nearest target) and `V` (evoke); `v` is gone (Ctrl + a d-pad
+  direction attacks without moving) and `x` moves to the `>` tab. The
+  `>` tab is now `e` `d` `c` `t` / `^F` `G` `^O` `!` / `X` `x` `<` `>`:
+  the unified `e` (equip) and `c` (unequip) replace `w`, `P` and `R`.
+  Those two keys exist from DCSS 0.33; on an older server, duplicate
+  Standard in Settings and put `w`/`P`/`R` back. Custom sets are not
+  affected.
+
 ## 2026-09-20
 
 - X-mode: dragging the map to pan should now work on Android,
