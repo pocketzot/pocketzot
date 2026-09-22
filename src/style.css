@@ -4250,10 +4250,16 @@ html.map-hold, html.map-hold * {
 #touch-controls.x-mode .tc-header,
 #touch-controls.x-mode .tc-footer { display: none; }
 #touch-controls.x-mode .tc-row { min-height: var(--tc-dpad); }
-/* No width override: the portrait tablet cap (.tc-panel max-width +
-   margin-left:auto, above) keeps the rows a 20rem block under the right
-   thumb rather than 100px keys across an iPad — the other hand pans the
-   map. Phones are narrower than the cap, so they get the full width. */
+/* Width: the strip's own normal-play width — d-pad, gap and the panel's
+   portrait cap (.tc-panel max-width + margin-left:auto, above). The bare
+   cap is 20rem = 320pt, which a 393pt phone exceeds: with no d-pad beside
+   it the panel hit the cap and sat pinned right with a gap on the left
+   (seen on-device 2026-09-22). This sum is wider than any phone (full
+   width) and bounds the rows to a block under the right thumb on a
+   tablet, where the other hand pans the map. */
+#touch-controls.x-mode .tc-panel {
+  max-width: calc(var(--touch-panel-cap) + var(--tc-dpad) * 3 + 4px + 0.35rem);
+}
 
 /* The level name is the `G` button: a bordered face marks it as tappable
    among plain keys; it takes double width because it carries a word. */
