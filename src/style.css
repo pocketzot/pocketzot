@@ -2783,8 +2783,9 @@ html.map-hold, html.map-hold * {
    gesture documented in ABOUT.md's Gestures (also surfaced as Settings →
    Help → Gestures). Unlike the message-log and monster-list taps — which
    expand already-visible content — this one reveals an otherwise-hidden
-   feature, so it carries a dotted underline as a standing tap affordance.
-   The muted lightgrey (#babdb6 @ 50%) keeps it from competing with the
+   feature, so it carries a dotted underline as a standing tap affordance
+   (added 2026-07-06, dropped 07-07 as HUD chrome not worth a learn-once
+   fact, restored 09-19 — settle it here rather than flipping again). The muted lightgrey (#babdb6 @ 50%) keeps it from competing with the
    text. The padding/negative-margin pair grows the hit area without moving
    the text — abbreviated names ("@D:1") are otherwise a small target. */
 .hud-place-chip {

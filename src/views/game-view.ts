@@ -1739,11 +1739,13 @@ export function buildGameView(
           // policy below then names a cell on the level just left. It can't
           // wait for the cursor report to retire it: place_cursor defers
           // CURSOR_MAP until AFTER a pending full map (tileweb.cc "if map is
-          // going to be updated, send the cursor after that"), and sends
-          // none at all when the arrival cell has the old cursor's coords —
-          // the held view then showed the new level around the old level's
-          // stair. The spectator-join clear (above) drops a hold too; that
-          // only re-centers on the cursor.
+          // going to be updated, send the cursor after that"; _send_map's
+          // force_full tail sends it, tileweb.cc:2014), so the hold would
+          // refuse this map's vgrdc, and the late cursor retires the hold
+          // without re-panning (MapJumper.onCursor) while no further vgrdc
+          // follows — the held view then showed the new level around the old
+          // level's stair. The spectator-join clear (above) drops a hold
+          // too; that only re-centers on the cursor.
           mapJumper.reset()
         }
         // vgrdc is the server's complete view-centering signal (present on a

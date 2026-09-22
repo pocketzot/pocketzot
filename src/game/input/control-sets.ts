@@ -247,15 +247,17 @@ function builtinStandard(): ControlSet {
     // Revised 2026-09-22 (a silent swap for everyone on Standard; custom
     // sets are frozen copies and unaffected). @ is the fight tab: f aims,
     // p fires at the nearest (the ranged Tab), v is the primary attack.
-    // Never trade v for V: v is the only key for a polearm's reach attack
-    // (CMD_PRIMARY_ATTACK → melee_action, quiver.cc:451; Ctrl+d-pad hits
-    // adjacent only), while wands quiver onto f/p (wand_action,
+    // Never trade v for V: v is the only way to aim a polearm's reach attack
+    // (CMD_PRIMARY_ATTACK → melee_action, quiver.cc:451; Tab reaches only the
+    // nearest target, Ctrl+d-pad hits adjacent only), while wands quiver onto f/p (wand_action,
     // quiver.cc:1651) and Shift+v sends V for the rest. x moved to >
     // (examine, beside X: a tapped cell + Enter travels there, directn.cc
     // do_look_around). > is items + finding your way: e/c are
-    // the unified equip/unequip (0.33+; older servers answer "Unknown
-    // command" — w/P/R/W/T were five keys for what these two do, and a
-    // custom set restores them), ^F ^O G ! mark and find, X x < > go.
+    // the unified equip/unequip (0.30+, cmd-keys.h at 0.30-b1; 0.26–0.29
+    // answer "Unknown command", and on 0.24/0.25 e eats and c butchers —
+    // CMD_EAT/CMD_BUTCHER, butchery starting unprompted on a lone corpse.
+    // w/P/R/W/T were five keys for what these two do, and a custom set
+    // restores them), ^F ^O G ! mark and find, X x < > go.
     // The X level map's own keys (exclusions, [ ]) live in x-mode-keys.ts,
     // never here.
     tabs: [

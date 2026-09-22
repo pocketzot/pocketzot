@@ -512,9 +512,9 @@ export class StatsView {
 
   // The in-game Settings entry: a self-labeling gear parked at the right edge
   // of the id line (same delegated-tap hook as the place chip, via
-  // setOnSettingsTap). Unlike the place chip it stays visibly tappable — it's
-  // the one surface a lost player must find without first reading the Gestures
-  // help, which itself lives inside Settings.
+  // setOnSettingsTap). It stays visibly tappable — it's the one surface a lost
+  // player must find without first reading the Gestures help, which itself
+  // lives inside Settings.
   private settingsChip(): string {
     // U+2699 GEAR + U+FE0E (text-presentation selector): iOS Safari otherwise
     // renders the bare gear as a colour emoji, ignoring the CSS colour. FE0E
