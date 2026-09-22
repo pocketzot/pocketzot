@@ -136,6 +136,57 @@ export function propagateDarkgreyColor(body: string): string {
   return result
 }
 
+// describe-god `powers_list` rows are single 80-column terminal lines: the
+// description, then the cost right-aligned to column 80 via
+// `cprintf("%s%*s%s\n", buf, 80 - desc_len - cost_len, "", cost)`
+// (describe-god.cc:981, trunk and 0.34.1 alike). At phone width the padding
+// trips isTabularLine into nowrap and the cost pans offscreen. Move each cost
+// onto its own 4-space-indented line, which renderBodyLines hangs as a
+// sub-item. The signature is visible width ≥ 80 plus a balanced trailing
+// `(…)` group: a row too long for its padding still reaches col 80 (a
+// negative printf width left-justifies, so the gap survives and the row runs
+// wider), and costs nest parens (Nemelex "A Card (12 in deck)", Ashenzari
+// "(Boost: …)" — ability.cc make_cost_description). Costless rows, passives
+// and the Makhleb/Jiyva/Hepliaklqana specials are shorter and pass through.
+// The server sets the colour before every row (describe-god.cc:927) and
+// opens-only lines each render with a fresh colour stack, so the cost line
+// repeats its row's leading tags.
+export function splitGodPowerCosts(lines: string[]): string[] {
+  const out: string[] = []
+  for (const line of lines) {
+    const raw = line.trimEnd()
+    const split = raw.endsWith(')') && raw.replace(/<[^<>]*>/g, '').length >= 80
+      ? trailingGroupStart(raw) : -1
+    const desc = split > 0 ? raw.slice(0, split).trimEnd() : ''
+    if (!desc.replace(/<[^<>]*>/g, '').trim()) { out.push(line); continue }
+    const lead = /^(?:<[^<>]+>)*/.exec(raw)![0]
+    out.push(desc, `${lead}    ${raw.slice(split)}`)
+  }
+  return out
+}
+
+// A mutation description ends with its tag line right-aligned to column 80:
+// `"\n" + string(80 - width, ' ') + "Category: [<darkgrey>Anatomy</darkgrey>]"`
+// (mutation.cc get_mutation_desc, trunk and 0.34.1 alike; ability
+// descriptions embed it too, ability.cc:1624). The ~60-space pad trips
+// isTabularLine's right-column rule into nowrap, parking the line offscreen
+// at phone width. Keyed on the literal label, not on "ends at col 80":
+// column_composer right-column continuations (keyhelp) are also deeply
+// indented and can end at 80 by chance.
+export function unpadMutationCategory(body: string): string {
+  return body.replace(/^ {20,}(Category: \[)/gm, '$1')
+}
+
+// Index of the `(` that balances a string's final `)`, or -1.
+function trailingGroupStart(s: string): number {
+  let depth = 0
+  for (let i = s.length - 1; i >= 0; i--) {
+    if (s[i] === ')') depth++
+    else if (s[i] === '(' && --depth === 0) return i
+  }
+  return -1
+}
+
 // Ego/artprop descriptions arrive pre-formatted by the server's
 // _format_prop_desc (describe.cc): a `Label: ` prefix, the description
 // hard-wrapped at 80 columns, and every continuation line padded with

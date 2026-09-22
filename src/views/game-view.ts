@@ -42,7 +42,8 @@ import { compactPlace, looksLikeWelcome, parseWelcome } from '../game/char-label
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
 import {
   renderBodyLines, propagateDarkgreyColor, unwrapHangingIndents, joinIndentedRuns,
-  renderSpellbook, stripDcss, formatMore, formatMoreHtml, computeScrollPos,
+  splitGodPowerCosts, unpadMutationCategory, renderSpellbook, stripDcss, formatMore,
+  formatMoreHtml, computeScrollPos,
 } from './overlay-body'
 import { SpellHarvester, type SpellEntry } from '../game/spell-harvest'
 import { ChatView } from './chat-view'
@@ -2601,7 +2602,7 @@ export function buildGameView(
     // (msg.quote, feats[].quote) and god power lists, which must not be
     // reflowed (dialogue-format quote lines look like label rows). game-over
     // is one fixed-width terminal block — leave it alone.
-    if (msg.type !== 'game-over') rawBody = unwrapHangingIndents(rawBody)
+    if (msg.type !== 'game-over') rawBody = unwrapHangingIndents(unpadMutationCategory(rawBody))
     if (msg.type === 'describe-god') {
       // describe-god has no `title`/`text` — name is the heading, and the
       // body is split across pane fields (description / favour+powers_list /
@@ -2611,7 +2612,7 @@ export function buildGameView(
       if (msg.description) sections.push(msg.description)
       if (msg.favour) sections.push(`<lightblue>Favour:</lightblue> ${msg.favour}`)
       if (msg.powers_list) {
-        const lines = msg.powers_list.split('\n').slice(3, -1).filter(s => s.trim())
+        const lines = splitGodPowerCosts(msg.powers_list.split('\n').slice(3, -1).filter(s => s.trim()))
         if (lines.length) sections.push(`<lightblue>Powers:</lightblue>\n${lines.join('\n')}`)
       }
       if (msg.powers) sections.push(msg.powers)

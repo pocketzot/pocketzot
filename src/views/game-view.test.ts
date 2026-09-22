@@ -723,6 +723,71 @@ describe('ui-push / ui-pop overlay stack', () => {
     expect(unwrapHangingIndents('Note:this is prose\nnext line')).toBe('Note:this is prose\nnext line')
   })
 
+  it('moves describe-god power costs onto an indented line under the description', () => {
+    const h = setup()
+    // Server row shape: cost right-aligned to col 80 (describe-god.cc:981);
+    // an over-long row keeps a gap and runs past 80 (negative printf width).
+    const row = (colour: string, desc: string, cost: string, gap = 0) =>
+      `<${colour}>${desc}${' '.repeat(gap || Math.max(80 - desc.length - cost.length, 0))}${cost}`
+    const overlong = 'You can surround yourself with impenetrable night, twice.'
+    const powers_list = [
+      '<lightgrey><lightgrey>', '', 'Granted powers:' + ' '.repeat(59) + '(Cost)',
+      '<yellow>Your life essence is reduced. (-10% HP)',
+      row('yellow', 'You can recall your ancestor.', '(2 MP, Piety-)'),
+      row('darkgrey', 'You can stack five cards from your decks.', '(A Card (12 in deck))'),
+      row('yellow', overlong, '(8 MP, Piety----, Exhaustion, Drain)', 6),
+      '<yellow>You can perform airborne attacks.',
+      '',
+    ].join('\n')
+    h.dispatch({ msg: 'ui-push', type: 'describe-god', name: 'Hepliaklqana', powers_list })
+    const lines = [...overlay(h).querySelectorAll<HTMLElement>('.overlay-line')]
+    const texts = lines.map(el => el.textContent)
+    const at = (t: string) => texts.indexOf(t)
+    // Each cost follows its description on its own 4-space line; nested
+    // parens stay in one group; short rows (incl. a mid-line paren) are kept.
+    expect(texts.slice(at('Powers:'), at('You can perform airborne attacks.') + 1)).toEqual([
+      'Powers:',
+      'Your life essence is reduced. (-10% HP)',
+      'You can recall your ancestor.',
+      '    (2 MP, Piety-)',
+      'You can stack five cards from your decks.',
+      '    (A Card (12 in deck))',
+      overlong,
+      '    (8 MP, Piety----, Exhaustion, Drain)',
+      'You can perform airborne attacks.',
+    ])
+    // Nothing in the list pans offscreen any more.
+    expect(overlay(h).querySelectorAll('.overlay-line--nowrap')).toHaveLength(0)
+    // The cost keeps its row's colour, and god-coloured costs hang at 4ch.
+    const desc = lines[at('You can recall your ancestor.')]
+    const cost = lines[at('    (2 MP, Piety-)')]
+    expect(desc.querySelector('span')?.getAttribute('style')).toMatch(/color/)
+    expect(cost.querySelector('span')?.getAttribute('style'))
+      .toBe(desc.querySelector('span')?.getAttribute('style'))
+    expect(cost.style.getPropertyValue('--hang-col')).toBe('4ch')
+    const card = lines[at('    (A Card (12 in deck))')]
+    expect(card.querySelector('span')?.getAttribute('style'))
+      .toBe(lines[at('You can stack five cards from your decks.')].querySelector('span')?.getAttribute('style'))
+  })
+
+  it('pulls the right-aligned mutation Category line back to the left edge', () => {
+    const h = setup()
+    // mutation.cc get_mutation_desc: tags right-aligned to col 80.
+    const tags = 'Category: [<darkgrey>Anatomy</darkgrey>, <red>Blood</red>]'
+    const body = [
+      'You have horns on your head.',
+      '',
+      'Trigger chance:  35%',
+      ' '.repeat(80 - 'Category: [Anatomy, Blood]'.length) + tags,
+    ].join('\n')
+    h.dispatch({ msg: 'ui-push', type: 'describe-generic', title: 'Horns', body })
+    const line = [...overlay(h).querySelectorAll<HTMLElement>('.overlay-line')]
+      .find(el => el.textContent?.includes('Category:'))
+    expect(line?.textContent).toBe('Category: [Anatomy, Blood]')
+    expect(line?.classList.contains('overlay-line--nowrap')).toBe(false)
+    expect(line?.querySelector('span')?.getAttribute('style')).toMatch(/color/)
+  })
+
   it('routes the other server table shapes correctly (no hanging-indent marks)', () => {
     const h = setup()
     // Real layout shapes from the reference source that must NOT be marked
