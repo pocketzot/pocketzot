@@ -16,6 +16,8 @@ Notable changes to PocketZot, newest first.
   (tap it for `G`, go to level), `]`, Enter — over `!` `e` `E` `R` `<`
   `>` and the keyboard. The d-pad is not shown there: tap the map to
   move the cursor, drag to pan.
+- Dragging the map in normal play now opens the level map, and the
+  drag carries on as its pan.
 - Standard control set revised. The `@` tab gains `p` (auto-fire at
   the nearest target) and `V` (evoke); `v` is gone (Ctrl + a d-pad
   direction attacks without moving) and `x` moves to the `>` tab. The
