@@ -246,10 +246,13 @@ function builtinStandard(): ControlSet {
     builtin: true,
     // Revised 2026-09-22 (a silent swap for everyone on Standard; custom
     // sets are frozen copies and unaffected). @ is the fight tab: f aims,
-    // p fires at the nearest (the ranged Tab), V evokes wands. Gone from it:
-    // v (primary attack — Ctrl+d-pad already attacks in a direction) and x
-    // (examine — moved to >, beside X: a tapped cell + Enter travels there,
-    // directn.cc do_look_around). > is items + finding your way: e/c are
+    // p fires at the nearest (the ranged Tab), v is the primary attack.
+    // Never trade v for V: v is the only key for a polearm's reach attack
+    // (CMD_PRIMARY_ATTACK → melee_action, quiver.cc:451; Ctrl+d-pad hits
+    // adjacent only), while wands quiver onto f/p (wand_action,
+    // quiver.cc:1651) and Shift+v sends V for the rest. x moved to >
+    // (examine, beside X: a tapped cell + Enter travels there, directn.cc
+    // do_look_around). > is items + finding your way: e/c are
     // the unified equip/unequip (0.33+; older servers answer "Unknown
     // command" — w/P/R/W/T were five keys for what these two do, and a
     // custom set restores them), ^F ^O G ! mark and find, X x < > go.
@@ -259,7 +262,7 @@ function builtinStandard(): ControlSet {
       { name: '@', cols: 4, slots: [
         k('Tab'), t('5'), t('i'), t('o'),
         t('q'), t('r'), t('f'), t('p'),
-        t('a'), t('V'), t("'"), t(','),
+        t('a'), t('v'), t("'"), t(','),
       ] },
       { name: '>', cols: 4, slots: [
         t('e'), t('d'), t('c'), t('t'),
