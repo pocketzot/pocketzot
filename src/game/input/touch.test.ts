@@ -164,15 +164,14 @@ describe('X level-map key set', () => {
     expect(place().classList.contains('long')).toBe(false)
   })
 
-  it('the d-pad centre is inert in X (its "." is travel-to-cursor) and live again after', () => {
+  it('the d-pad centre sends "." in X too (travel-to-cursor there), not only in normal play', () => {
     const { tc, sent } = setup()
     const centre = tc.element.querySelector<HTMLElement>('.tc-dpad-btn.wait')!
     tc.enterXMode()
     centre.click()
-    expect(sent).toEqual([])
     tc.exitXMode()
     centre.click()
-    expect(texts(sent)).toEqual(['.'])
+    expect(texts(sent)).toEqual(['.', '.'])
   })
 
   it('a control-set change while in X keeps the X keys up', () => {

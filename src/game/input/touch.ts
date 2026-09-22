@@ -104,9 +104,9 @@ export interface TouchControls {
 
 // Arrow + numpad keycodes; shift = run-variant; ctrl = open-door / attack-stationary.
 // Center is the wait/confirm slot; sends '.' as text so it both waits one turn in
-// normal play and accepts the target while aiming (inert in the X level map —
-// see buildDpad). Exported so the settings d-pad specimen renders the same
-// faces as the live pad.
+// normal play, accepts the target while aiming, and travels to the cursor in
+// the X level map (CMD_MAP_GOTO_TARGET). Exported so the settings d-pad
+// specimen renders the same faces as the live pad.
 export const DPAD_LAYOUT: DpadDef[][] = [
   [
     { label: '↖', plain: CK_HOME,  shifted: CK_SHIFT_HOME,  ctrled: CK_CTRL_HOME  },
@@ -734,11 +734,8 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
         btn.className = 'tc-dpad-btn' + (r === 1 && c === 1 ? ' wait' : '')
         btn.textContent = def.label
         if ('text' in def) {
-          // Single-fire: a held wait would burn turns blind. Inert in the X
-          // level map, where the whole pad is hidden (style.css): `.` is
-          // CMD_MAP_GOTO_TARGET (cmd-keys.h:352), a travel — the X row's
-          // Enter is the one confirm, and a hidden pad must stay silent.
-          bindTap(btn, () => { if (!inXMode) sendDpad(def) })
+          // Single-fire: a held wait would burn turns blind.
+          bindTap(btn, () => sendDpad(def))
         } else {
           // Hold = run: the touch-down's plain step, then ONE shifted keycode
           // at the hold threshold. In normal play CK_SHIFT_<dir> is
