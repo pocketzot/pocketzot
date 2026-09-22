@@ -276,6 +276,28 @@ export function buildGameView(
   const xmodeMinimap = new MinimapView(store, {
     className: 'minimap-inset', maxCellCss: 3, growToView: false,
   })
+  // Landscape sidebar minimap: always-on in the sidebar's 1fr spacer row
+  // (style.css `mini` area; display:none in portrait), shown only when that
+  // row has room — a tablet's tall sidebar, rarely a phone's. The slot is
+  // the grid item; the minimap sits absolutely inside it (see style.css),
+  // and the observer keeps its content box current, so repaints never read
+  // layout. `.empty` hides just the canvas: the element keeps its box, so
+  // the observer still sees room come back.
+  const sidebarMinimap = new MinimapView(store, {
+    className: 'minimap-sidebar empty', maxCellCss: 5, growToView: false,
+  })
+  const sidebarMinimapSlot = document.createElement('div')
+  sidebarMinimapSlot.className = 'minimap-sidebar-slot'
+  sidebarMinimapSlot.appendChild(sidebarMinimap.element)
+  let sidebarBox = { w: 0, h: 0 }
+  let sidebarMinimapShown = false
+  // Below this the spacer row is a sliver: a minimap squeezed into it reads
+  // as noise, and it would flicker in and out as the HUD/monster list grow.
+  const SIDEBAR_MINIMAP_MIN_H = 80
+  new ResizeObserver(([entry]) => {
+    sidebarBox = { w: entry.contentRect.width, h: entry.contentRect.height }
+    scheduleMinimapRepaint()
+  }).observe(sidebarMinimap.element)
   statsView.setOnSettingsTap(() => openSettings())
   // Declared ahead of ChatView (not with its map/log siblings below): the
   // chipAllowed veto reads its display, and the ChatView constructor runs an
@@ -834,7 +856,7 @@ export function buildGameView(
     const dy = e.clientY - lastTap.y
     if (dt < 300 && dx * dx + dy * dy < 30 * 30) {
       mapView.setZoomMode(!mapView.isZoomMode())
-      mapView.fitToContainer()
+      fitNow()
       lastTap = { t: 0, x: 0, y: 0 }
       return
     }
@@ -1124,6 +1146,7 @@ export function buildGameView(
   // containing-block trick as #more-btn), landscape slots it into the
   // sidebar between HUD and spell rail.
   view.appendChild(monsterListView.element)
+  view.appendChild(sidebarMinimapSlot)
   view.appendChild(msgLog)
   view.appendChild(xdescStrip)
   view.appendChild(spellRail)
@@ -1185,8 +1208,8 @@ export function buildGameView(
   // `player` handler) — early enough to beat that same-batch first `map`
   // render, so the first painted frame is already at the settled size.
   //
-  // Some call sites (enterXMode/exitXMode, hideOverlay) also call
-  // mapView.fitToContainer() explicitly. That's redundant with the observer
+  // Some call sites (hideOverlay, the double-tap zoom) also re-fit
+  // explicitly (fitNow). That's redundant with the observer
   // but resolves the layout one frame earlier — without it there'd be a
   // brief flash at the old size before the observer's callback runs.
   // Coalesced "re-fit next frame", modelled on scheduleMinimapRepaint below.
@@ -1200,11 +1223,17 @@ export function buildGameView(
     fitQueued = true
     requestAnimationFrame(() => {
       fitQueued = false
-      mapView.fitToContainer()
-      // A re-fit resizes the viewport — the inset's you-are-here rect, and
-      // its size box (a fraction of the map area) on rotation.
-      scheduleMinimapRepaint()
+      fitNow()
     })
+  }
+  // Every re-fit goes through here, never a bare mapView.fitToContainer():
+  // a re-fit resizes the viewport, so the minimaps' you-are-here rect (and
+  // the X inset's size box, a fraction of the map area) must follow. The
+  // double-tap zoom and the render-mode swap once re-fit directly and left
+  // the rect stale until the next move.
+  function fitNow(): void {
+    mapView.fitToContainer()
+    scheduleMinimapRepaint()
   }
   const fontScaleObserver = new ResizeObserver(() => {
     if (!hudRevealed) return
@@ -1238,6 +1267,9 @@ export function buildGameView(
     if (inXMode) next.setFontScale(X_MODE_SCALE)
     if (cursorLoc) next.setCursor(cursorLoc)
     next.setPlayerStats(playerStats)
+    // Carry the overlay layouts' hide: "map element displayed" is the
+    // sidebar minimap's map-on-screen test (repaintSidebarMinimap).
+    next.element.style.display = oldEl.style.display
     oldEl.replaceWith(next.element)
     mapView = next
     fontScaleObserver.observe(mapView.element)
@@ -1247,7 +1279,7 @@ export function buildGameView(
     // version lands.
     if (mode === 'tiles' && loader) void (mapView as TileMapView).preloadAtlases(loader)
     monsterListView.setRenderMode(mode)
-    requestAnimationFrame(() => { mapView.fitToContainer(); mapView.fullRender() })
+    requestAnimationFrame(() => { fitNow(); mapView.fullRender() })
   }
 
   // Live-apply when the settings page changes the render-mode pref while a
@@ -1794,7 +1826,7 @@ export function buildGameView(
             // layout) so a `map` message later in this same WS batch renders
             // straight into the final viewport rather than the pre-fit size.
             // The ResizeObserver stays gated until exactly here; see its comment.
-            mapView.fitToContainer()
+            fitNow()
           }
         }
         break
@@ -3891,25 +3923,40 @@ export function buildGameView(
   // only repeat the map in miniature (common in ASCII X on a small level).
   // It reappears as soon as a pan, `[`/`]` or tiles' narrower view leaves
   // part of the level off-screen.
+  // A landscape sidebar minimap, when shown, carries the cursor ring and
+  // stands in for the inset.
   function repaintXmodeMinimap(): void {
     const view = mapView.viewRect()
     const b = store.mfBounds()
     const fits = !!b && cursorInView({ x: b.left, y: b.top }, view)
       && cursorInView({ x: b.right, y: b.bottom }, view)
-    xmodeMinimap.element.hidden = fits || !xmodeMinimap.paint(
+    xmodeMinimap.element.hidden = sidebarMinimapShown || fits || !xmodeMinimap.paint(
       view, mapWrap.clientWidth * 0.38, mapWrap.clientHeight * 0.24, cursorLoc)
+  }
+
+  // Off while a full overlay hides the map (landscape overlays leave the
+  // sidebar column up) — enterOverlayLayout/hideOverlay reschedule.
+  function repaintSidebarMinimap(): void {
+    sidebarMinimapShown = sidebarBox.h >= SIDEBAR_MINIMAP_MIN_H
+      && mapView.element.style.display !== 'none'
+      && sidebarMinimap.paint(mapView.viewRect(), sidebarBox.w, sidebarBox.h,
+                              inXMode ? cursorLoc : null)
+    sidebarMinimap.element.classList.toggle('empty', !sidebarMinimapShown)
   }
 
   // Message-driven repaints coalesce through rAF: a movement turn delivers
   // player + map in one batch, and without this each message would repaint
-  // (and restyle) the lens separately. Serves both hosts.
+  // (and restyle) the lens separately. Serves all three hosts; the sidebar
+  // goes before the inset, which reads sidebarMinimapShown.
   let minimapRepaintQueued = false
   function scheduleMinimapRepaint(): void {
-    if ((!minimapOpen && !inXMode) || minimapRepaintQueued) return
+    const sidebarLive = sidebarBox.h >= SIDEBAR_MINIMAP_MIN_H || sidebarMinimapShown
+    if ((!minimapOpen && !inXMode && !sidebarLive) || minimapRepaintQueued) return
     minimapRepaintQueued = true
     requestAnimationFrame(() => {
       minimapRepaintQueued = false
       if (minimapOpen) repaintMinimap()
+      repaintSidebarMinimap()
       if (inXMode) repaintXmodeMinimap()
     })
   }
@@ -4013,6 +4060,7 @@ export function buildGameView(
     touchControls.element.style.display = opts?.touch === false ? 'none' : ''
     setMenuBar(false)
     menuControls.innerHTML = ''
+    scheduleMinimapRepaint()  // the sidebar minimap follows the map's display
   }
 
   // The game-view surface handed to the extracted overlay screens
@@ -4220,10 +4268,9 @@ export function buildGameView(
       if (minimapOpen) minimapSuspended = false
     }
     requestAnimationFrame(() => {
-      mapView.fitToContainer()
-      // The restore above painted against the pre-fit viewport; refresh the
-      // you-are-here rect now that fitToContainer has settled the real size.
-      if (minimapOpen) repaintMinimap()
+      // The restore above painted the lens against the pre-fit viewport;
+      // fitNow's repaint refreshes it and brings the sidebar minimap back.
+      fitNow()
       focusView()
     })
   }

@@ -71,6 +71,19 @@ describe('MinimapView.paint', () => {
     expect(mm.paint(null, 0, 0)).toBe(false)
   })
 
+  it('reports no room when even the minimum cell size overflows the box', () => {
+    const store = new MapStore()
+    store.merge([
+      { x: 0, y: 0, g: '.', mf: 1 },
+      { x: 79, y: 0, g: '.', mf: 1 },
+    ])
+    // Crop 82 cells wide incl. margin: at dpr 1 and MIN_CELL_PX 2 that needs
+    // 164px — a 100px box can't hold it, a 200px one can.
+    const mm = new MinimapView(store, { growToView: false })
+    expect(mm.paint(null, 100, 100)).toBe(false)
+    expect(mm.paint(null, 200, 100)).toBe(true)
+  })
+
   it('inset options: capped cell size, no growth past the crop', () => {
     const store = new MapStore()
     store.merge([

@@ -2768,6 +2768,9 @@ html.map-hold, html.map-hold * {
 /* A spectator's lens survives the watched player entering X (enterXMode);
    the inset would then draw a small minimap over the big one. */
 #map-wrap:has(> .minimap-lens) ~ .minimap-inset { display: none; }
+/* Landscape sidebar minimap (game-view sidebarMinimap): portrait has no
+   slot for it; the landscape block gives it the `mini` grid area. */
+.minimap-sidebar-slot { display: none; }
 .minimap-canvas {
   /* The bitmap is integer device-px per cell; keep upscaling (if any)
      hard-edged. Deliberately borderless: the explored region reads its own
@@ -4651,8 +4654,9 @@ html.map-hold, html.map-hold * {
        carries its own safe-left margin). */
     padding-right: var(--safe-right);
     grid-template-columns: minmax(0, 1fr) var(--sidebar-w);
-    /* The 1fr spacer (3rd row) absorbs the sidebar's vertical slack, pinning
-       HUD+monster list to the top and spell rail+panel to the bottom. The HUD
+    /* The 1fr spacer (3rd row, `mini`) absorbs the sidebar's vertical slack,
+       pinning HUD+monster list to the top and spell rail+panel to the
+       bottom; the sidebar minimap fills it when tall enough. The HUD
        row is minmax(0, auto): content-sized when there's room, but able to
        shrink so it scrolls (overflow-y:auto below) when a short landscape
        viewport can't fit everything — keeping the bottom controls visible.
@@ -4671,7 +4675,7 @@ html.map-hold, html.map-hold * {
     grid-template-areas:
       "map hud"
       "map mons"
-      "map ."
+      "map mini"
       "map spells"
       "map panel"
       "chat chat";
@@ -4766,6 +4770,33 @@ html.map-hold, html.map-hold * {
     margin: 0.3rem 0.4rem 0;
     max-width: calc(var(--sidebar-w) - 0.8rem);
   }
+
+  /* Sidebar minimap in the 1fr spacer row. The slot is the grid item and
+     contributes NO size of its own — no padding, and the minimap inside is
+     absolutely positioned — so the row can still collapse to 0 on a
+     phone, as it did when it was an empty spacer (a padded item held it
+     at ~13px, taken from the HUD). The row's height is the room
+     (game-view observes the inner content box), never the other way
+     round. .empty (no room / no map / map hidden) hides only the canvas,
+     so the box stays observable. Padding matches the monster list's
+     gutters. Top-aligned, not centred: X mode drops the spell rail and
+     the row grows, and a centred minimap jumped ~40px on entering X. */
+  .minimap-sidebar-slot {
+    grid-area: mini;
+    display: block;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .minimap-sidebar {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0.4rem;
+  }
+  .minimap-sidebar.empty .minimap-canvas { visibility: hidden; }
 
   /* The X-mode --more-- fallback button re-anchors to the log's usual band
      (the log itself is hidden in X mode): top keeps it clear of the
@@ -4946,7 +4977,7 @@ html.map-hold, html.map-hold * {
     grid-row: 1 / 5;
     padding-right: 0;
   }
-  #game-view.newgame :is(#game-hud, #monster-list, #spell-rail, #game-messages, #map-wrap, .tc-dpad, .tc-panel) {
+  #game-view.newgame :is(#game-hud, #monster-list, .minimap-sidebar-slot, #spell-rail, #game-messages, #map-wrap, .tc-dpad, .tc-panel) {
     display: none !important;
   }
   #game-view.newgame #ui-overlay:has(> .ngv-foot) {

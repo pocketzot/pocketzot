@@ -3,7 +3,7 @@
 // Same idea as the reference client's minimap.js, but rendered on demand
 // instead of as an always-on panel. One class, several hosts, each with its
 // own sizing (MinimapOpts): the place-chip lens fills #map-wrap, the X-mode
-// corner inset stays small.
+// corner inset stays small, the landscape sidebar one fills the spare row.
 //
 // `mf` values follow the map_feature enum ordering in crawl's map-feature.h.
 // That header — NOT the server-loaded enums.js — is the wire truth: the
@@ -148,6 +148,9 @@ export class MinimapView {
       this.maxCellCss * Math.ceil(dpr),
       Math.floor(Math.min(maxCssW * dpr / cropW, maxCssH * dpr / cropH)),
     ))
+    // No room: even MIN_CELL_PX overflows the box. Never hit by the lens
+    // (a whole map area); a squeezed landscape sidebar hides on it.
+    if (cropW * this.cellPx > maxCssW * dpr || cropH * this.cellPx > maxCssH * dpr) return false
 
     // Early in a level the viewport rectangle is bigger than everything
     // explored. Rather than clip it at the border (confusing) or shrink the
