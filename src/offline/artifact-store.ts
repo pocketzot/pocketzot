@@ -338,14 +338,23 @@ export const jspiSupported = (): boolean =>
 // matchOrFetch would happily assemble that pair out of a partly-evicted
 // cache.
 //
-// A cached piece of either set pins its variant: boot is pinned to the cached
-// build (engine.worker.ts openArtifactCache), and the deploy's other variant
-// may be a different build. So a device that gains JSPI under a cached
-// Asyncify set (an OS update) moves over at its next engine update, when the
-// download clears the store first — not before. With nothing cached, a
-// capable device probes the JSPI glue; a deploy that ships none (a confirmed
-// 404 — SPA-fallback html counts) means Asyncify, while a failure to find
-// out propagates like any other unreachable artifact.
+// The cache decides before the network does, because boot is pinned to the
+// cached build (engine.worker.ts openArtifactCache) and the deploy's other
+// variant may be a different build. In order:
+// 1. a complete cached pair (cachedPairVariant) — the answer
+//    bootArtifactsCached gives, so the variant that made openArtifactCache
+//    skip its version check is the one that boots. A lone piece must never
+//    outrank a whole pair: its missing half would come off the network with
+//    that check skipped, possibly from a newer build.
+// 2. a lone piece — an interrupted download of that variant; finishing it
+//    goes through openArtifactCache's version check (no pair was cached).
+// 3. nothing cached: a capable device probes the JSPI glue; a deploy that
+//    ships none (a confirmed 404 — SPA-fallback html counts) means Asyncify,
+//    while a failure to find out propagates like any other unreachable
+//    artifact.
+// So a device that gains JSPI under a cached Asyncify set (an OS update)
+// moves over at its next engine update, when the download clears the store
+// first — not before.
 //
 // `supported` is where ?jspi=0 (boot.ts) lands, and it covers BOOT only: the
 // lobby's download still installs by capability, so a forced-Asyncify boot
@@ -359,6 +368,8 @@ export async function resolveEngineVariant(
 ): Promise<EngineVariant> {
   if (!supported) return 'asyncify'
   if (cache) {
+    const pair = await cachedPairVariant(cache, supported)
+    if (pair) return pair
     for (const v of ['jspi', 'asyncify'] as const) {
       if (await anyCached(cache, [...ENGINE_SETS[v].glue, ...ENGINE_SETS[v].wasm])) return v
     }
@@ -394,11 +405,17 @@ export async function bootArtifactsCached(
   supported = jspiSupported(),
 ): Promise<boolean> {
   if (!cache || !await anyCached(cache, ENGINE_DATA)) return false
+  return await cachedPairVariant(cache, supported) !== null
+}
+
+// The variant whose whole glue+wasm pair is cached, JSPI first when this
+// device can run it; null when neither pair is whole.
+async function cachedPairVariant(cache: Cache, supported: boolean): Promise<EngineVariant | null> {
   for (const v of (supported ? ['jspi', 'asyncify'] : ['asyncify']) as EngineVariant[]) {
     if (await anyCached(cache, ENGINE_SETS[v].glue) && await anyCached(cache, ENGINE_SETS[v].wasm))
-      return true
+      return v
   }
-  return false
+  return null
 }
 
 // The build id stamped on the cached engine set (undefined = never stamped,

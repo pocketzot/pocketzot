@@ -291,6 +291,17 @@ describe('engine variants', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('lets a whole cached pair outrank a lone piece of the other variant', async () => {
+    stubFetch(JSPI_DEPLOY)
+    const c = await seedEngineSet()
+    await c.put('/offline/jspi/crawl.js', new Response('jspi glue'))
+    expect(await resolveEngineVariant(c as unknown as Cache, newStats(), true)).toBe('asyncify')
+    expect(fetch).not.toHaveBeenCalled()
+    // …while a lone piece with no whole pair beside it resumes its variant.
+    await c.delete('/offline/crawl.wasm.gz')
+    expect(await resolveEngineVariant(c as unknown as Cache, newStats(), true)).toBe('jspi')
+  })
+
   it('counts a set bootable only as a whole pair this browser can run', async () => {
     const c = await artifactCache()
     await c.put('/offline/crawl.data.gz', new Response('data'))
