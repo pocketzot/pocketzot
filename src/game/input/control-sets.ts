@@ -250,7 +250,12 @@ function builtinStandard(): ControlSet {
     // Never trade v for V: v is the only way to aim a polearm's reach attack
     // (CMD_PRIMARY_ATTACK → melee_action, quiver.cc:451; Tab reaches only the
     // nearest target, Ctrl+d-pad hits adjacent only), while wands quiver onto f/p (wand_action,
-    // quiver.cc:1651) and Shift+v sends V for the rest. x moved to >
+    // quiver.cc:1651) and Shift+v sends V for the rest. Q picks what f/p
+    // fire. Mind what a mistap next to , and o (the most-tapped) costs: p is
+    // accepted there (with nothing in view it only prints a message), but
+    // ' left the set over it — it spends a turn, and with no weapon in a/b
+    // it unwields yours (auto_wield, item-use.cc:1841). The virtual keyboard
+    // still sends it. x moved to >
     // (examine, beside X: a tapped cell + Enter travels there, directn.cc
     // do_look_around). > is items + finding your way: e/c are
     // the unified equip/unequip (0.30+, cmd-keys.h at 0.30-b1; 0.26–0.29
@@ -264,7 +269,7 @@ function builtinStandard(): ControlSet {
       { name: '@', cols: 4, slots: [
         k('Tab'), t('5'), t('i'), t('o'),
         t('q'), t('r'), t('f'), t('p'),
-        t('a'), t('v'), t("'"), t(','),
+        t('a'), t('Q'), t('v'), t(','),
       ] },
       { name: '>', cols: 4, slots: [
         t('e'), t('d'), t('c'), t('t'),

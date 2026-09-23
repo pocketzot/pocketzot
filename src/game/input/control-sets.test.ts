@@ -40,7 +40,7 @@ describe('built-in sets', () => {
     expect(at.name).toBe('@')
     expect(at.slots[0]).toEqual({ key: 9 })  // Tab = auto-fight
     expect(at.slots.slice(1).map(s => s!.text)).toEqual(
-      ['5', 'i', 'o', 'q', 'r', 'f', 'p', 'a', 'v', "'", ','])
+      ['5', 'i', 'o', 'q', 'r', 'f', 'p', 'a', 'Q', 'v', ','])
     expect(go.name).toBe('>')
     expect(go.slots.map(s => s!.text ?? `^${String.fromCharCode(64 + s!.key!)}`)).toEqual(
       ['e', 'd', 'c', 't', '^F', 'G', '^O', '!', 'X', 'x', '<', '>'])
@@ -150,7 +150,7 @@ describe('export / import string format', () => {
 
   it('is human-readable', () => {
     const str = encodeControlSet(builtinSets()[0])
-    expect(str).toContain("@4:{Tab} 5 i o q r f p a v ' ,")
+    expect(str).toContain('@4:{Tab} 5 i o q r f p a Q v ,')
     expect(str).toContain('>4:e d c t {^F} G {^O} ! X x < >')
     expect(str).toContain('{v1|Standard|')
     // set-name spaces stay literal (only key tokens need {sp})
