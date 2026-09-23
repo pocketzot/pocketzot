@@ -129,7 +129,7 @@ describe('X level-map key set', () => {
     tc.setXModePlace('D:2')  // arrives before X on any real session
     tc.enterXMode()
     expect(tabButtons(tc.element).map(b => b.textContent))
-      .toEqual(['⎋', '[', 'D:2', ']', '⏎', '!', 'e', 'E', 'R', '<', '>', 'abc▴'])
+      .toEqual(['⎋', '[', 'D:2', ']', '⏎', '!', 'e', 'E', 'R', '<', '>'])
 
     tc.exitXMode()
     expect(tabButtons(tc.element).map(b => b.textContent)).toEqual(before)
@@ -138,14 +138,14 @@ describe('X level-map key set', () => {
   it('sends each key as its level-map command; the level name is G', () => {
     const { tc, sent } = setup()
     tc.enterXMode()
-    for (const b of tabButtons(tc.element)) if (b.textContent !== 'abc▴') b.click()
+    for (const b of tabButtons(tc.element)) b.click()
     expect(texts(sent)).toEqual(['key:27', '[', 'G', ']', 'key:13', '!', 'e', 'E', 'R', '<', '>'])
   })
 
-  it('the abc▴ key opens the keyboard overlay', () => {
+  it('the footer abc▴ opens the keyboard overlay', () => {
     const { tc } = setup()
     tc.enterXMode()
-    tabButtons(tc.element).find(b => b.textContent === 'abc▴')!.click()
+    tc.element.querySelector<HTMLElement>('.tc-footer .tc-kbd')!.click()
     expect(tc.isKbdOpen()).toBe(true)
   })
 
@@ -178,7 +178,7 @@ describe('X level-map key set', () => {
     const { tc } = setup()
     tc.enterXMode()
     setActiveControlSet(saveThreeColSet())
-    expect(tabButtons(tc.element)).toHaveLength(12)
+    expect(tabButtons(tc.element)).toHaveLength(11)
   })
 })
 

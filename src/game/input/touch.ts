@@ -810,14 +810,15 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
 
   // The X level map's fixed key grid (x-mode-keys.ts). Keys go through
   // sendTabKey, so the footer modifiers apply exactly as on a tab grid.
-  // Two full-width rows; the d-pad, header and footer are hidden meanwhile
-  // (style.css x-mode rules). Top: Esc | `[` name `]` | Enter — `[` / `]`
+  // Two full-width rows; the d-pad and header are hidden meanwhile, the
+  // footer keeps only abc▴ in its normal-play spot (style.css x-mode rules).
+  // Top: Esc | `[` name `]` | Enter — `[` / `]`
   // step through the levels the character knows, and the boxed level name
   // between them is the `G` button (the engine answers `G` with its "Where
   // to?" branch menu). The name is fed by setXModePlace: the engine re-sends
   // player place/depth for the VIEWED level on every level change (traced
   // 2026-09-21: `[` → player{depth} → map{clear, player_on_level:false}).
-  // Bottom: X_MODE_KEYS + the abc▴ keyboard for the rare rest.
+  // Bottom: X_MODE_KEYS; the footer's abc▴ keyboard covers the rare rest.
   let xPlace = ''
   function renderXModeContent(): void {
     contentEl.innerHTML = ''
@@ -845,7 +846,6 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
     const bottom = document.createElement('div')
     bottom.className = 'tc-row'
     for (const k of X_MODE_KEYS) bottom.appendChild(key(k.label, k.title, () => sendTabKey(k.slot)))
-    bottom.appendChild(key('abc▴', 'Open keyboard input', openKbd, 'tri tc-kbd-x'))
     contentEl.append(top, bottom)
   }
 

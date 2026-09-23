@@ -4288,16 +4288,29 @@ html.map-hold, html.map-hold * {
 .tc-tab.pressed { background: var(--tc-press); color: var(--accent); }
 
 /* X level map: the strip becomes two full-width rows (touch.ts
-   renderXModeContent) — d-pad, tab header and modifier footer all hidden.
+   renderXModeContent) — d-pad and tab header hidden, the footer cut down
+   to abc▴ (below).
    The rows take the d-pad's cell height, so the strip loses its third row
    to the map (~5 rows at the 0.7 map scale). `[` `]` sit at full key size
    on purpose: the level check ("what was down these stairs?") is the set's
    reason to exist, and in the header track they were the smallest keys on
    screen (the 2026-09-21 first build). */
 #touch-controls.x-mode .tc-dpad,
-#touch-controls.x-mode .tc-header,
-#touch-controls.x-mode .tc-footer { display: none; }
+#touch-controls.x-mode .tc-header { display: none; }
 #touch-controls.x-mode .tc-row { min-height: var(--tc-dpad); }
+/* The footer stays, padded by the d-pad + gap it no longer sits beside, so
+   it keeps normal play's width and abc▴ lands on its normal-play pixels.
+   With abc▴ out of the key row, the six X keys share the full width and
+   `<` `>` fall within a few px of the > tab's `<` `>` (measured in WebKit
+   at 402pt, 2026-09-23): X → `>` → Enter → `>` is the same thumb spot
+   twice, as it was before X had its own keys. ⇧ ⌃ stay hidden but keep
+   their slots: Ctrl-E/F/U/C must never be one stray tap away
+   (x-mode-keys.ts). */
+#touch-controls.x-mode .tc-footer {
+  padding-left: calc(var(--tc-dpad) * 3 + 4px + 0.35rem);
+}
+#touch-controls.x-mode .tc-shift,
+#touch-controls.x-mode .tc-ctrl { visibility: hidden; }
 /* Width: the strip's own normal-play width — d-pad, gap and the panel's
    portrait cap (.tc-panel max-width + margin-left:auto, above). The bare
    cap is 20rem = 320pt, which a 393pt phone exceeds: with no d-pad beside
