@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect } from 'vitest'
 import { setEnumsModule } from '../map/flag-decode'
 import {
-  decodeMdam, decodeFgStatuses, decodeFgThreatTier,
+  decodeMdam, decodeFgThreatTier,
   buildStatusOverlays, mayHaveStatusOverlays, mdamIconName, fgTileIndex,
   resolveOverlayId,
   nameColor, threatColor, isExcluded, monsterSort,
@@ -12,10 +12,10 @@ import type { MonsterInfo } from '../../ws/types'
 import type { MonsterCell } from '../map/map-store'
 import {
   FG_PET, FG_GD_NEUTRAL, FG_NEUTRAL,
-  FG_STAB, FG_MAY_STAB, FG_FLEEING, FG_PARALYSED,
-  FG_NET, FG_WEB, FG_S_UNDER,
+  FG_STAB, FG_MAY_STAB,
+  FG_NET, FG_S_UNDER,
   FG_MDAM_LIGHT_LO, FG_MDAM_MOD_LO, FG_MDAM_HEAVY_LO, FG_MDAM_HI_BIT,
-  FG_POISON, FG_MORE_POISON, FG_MAX_POISON,
+  FG_POISON,
   FG_THREAT_TRIVIAL, FG_THREAT_EASY, FG_THREAT_TOUGH, FG_THREAT_NASTY, FG_THREAT_UNUSUAL,
 } from '../map/cell-flags'
 
@@ -72,39 +72,6 @@ describe('mdamTier', () => {
   it('MDAM_COLORS covers every named tier', () => {
     expect(MDAM_COLORS.uninjured).toBeDefined()
     expect(MDAM_COLORS.almost_dead).toBeDefined()
-  })
-})
-
-// ─── decodeFgStatuses ──────────────────────────────────────────────────────
-
-describe('decodeFgStatuses', () => {
-  it('empty when undefined or zero', () => {
-    expect(decodeFgStatuses(undefined)).toEqual([])
-    expect(decodeFgStatuses(0)).toEqual([])
-  })
-
-  it('decodes each behaviour exclusively', () => {
-    expect(decodeFgStatuses(FG_STAB)).toEqual(['asleep'])
-    expect(decodeFgStatuses(FG_MAY_STAB)).toEqual(['wandering'])
-    expect(decodeFgStatuses(FG_FLEEING)).toEqual(['fleeing'])
-    expect(decodeFgStatuses(FG_PARALYSED)).toEqual(['paralysed'])
-  })
-
-  it('decodes net + web (independent bits)', () => {
-    expect(decodeFgStatuses(FG_NET)).toEqual(['caught'])
-    expect(decodeFgStatuses(FG_WEB)).toEqual(['webbed'])
-    expect(decodeFgStatuses(FG_NET | FG_WEB)).toEqual(['caught', 'webbed'])
-  })
-
-  it('decodes poison tiers from hi word', () => {
-    expect(decodeFgStatuses([0, FG_POISON])).toEqual(['poisoned'])
-    expect(decodeFgStatuses([0, FG_MORE_POISON])).toEqual(['very poisoned'])
-    expect(decodeFgStatuses([0, FG_MAX_POISON])).toEqual(['extremely poisoned'])
-  })
-
-  it('combines behaviour + restraint + poison', () => {
-    expect(decodeFgStatuses([FG_STAB | FG_NET, FG_POISON]))
-      .toEqual(['asleep', 'caught', 'poisoned'])
   })
 })
 

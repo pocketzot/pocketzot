@@ -62,30 +62,6 @@ export function decodeMdam(fg: number | number[] | undefined): string {
   return 'uninjured'
 }
 
-// Decodes monster condition flags from t.fg into short status names.
-// These are the only MB_ flags expressed as tile flags in the WebTiles protocol;
-// flags like MB_ALLY_TARGET / MB_ABJURABLE are not transmitted via t.fg.
-export function decodeFgStatuses(fg: number | number[] | undefined): string[] {
-  if (fg === undefined) return []
-  const f = fgFlags(fg)
-  const out: string[] = []
-
-  if (f.STAB) out.push('asleep')
-  else if (f.MAY_STAB) out.push('wandering')
-  else if (f.FLEEING) out.push('fleeing')
-  else if (f.PARALYSED) out.push('paralysed')
-
-  if (f.NET) out.push('caught')
-  if (f.WEB) out.push('webbed')
-
-  if (f.POISON) out.push('poisoned')
-  else if (f.MORE_POISON) out.push('very poisoned')
-  else if (f.MAX_POISON) out.push('extremely poisoned')
-
-  return out
-}
-
-
 // A status icon to overlay on a monster sprite: either a named tile-constant
 // (resolved against tileinfo-icons by the caller) or a raw numeric id from
 // cell.icons, plus the cell-space pixel offset draw_foreground would place it at.

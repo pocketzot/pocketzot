@@ -68,12 +68,13 @@ to TypeScript, following its structure and draw order:
 
 ## Derived from the DCSS engine and server
 
-Offline support ports a few small pieces of DCSS itself (the C++ engine and
-the Python WebTiles server), where the client must reproduce their behavior
-exactly:
+A few small pieces of DCSS itself (the C++ engine and the Python WebTiles
+server) are ported where the client must reproduce their behavior or
+wording exactly:
 
 | File | Ported from (DCSS) | What |
 |------|--------------------|------|
+| `src/game/hud/monster-status.ts` | `mon-info-flag-name.h` — `monster_info_flag_names`; `tilepick.cc` — `monster_status_icons` | Monster status words, their display order, and the icon each is sent as |
 | `src/offline/mini-server.ts` | `webserver/process_handler.py` — `handle_input` | Input routing (pty text vs control-socket keycodes) |
 | `src/offline/offline-state.ts` | `stringutil.cc` — `strip_filename_unsafe_chars` | Save-slot filename stem |
 | `src/offline/offline-state.ts` | `ng-input.cc` — `validate_player_name` | Character-name validation |

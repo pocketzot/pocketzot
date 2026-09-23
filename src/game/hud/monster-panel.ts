@@ -6,10 +6,10 @@ import type { TileLoader } from '../tiles/tile-loader'
 import {
   MDAM_COLORS,
   decodeMdam, mdamTier,
-  decodeFgStatuses,
   fgHaloDngnName, fgThreatDngnName,
   filterAndSortMonsters, nameColor,
 } from './monster-style'
+import { iconNameMap, monsterStatusLabels, type IconNames } from './monster-status'
 
 // Sprite scale on the row's left edge. The base tile is 32x32 logical px;
 // scale 1.5 lines up with the row's 48px height defined in .mp-tile / .mp-row.
@@ -21,6 +21,11 @@ export class MonsterPanelView {
   // Per-version tile loader; null until game-view supplies it. The tile-view
   // helpers no-op on null, so rows render glyph-only until then.
   private loader: TileLoader | null = null
+  // id → name for this version's status icons (monster-status.ts), null until
+  // the icons tileinfo module loads — in ASCII mode too, since the status
+  // words read cell.icons.
+  private iconNames: IconNames | null = null
+  private lastMonsters: ReadonlyMap<string, MonsterCell> | null = null
 
   constructor(private readonly store: MapStore) {
     this.element = document.createElement('div')
@@ -32,10 +37,20 @@ export class MonsterPanelView {
   }
 
   setLoader(loader: TileLoader): void {
+    if (this.loader === loader) return
     this.loader = loader
+    this.iconNames = null
+    // The panel is open while the player is idle, so no `map` message may
+    // come to re-render it: repaint from the last snapshot once names land.
+    loader.getModule('icons').then((mod) => {
+      if (this.loader !== loader) return
+      this.iconNames = iconNameMap(mod)
+      if (this.lastMonsters) this.update(this.lastMonsters)
+    }).catch((err) => console.warn('icon module load failed:', err))
   }
 
   update(monsterCells: ReadonlyMap<string, MonsterCell>): void {
+    this.lastMonsters = monsterCells
     const list = filterAndSortMonsters(monsterCells)
 
     this.element.innerHTML = ''
@@ -108,7 +123,7 @@ export class MonsterPanelView {
     nameEl.className = 'mp-name'
     nameEl.style.color = color
     nameEl.textContent = mon.name ?? '?'
-    const statuses = decodeFgStatuses(cell?.fg)
+    const statuses = monsterStatusLabels(cell?.fg, cell?.icons ?? [], att, this.iconNames)
     if (statuses.length > 0) {
       const statusEl = document.createElement('span')
       statusEl.className = 'mp-status'
