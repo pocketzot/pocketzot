@@ -245,3 +245,27 @@ describe('MapStore.mfBounds', () => {
     expect(store.mfBounds()).toEqual({ left: 10, top: 5, right: 30, bottom: 20 })
   })
 })
+
+describe('MapStore.knownBounds', () => {
+  it('is mfBounds without the explore-horizon frontier (mf:26)', () => {
+    const store = new MapStore()
+    store.merge([
+      { x: 10, y: 5, g: '.', mf: 1 },
+      { x: 30, y: 20, g: '#', mf: 2 },
+      { x: 9, y: 12, g: ' ', mf: 26 },   // frontier beyond the left edge
+      { x: 31, y: 4, g: ' ', mf: 26 },   // frontier beyond the top-right corner
+    ])
+    expect(store.mfBounds()).toEqual({ left: 9, top: 4, right: 31, bottom: 20 })
+    expect(store.knownBounds()).toEqual({ left: 10, top: 5, right: 30, bottom: 20 })
+  })
+
+  it('is null while only frontier is known, and tracks mf writes and clear', () => {
+    const store = new MapStore()
+    store.merge([{ x: 3, y: 3, g: ' ', mf: 26 }])
+    expect(store.knownBounds()).toBeNull()
+    store.merge([{ x: 3, y: 3, g: '.', mf: 1 }])  // the frontier cell gets explored
+    expect(store.knownBounds()).toEqual({ left: 3, top: 3, right: 3, bottom: 3 })
+    store.clear()
+    expect(store.knownBounds()).toBeNull()
+  })
+})

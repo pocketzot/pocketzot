@@ -611,7 +611,7 @@ export function buildGameView(
   // loc below.
   const mapJumper = new MapJumper({
     send: (keys) => conn.send({ msg: 'input', text: keys }),
-    bounds: () => store.mfBounds(),
+    bounds: () => store.knownBounds(),
   })
   // Last `input_mode` from the server. MOUSE_MODE_YESNO (8) is sent while
   // a (y/N) prompt is active inside an open menu (e.g. shop "Purchase
@@ -903,6 +903,13 @@ export function buildGameView(
     onTap: (cell) => {
       if (spectating || !inXMode || !cursorLoc) return
       mapJumper.tap(cursorLoc, cell)
+      // An edge-ring destination re-centers now, not along the flight
+      // (map-pan.ts).
+      const dest = mapJumper.destination()
+      if (dest && !cursorInView(dest, mapView.viewRect()) && mapView.setViewCenter(dest)) {
+        mapView.panRender()
+        scheduleMinimapRepaint()
+      }
     },
     // X level map only: drag pans the view locally (wire-silent, so
     // spectators too). The center is clamped to the known-cell box so the

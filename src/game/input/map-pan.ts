@@ -3,8 +3,8 @@
 // re-centering it.
 //
 // Why local: webtiles has no message that scrolls the level map, and the
-// store already holds the whole known level (MapStore.mfBounds is what the
-// engine clamps its cursor to), so a pan is just a view-center move — no
+// store already holds the whole known level (MapStore.knownBounds is what
+// the engine clamps its cursor to), so a pan is just a view-center move — no
 // wire traffic, both renderers derive every offset from viewCenter.
 //
 // Why a policy is needed: on every level-map redraw the engine pins vgrdc
@@ -19,6 +19,12 @@
 // "hold while the cursor is in view": that kept `<`/`>` stair cycling from
 // re-centering when the stair fell under the phone's Dynamic Island (the
 // map full-bleeds under it), leaving the cursor rendered but invisible.
+// A tap outside the inset (the viewport's edge ring, or a clamp that moved
+// it off-view) re-centers on its destination at tap time (game-view onTap),
+// which puts the flight under the hold. Never leave that to the flight's
+// vgrdcs: applied one by one they jumped the view back to the walk's start
+// and rode it until the destination entered the inset, then stopped short
+// of centering (traced 2026-09-23, centers 3→6→5→4→3→2 for a start at 7).
 // game-view's map handler owns the state (X mode, the walk, the view);
 // this file holds the pure rule.
 

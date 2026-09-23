@@ -24,9 +24,9 @@
 // Clamping: after EVERY map command the engine clamps the cursor
 // componentwise to the bounding box of known cells (viewmap.cc
 // UIMapView::process_command → clamp_lpos → coord_def::clamped against
-// known_map_bounds()). The store holds exactly those cells, so the target
-// is clamped to the same box up front (MapStore.mfBounds) — a tap into the
-// void walks to the edge, never wastes keys past it.
+// known_map_bounds()). The target is clamped to the same box up front
+// (MapStore.knownBounds) — a tap into the void walks to the edge, never
+// wastes keys past it.
 
 export interface Pt { x: number; y: number }
 export interface Box { left: number; top: number; right: number; bottom: number }

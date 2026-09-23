@@ -1,5 +1,7 @@
 import type { CellUpdate, MonsterInfo } from '../../ws/types'
 import { bgFlags } from './flag-decode'
+import { MF_EXPLORE_HORIZON } from './minimap-view'
+import type { Box } from '../input/map-jump'
 
 export interface Cell {
   g: string   // glyph
@@ -87,9 +89,9 @@ export function parseCellKey(key: string): { x: number; y: number } {
 // and x/y coordinates carry forward (if x omitted, use prev x+1; if y omitted use prev y).
 export class MapStore {
   private cells = new Map<string, Cell>()
-  // mfBounds memo: undefined = stale (an mf write or clear happened since),
-  // null = computed, no minimap-worthy cells yet.
-  private mfBox: { left: number; top: number; right: number; bottom: number } | null | undefined
+  // mfBounds/knownBounds memo: undefined = stale (an mf write or clear
+  // happened since); a null box = computed, no such cells yet.
+  private boxes: { mf: Box | null; known: Box | null } | undefined
   private monsterMap = new Map<string, MonsterCell>()
   // Keyed by monster id; accumulates partial updates across turns (mirrors reference monster_table)
   private monsterTable = new Map<number, MonsterInfo>()
@@ -148,7 +150,7 @@ export class MapStore {
       // 0/false/null → overwrite" — same pattern the reference shallow
       // merge_objects uses in game_data/static/map_knowledge.js.
       const t = u.t
-      if (u.mf !== undefined) this.mfBox = undefined
+      if (u.mf !== undefined) this.boxes = undefined
       const cell: Cell = {
         g: u.g ?? existing?.g ?? ' ',
         col: u.col ?? existing?.col ?? 7,
@@ -327,29 +329,46 @@ export class MapStore {
   }
 
   // Bounding box of minimap-worthy cells (mf > 0, so MF_UNSEEN and mf-less
-  // cells are excluded), or null before any are known. Matches the engine's
-  // known_map_bounds() (map-knowledge.cc), which the level map clamps its
-  // cursor to — map-jump.ts relies on that equality (verified live: the
-  // store's edge and the engine's clamp agreed). One pass over the store,
-  // memoized until the next mf write or clear: merge (the hot path) stays
-  // free of per-cell bbox bookkeeping, while the X-map drag-pan clamp
-  // (game-view onPan) can read it per cell crossing without a rescan.
-  mfBounds(): { left: number; top: number; right: number; bottom: number } | null {
-    if (this.mfBox !== undefined) return this.mfBox
-    let box: { left: number; top: number; right: number; bottom: number } | null = null
+  // cells are excluded), or null before any are known — what the minimap
+  // frames, frontier included. One pass over the store, memoized until the
+  // next mf write or clear: merge (the hot path) stays free of per-cell bbox
+  // bookkeeping, while the X-map drag-pan clamp (game-view onPan) can read
+  // it per cell crossing without a rescan.
+  mfBounds(): Box | null {
+    return this.computeBoxes().mf
+  }
+
+  // mfBounds minus MF_EXPLORE_HORIZON cells: the engine's
+  // known_map_bounds() (map-knowledge.cc:378), which the level map clamps
+  // its cursor to and map-jump.ts clamps a tap to. The frontier cells are
+  // unknown ground — get_cell_map_feature (map-knowledge.cc:224) marks them
+  // for the minimap, but known() is false there — so where the frontier
+  // borders the known area, mfBounds sits one cell wide of the engine's
+  // clamp (traced 2026-09-23: taps at mfBounds' left/right edge stopped one
+  // cell short).
+  knownBounds(): Box | null {
+    return this.computeBoxes().known
+  }
+
+  private computeBoxes(): { mf: Box | null; known: Box | null } {
+    if (this.boxes) return this.boxes
+    const grow = (box: Box | null, x: number, y: number): Box => {
+      if (!box) return { left: x, top: y, right: x, bottom: y }
+      if (x < box.left) box.left = x
+      if (x > box.right) box.right = x
+      if (y < box.top) box.top = y
+      if (y > box.bottom) box.bottom = y
+      return box
+    }
+    let mf: Box | null = null
+    let known: Box | null = null
     this.forEachCell((x, y, cell) => {
       if (!cell.mf) return
-      if (!box) {
-        box = { left: x, top: y, right: x, bottom: y }
-      } else {
-        if (x < box.left) box.left = x
-        if (x > box.right) box.right = x
-        if (y < box.top) box.top = y
-        if (y > box.bottom) box.bottom = y
-      }
+      mf = grow(mf, x, y)
+      if (cell.mf !== MF_EXPLORE_HORIZON) known = grow(known, x, y)
     })
-    this.mfBox = box
-    return box
+    this.boxes = { mf, known }
+    return this.boxes
   }
 
   getMonsters(): ReadonlyMap<string, MonsterCell> {
@@ -358,7 +377,7 @@ export class MapStore {
 
   clear(): void {
     this.cells.clear()
-    this.mfBox = undefined
+    this.boxes = undefined
     this.monsterMap.clear()
     this.monsterTable.clear()
     this.monsterGlyphs.clear()

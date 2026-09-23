@@ -17,6 +17,7 @@ import type { MapStore } from './map-store'
 
 export const MF_UNSEEN = 0
 export const MF_PLAYER = 21
+export const MF_EXPLORE_HORIZON = 26
 
 // Colours indexed by mf value. Defaults are crawl's own tile_*_col option
 // defaults (initfile.cc), except brightened MF_ITEM and MF_MONS_HOSTILE —
