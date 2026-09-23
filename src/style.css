@@ -604,7 +604,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   width: 100%;
 }
 
-.login-account-card:active { background: rgba(245, 158, 11, 0.08); }
+.login-account-card:active { background: var(--press); }
 .login-account-card:disabled { opacity: 0.5; cursor: default; }
 
 .login-account-tag {
@@ -975,7 +975,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .lobby-account-chip .unread-dot-corner { top: -1px; right: 6px; }
 
 .lobby-account-chip[aria-expanded="true"] {
-  background: var(--surface2);
+  background: var(--press);
 }
 
 .lobby-account-menu {
@@ -1005,7 +1005,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border-radius: 3px;
   white-space: nowrap;  /* the unread dot rides the label, never a 2nd line */
 }
-.lobby-account-menu-item:active { background: var(--surface2); }
+.lobby-account-menu-item:active { background: var(--press); }
 
 /* Guest server switcher (lobby.ts): the server you're on is marked, not just
    coloured, and every row reserves the mark's width so the hostnames stay in
@@ -1023,13 +1023,22 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .login-btn,
 .lobby-btn-primary {
   background: var(--accent);
-  border: none;
+  /* Transparent, not none: the outlined trunk button stacks under the
+     headline one, and a borderless fill set its label 1px left of trunk's. */
+  border: 1px solid transparent;
   border-radius: 4px;
   color: var(--bg);
   font-family: var(--font-mono);
   font-weight: bold;
   cursor: pointer;
 }
+/* Fills press by dimming (as .settings-btn-primary, .rc-editor-save); the
+   outlined buttons take --press. */
+.login-btn:not(:disabled):active,
+.lobby-btn-primary:not(:disabled):active { opacity: 0.85; }
+.login-btn.login-btn-spectate:not(:disabled):active,
+.lobby-btn-trunk:not(:disabled):active,
+.lobby-btn-secondary:not(:disabled):active { background: var(--press); opacity: 1; }
 .lobby-btn-primary {
   font-size: 0.95rem;
   padding: 0.6rem 1rem;
@@ -1099,7 +1108,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
     border-color: var(--border);
   }
 }
-.lobby-btn-ghost:active { background: var(--surface2); }
+.lobby-btn-ghost:active { background: var(--press); }
 .lobby-btn-ghost:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 1px;
@@ -1217,7 +1226,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   pointer-events: none;
 }
 
-.lobby-game-row:active { background: var(--surface2); }
+.lobby-game-row:active { background: var(--press); }
 .lobby-game-row:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
@@ -1348,7 +1357,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .offline-device-row.offline-nav-row { align-items: center; cursor: pointer; }
 .offline-nav-row .offline-device-label { font-size: 0.95rem; }
 .offline-nav-row::after { content: "→"; color: var(--text-dim); font-size: 0.95rem; }
-.offline-nav-row:active { background: var(--surface2); }
+.offline-nav-row:active { background: var(--press); }
 .offline-nav-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .offline-nav-row.is-disabled { opacity: 0.5; cursor: default; }
 /* The name form, opened in place of the New game row: the card is its
@@ -1405,7 +1414,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .offline-slot-confirm-del { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
 .offline-slot-confirm-del:disabled { opacity: 0.5; cursor: default; }
 .offline-slot-confirm-del:active,
-.offline-slot-confirm-cancel:active { background: var(--surface2); }
+.offline-slot-confirm-cancel:active { background: var(--press); }
 
 /* The gate note (offline-lobby.ts renderGateNote; where it hangs and why:
    placeNewGame). Dim, and gone entirely when there's nothing to pay. */
@@ -1502,7 +1511,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border-radius: 4px;
   cursor: pointer;
 }
-.offline-device-btn:active { background: var(--surface2); }
+.offline-device-btn:active { background: var(--press); }
 .offline-device-btn:disabled { opacity: 0.5; cursor: default; }
 /* The download/update action is the row's call to action. */
 .offline-device-btn.is-accent { border-color: var(--accent-line); }
@@ -1570,7 +1579,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   color: var(--bg);
   font-weight: bold;
 }
-.rc-editor-esc:active { background: var(--surface2); }
+.rc-editor-esc:active { background: var(--press); }
 .rc-editor-save:active { opacity: 0.85; }
 .rc-editor-save:disabled { opacity: 0.5; cursor: default; }
 
@@ -1644,7 +1653,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border-radius: 6px;
   cursor: pointer;
 }
-.lobby-exit-close:active { background: var(--surface2); }
+.lobby-exit-close:active { background: var(--press); }
 
 /* ── In-app document modal (About / What's new) ───────────── */
 /* Floats above login/lobby; rendered from ABOUT.md / CHANGELOG.md. Backdrop and
@@ -1693,7 +1702,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   border-radius: 6px;
   cursor: pointer;
 }
-.doc-close:active { background: var(--surface2); }
+.doc-close:active { background: var(--press); }
 .doc-body {
   overflow-y: auto;
   padding: 0.75rem 1rem 1.5rem;
@@ -2358,7 +2367,7 @@ html.map-hold, html.map-hold * {
 
 .seed-header {
   font-size: 1rem;
-  color: var(--accent);
+  color: var(--text);
   line-height: 1.3;
 }
 
@@ -2406,7 +2415,7 @@ html.map-hold, html.map-hold * {
   cursor: pointer;
   touch-action: manipulation;
 }
-.seed-btn:active { background: var(--surface); color: var(--accent); }
+.seed-btn:active { background: var(--press); color: var(--accent); }
 
 .seed-pregen {
   display: flex;
@@ -2458,7 +2467,7 @@ html.map-hold, html.map-hold * {
   touch-action: manipulation;
 }
 
-#more-btn:active { background: var(--surface); }
+#more-btn:active { background: var(--press); }
 
 /* HUD */
 #game-hud {
@@ -3426,8 +3435,8 @@ html.map-hold, html.map-hold * {
 /* Quiet outlined buttons, matching the lobby exit dialog's tone: a prompt
    like "Transfer? / No" is a real either/or, so neither choice should shout
    as a filled accent CTA. Normal weight, body text on a transparent fill with
-   a hairline border for tap affordance; the dim surface2 on :active is the
-   same press feedback as .lobby-exit-close. */
+   a hairline border for tap affordance; --press on :active is the same
+   press feedback as .lobby-exit-close. */
 .dialog-body .button,
 .dialog-body input[type="button"] {
   float: none !important;
@@ -3444,7 +3453,7 @@ html.map-hold, html.map-hold * {
   cursor: pointer;
 }
 .dialog-body .button:active,
-.dialog-body input[type="button"]:active { background: var(--surface2); }
+.dialog-body input[type="button"]:active { background: var(--press); }
 
 .overlay-stat-row {
   display: flex;
@@ -5156,7 +5165,7 @@ html.map-hold, html.map-hold * {
   border-radius: 6px;
   cursor: pointer;
 }
-.reconnect-btn:active { background: var(--surface2); }
+.reconnect-btn:active { background: var(--press); }
 .reconnect-force-yes { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
 
 /* Yes/no row inside the lobby notice (force_terminate? on the manual path). */
@@ -5175,7 +5184,7 @@ html.map-hold, html.map-hold * {
   border-radius: 6px;
   cursor: pointer;
 }
-.lobby-notice-actions button:active { background: var(--surface2); }
+.lobby-notice-actions button:active { background: var(--press); }
 
 /* ── Settings overlay (src/views/settings-view.ts) ───────────── */
 /* Reuses the doc-viewer shell (.doc-backdrop/.doc-card); above the in-game
@@ -5249,7 +5258,7 @@ html.map-hold, html.map-hold * {
   font-size: 1rem;
   cursor: pointer;
 }
-.set-row-more:active { background: var(--surface2); }
+.set-row-more:active { background: var(--press); }
 .set-row-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0 0 0.25rem; }
 .set-action {
   flex: 1;
@@ -5262,7 +5271,7 @@ html.map-hold, html.map-hold * {
   font-size: 0.72rem;
   cursor: pointer;
 }
-.set-action:active { background: var(--surface2); }
+.set-action:active { background: var(--press); }
 .set-action-danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
 /* Export's transient "Copied ✓" morph */
 .set-action.flash { color: var(--accent); border-color: var(--accent); }
@@ -5279,7 +5288,7 @@ html.map-hold, html.map-hold * {
   font-size: 0.85rem;
   cursor: pointer;
 }
-.settings-btn:active { background: var(--surface); }
+.settings-btn:active { background: var(--press); }
 .settings-btn-primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -5602,7 +5611,7 @@ html.map-hold, html.map-hold * {
   padding: 0.6rem;
   margin-top: 0.6rem;
 }
-.ed-picker-title { color: var(--accent); font-size: 0.78rem; margin-bottom: 0.5rem; }
+.ed-picker-title { color: var(--text); font-size: 0.78rem; margin-bottom: 0.5rem; }
 .ed-picker-textrow { display: flex; gap: 0.4rem; }
 .ed-picker-text {
   flex: 1;
@@ -5629,7 +5638,7 @@ html.map-hold, html.map-hold * {
   font-size: 0.72rem;
   cursor: pointer;
 }
-.ed-key:active { background: var(--surface); color: var(--accent); }
+.ed-key:active { background: var(--press); color: var(--accent); }
 /* current = what the slot holds now; armed = first tap of the two-tap send */
 .ed-key.current { border-color: var(--text-dim); }
 .ed-key.armed { border-color: var(--accent); color: var(--accent); background: var(--surface); }
@@ -5764,7 +5773,7 @@ html.map-hold, html.map-hold * {
   font-family: var(--font-mono);
   font-size: 0.8rem;
 }
-.chat-title { color: var(--accent); font-weight: 600; }
+.chat-title { color: var(--text); font-weight: 600; }
 .chat-names {
   flex: 1;
   min-width: 0;
@@ -5848,7 +5857,7 @@ html.map-hold, html.map-hold * {
   padding: 0 0.8rem;
   cursor: pointer;
 }
-.chat-send:active { background: var(--surface); }
+.chat-send:active { background: var(--press); }
 
 /* ── Character card (views/char-card.ts) ──────────────────────
    Shared by the crypt modal and the offline past-games list. The result
@@ -5866,7 +5875,7 @@ html.map-hold, html.map-hold * {
   text-align: left;
 }
 .char-card-tappable { cursor: pointer; }
-.char-card-tappable:active { background: var(--surface2); }
+.char-card-tappable:active { background: var(--press); }
 .char-card-doll {
   flex: none;
   display: flex;
@@ -5999,7 +6008,11 @@ html.map-hold, html.map-hold * {
   padding: calc(0.35rem - 2px) 0.7rem;
   cursor: pointer;
 }
-.records-sort-btn.is-active { background: var(--surface2); color: var(--accent); }
+/* Selected = raised thumb + bright label, both luminance cues (--text is
+   ~1.9:1 over --text-dim; an orange label was ~1.2:1, hue only). No accent:
+   this is the header chips' family. --press says why the thumb isn't
+   surface2. */
+.records-sort-btn.is-active { background: var(--press); color: var(--text); }
 .records-list {
   display: flex;
   flex-direction: column;
@@ -6061,7 +6074,7 @@ html.map-hold, html.map-hold * {
 }
 .records-morgue-zoom:active,
 .records-morgue-dl:active,
-.records-morgue-del:active { background: var(--surface2); }
+.records-morgue-del:active { background: var(--press); }
 /* Only ↓ ever disables (a record whose morgue file was never written), and it
    sits beside a live ⌧ — without this it reads as tappable and does nothing. */
 .records-morgue-dl:disabled { opacity: 0.5; cursor: default; }
