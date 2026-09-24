@@ -152,6 +152,18 @@ export function iconNameMap(mod: { [k: string]: unknown }): IconNames {
   return names
 }
 
+export interface StatusLabelOpts {
+  // The caller draws the monster's sprite with its status icons beside the
+  // words. Words that a mark on the sprite already says, without a legend and
+  // without colour, are then left out: the white Zz (asleep), the white "?"
+  // (unaware / wandering), the net and web overlays, and the attitude halo
+  // (friendly). Their colour twins keep their words — paralysed is the same
+  // Zz in yellow, confused the same "?" in yellow, peaceful / neutral the
+  // friendly ring in yellow / grey (rltiles/misc/icons art) — so a word marks
+  // the rarer state. Only for sprites big enough to read those marks.
+  withSprite?: boolean
+}
+
 // Status words for one monster, in crawl's display order: an attitude word
 // for non-hostiles first (so attitude never rests on name colour alone),
 // then fg-bit and icon statuses. `iconNames` is null until the version's
@@ -163,7 +175,9 @@ export function monsterStatusLabels(
   icons: readonly number[],
   att: number | undefined,
   iconNames: IconNames | null,
+  opts: StatusLabelOpts = {},
 ): string[] {
+  const withSprite = opts.withSprite ?? false
   const f = fgFlags(fg)
   const iconSet = new Set<string>()
   const extra: string[] = []
@@ -181,20 +195,26 @@ export function monsterStatusLabels(
   const cls = ATTITUDE_CLASSES[att ?? 0] ?? 'hostile'
   const hostile = cls === 'hostile'
   const keys = new Set<string>(iconSet)
+  // On your own allies these repeat what you did: you summoned them.
+  if (cls === 'friendly') { keys.delete('SUMMONED'); keys.delete('MINION') }
   if (f.PARALYSED) keys.add('@paralysed')
   // STAB also covers petrified monsters (MB_STABBABLE: asleep, paralysed or
   // petrified — fight.cc stab_bonus_denom; paralysed wins the flag first,
   // tilepick.cc tileidx_monster). When the PETRIFIED icon explains the flag,
   // don't also claim sleep.
-  else if (f.STAB) { if (!iconSet.has('PETRIFIED')) keys.add('@asleep') }
+  else if (f.STAB) { if (!withSprite && !iconSet.has('PETRIFIED')) keys.add('@asleep') }
   // MAY_STAB = distracted, unaware, wandering or unable to see you
   // (tilepick.cc). Distracted and unaware are hostile-only (mon-info.cc,
   // mons_looks_distracted), so a non-hostile's is wandering (or can't see an
   // invisible you); a hostile's is often not wandering, but always unaware.
-  else if (f.MAY_STAB) keys.add(hostile ? '@unaware' : '@wandering')
+  // Allies and peacefuls get no word: there's no stab to set up.
+  else if (f.MAY_STAB) {
+    if (hostile) { if (!withSprite) keys.add('@unaware') }
+    else if (cls === 'neutral' && !withSprite) keys.add('@wandering')
+  }
   else if (f.FLEEING) keys.add('@fleeing')
-  if (f.NET) keys.add('@caught')
-  if (f.WEB) keys.add('@webbed')
+  if (f.NET && !withSprite) keys.add('@caught')
+  if (f.WEB && !withSprite) keys.add('@webbed')
   if (f.POISON) keys.add('@poisoned')
   else if (f.MORE_POISON) keys.add('@very poisoned')
   else if (f.MAX_POISON) keys.add('@extremely poisoned')
@@ -202,7 +222,7 @@ export function monsterStatusLabels(
   const out: string[] = []
   // Attitude words per directn.cc get_monster_equipment_desc; a frenzied
   // neutral gets no "neutral" there, and neither does it here.
-  if (cls === 'friendly') out.push('friendly')
+  if (cls === 'friendly') { if (!withSprite) out.push('friendly') }
   else if (cls === 'good_neutral') out.push('peaceful')
   else if (cls === 'neutral' && !iconSet.has('FRENZIED')) out.push('neutral')
   for (const [key, label] of STATUS_ORDER) {

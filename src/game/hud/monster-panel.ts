@@ -123,7 +123,7 @@ export class MonsterPanelView {
     nameEl.className = 'mp-name'
     nameEl.style.color = color
     nameEl.textContent = mon.name ?? '?'
-    const statuses = monsterStatusLabels(cell?.fg, cell?.icons ?? [], att, this.iconNames)
+    const statuses = monsterStatusLabels(cell?.fg, cell?.icons ?? [], att, this.iconNames, { withSprite: true })
     if (statuses.length > 0) {
       const statusEl = document.createElement('span')
       statusEl.className = 'mp-status'
