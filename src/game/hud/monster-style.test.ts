@@ -157,7 +157,7 @@ describe('buildStatusOverlays', () => {
     // MAY_STAB bumps by 7, so poison lands at -7; shift ends at 7 + 5 = 12.
     const { overlays, statusShift } = buildStatusOverlays([FG_MAY_STAB, FG_POISON], [], noSizes)
     expect(overlays).toEqual([
-      { name: 'UNAWARE', xofs: 0, yofs: 0 },
+      { name: 'UNAWARE', altName: 'MAY_STAB_BRAND', xofs: 0, yofs: 0 },
       { name: 'POISON', xofs: -7, yofs: 0 },
     ])
     expect(statusShift).toBe(12)

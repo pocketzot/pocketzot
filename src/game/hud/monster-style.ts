@@ -171,7 +171,9 @@ export function buildStatusOverlays(
   let shift = 0
   if (f.PARALYSED) { overlays.push({ name: 'PARALYSED', xofs: 0, yofs: 0 }); shift += 12 }
   else if (f.STAB) { overlays.push({ name: 'STAB_BRAND', xofs: 0, yofs: 0 }); shift += 12 }
-  else if (f.MAY_STAB) { overlays.push({ name: 'UNAWARE', xofs: 0, yofs: 0 }); shift += 7 }
+  // Same "?" art, named MAY_STAB_BRAND through 0.33-a0 (dc-icons.txt; renamed
+  // by 0.33-b1).
+  else if (f.MAY_STAB) { overlays.push({ name: 'UNAWARE', altName: 'MAY_STAB_BRAND', xofs: 0, yofs: 0 }); shift += 7 }
   else if (f.FLEEING) { overlays.push({ name: 'FLEEING', xofs: 0, yofs: 0 }); shift += 3 }
 
   // `-shift || 0` avoids a -0 xofs when nothing has shifted yet (paints the
