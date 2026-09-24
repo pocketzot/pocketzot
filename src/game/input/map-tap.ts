@@ -25,8 +25,10 @@ export const SLOP_PX = 12
 // hold that drifts 12 px before the long-press lands is cancelled silently
 // today, and must stay that way — converting it would trade a missed
 // describe for a full-screen mode switch. Between the two radii nothing
-// happens. About one zoomed tile, three ASCII cells.
-export const DRAG_PX = 32
+// happens. The felt distance is this plus one round trip of finger travel
+// (nothing moves until X mode arrives — game-view onDrag), so keep the
+// margin over SLOP_PX modest.
+export const DRAG_PX = 20
 
 // Mirror of enums.mouse_mode in the reference client. Only the modes the
 // gesture gates need are named; the engine sends the index (input_mode msg).
