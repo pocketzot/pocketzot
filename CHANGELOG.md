@@ -9,23 +9,23 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
-## 2026-09-22
+## 2026-09-25
 
-- X-mode (the `X` level map) now has its own control set: the touch
-  strip becomes two rows of full-size keys — Esc, `[`, the level name
-  (tap it for `G`, go to level), `]`, Enter — over `!` `e` `E` `R` `<`
-  `>` and the keyboard. The d-pad is not shown there: tap the map to
-  move the cursor, drag to pan.
-- Dragging the map in normal play now opens the level map, and the
-  drag carries on as its pan.
-- Standard control set revised. The `@` tab gains `p` (auto-fire at
-  the nearest target) and `V` (evoke); `v` is gone (Ctrl + a d-pad
-  direction attacks without moving) and `x` moves to the `>` tab. The
-  `>` tab is now `e` `d` `c` `t` / `^F` `G` `^O` `!` / `X` `x` `<` `>`:
-  the unified `e` (equip) and `c` (unequip) replace `w`, `P` and `R`.
-  Those two keys exist from DCSS 0.33; on an older server, duplicate
-  Standard in Settings and put `w`/`P`/`R` back. Custom sets are not
-  affected.
+- Dragging the map in normal play now opens X-mode.
+- X-mode now has its own control set and shows the minimap for
+  orientation.
+- Landscape now shows the minimap in the sidebar on tablets, and on
+  phones while spectating.
+- The Standard control set has changed on the `@` and `>` tabs.
+  Custom control sets are not affected. If you'd like a copy of the old
+  layout, import it in Settings:
+  `pocketzot-controls{v1|Old Standard|@4:{Tab} 5 i o q r f v a ' x ,|>4:w R t P d {^F} G {^O} X e < >|?4:@ % ^ = A m {rb} \ $ M I ?}`
+- Ctrl-O (dungeon overview) is now reformatted for portrait.
+- God power costs are now listed under the power instead of requiring
+  panning to the right.
+- The monster panel now shows more text labels for various status
+  effects.
+- Other improvements.
 
 ## 2026-09-20
 
