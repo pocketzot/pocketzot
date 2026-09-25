@@ -9,6 +9,7 @@ import { buildTouchControls, HOLD_MS, REPEAT_DELAY_MS, REPEAT_INTERVAL_MS } from
 import {
   cloneSet, newSetId, saveControlSet, setActiveControlSet, builtinSets,
 } from './control-sets'
+import { X_MODE_COLS, X_MODE_KEYS } from './x-mode-keys'
 import type { ClientMsg } from '../../ws/types'
 
 beforeEach(() => {
@@ -126,20 +127,39 @@ describe('X level-map key set', () => {
     tc.element.querySelector<HTMLElement>('.tc-tab[data-tab="info"]')!.click()
     const before = tabButtons(tc.element).map(b => b.textContent)
 
-    tc.setXModePlace('D:2')  // arrives before X on any real session
     tc.enterXMode()
     expect(tabButtons(tc.element).map(b => b.textContent))
-      .toEqual(['⎋', '[', 'D:2', ']', '⏎', '!', 'e', 'E', 'R', '<', '>'])
+      .toEqual(['e', 'E', 'R', '^', '!', 'G', '[', ']', '_', '\\', '<', '>'])
+    expect(tc.element.querySelectorAll('.tc-content .tc-row')).toHaveLength(3)
 
     tc.exitXMode()
     expect(tabButtons(tc.element).map(b => b.textContent)).toEqual(before)
   })
 
-  it('sends each key as its level-map command; the level name is G', () => {
+  it('sends each key as its level-map command', () => {
     const { tc, sent } = setup()
     tc.enterXMode()
     for (const b of tabButtons(tc.element)) b.click()
-    expect(texts(sent)).toEqual(['key:27', '[', 'G', ']', 'key:13', '!', 'e', 'E', 'R', '<', '>'])
+    expect(texts(sent)).toEqual(['e', 'E', 'R', '^', '!', 'G', '[', ']', '_', '\\', '<', '>'])
+  })
+
+  it('keys shared with the Standard > tab sit on that tab\'s slots, bar !', () => {
+    const tab = builtinSets()[0].tabs.find(t => t.name === '>')!
+    expect(tab.cols).toBe(X_MODE_COLS)
+    const shared = X_MODE_KEYS.flatMap((k, i) => {
+      const j = tab.slots.findIndex(s => s.text === k.slot.text)
+      return j < 0 ? [] : [{ key: k.label, at: i, onTab: j }]
+    })
+    expect(shared.map(s => s.key)).toEqual(['e', '!', 'G', '<', '>'])
+    for (const s of shared.filter(s => s.key !== '!')) expect(s.at).toBe(s.onTab)
+  })
+
+  it('keeps the header Esc / Enter', () => {
+    const { tc, sent } = setup()
+    tc.enterXMode()
+    tc.element.querySelector<HTMLElement>('.tc-header .tc-esc')!.click()
+    tc.element.querySelector<HTMLElement>('.tc-header .tc-enter')!.click()
+    expect(texts(sent)).toEqual(['key:27', 'key:13'])
   })
 
   it('the footer abc▴ opens the keyboard overlay', () => {
@@ -149,19 +169,16 @@ describe('X level-map key set', () => {
     expect(tc.isKbdOpen()).toBe(true)
   })
 
-  it('the level label follows setXModePlace, live and across entries', () => {
+  it('the header level label follows setXModePlace, live and across entries', () => {
     const { tc } = setup()
     tc.enterXMode()
     tc.setXModePlace('Depths:4')
-    const place = () => tc.element.querySelector<HTMLElement>('.tc-place')!
+    const place = () => tc.element.querySelector<HTMLElement>('.tc-header .tc-xplace')!
     expect(place().textContent).toBe('Depths:4')
     tc.exitXMode()
-    tc.setXModePlace('Necropolis')  // while out of X: stored for the next entry
+    tc.setXModePlace('Necropolis')  // while out of X: kept for the next entry
     tc.enterXMode()
     expect(place().textContent).toBe('Necropolis')
-    expect(place().classList.contains('long')).toBe(true)
-    tc.setXModePlace('Vaults:5')
-    expect(place().classList.contains('long')).toBe(false)
   })
 
   it('the d-pad centre sends "." in X too (travel-to-cursor there), not only in normal play', () => {
@@ -178,7 +195,7 @@ describe('X level-map key set', () => {
     const { tc } = setup()
     tc.enterXMode()
     setActiveControlSet(saveThreeColSet())
-    expect(tabButtons(tc.element)).toHaveLength(11)
+    expect(tabButtons(tc.element)).toHaveLength(12)
   })
 })
 

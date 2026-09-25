@@ -271,13 +271,15 @@ export function buildGameView(
   // The place chip toggles the minimap. StatsView owns the chip's DOM and
   // tap detection (see its constructor); we only supply the behavior.
   statsView.setOnPlaceTap(() => minimapOpen ? closeMinimap() : openMinimap())
-  // X-mode corner inset: the same renderer, small and passive (touches pass
-  // through to the map — pointer-events:none in style.css). Mounted for the
-  // life of X mode by enterXMode/exitXMode; repaints ride
-  // scheduleMinimapRepaint.
+  // X-mode minimap: the same renderer in the touch strip's d-pad slot
+  // (touchControls.xModeSlot), passive. Mounted for the life of X mode by
+  // enterXMode/exitXMode; repaints ride scheduleMinimapRepaint. xslotBox is
+  // the slot's content box, kept by an observer next to touchControls, so
+  // repaints never read layout.
   const xmodeMinimap = new MinimapView(store, {
-    className: 'minimap-inset', maxCellCss: 3, growToView: false,
+    className: 'minimap-xslot', maxCellCss: 3, growToView: false,
   })
+  let xslotBox = { w: 0, h: 0 }
   // Landscape sidebar minimap: always-on in the sidebar's 1fr spacer row
   // (style.css `mini` area; display:none in portrait), shown only when that
   // row has room — a tablet's tall sidebar, rarely a phone's. The slot is
@@ -751,10 +753,11 @@ export function buildGameView(
   xdescActions.className = 'xdesc-actions'
   xdescActions.style.display = 'none'
   xdescStrip.append(xdescLines, xdescActions)
-  // The X-mode minimap inset stacks on top of the strip (style.css
-  // .minimap-inset). Publish the strip's PEAK height this X session, not its
-  // live one: trunk rebuilds the strip per cursor move with 0–4 describe
-  // lines, and tracking that bounced the inset up and down on every step.
+  // In landscape the X-mode minimap slot floats over the map and stacks on
+  // top of the strip (style.css .tc-xslot). Publish the strip's PEAK height
+  // this X session, not its live one: trunk rebuilds the strip per cursor
+  // move with 0–4 describe lines, and tracking that bounced the minimap up
+  // and down on every step.
   // Grow-only means at most a few early rises; exitXMode resets it.
   let xdescPeakH = 0
   const setXdescPeak = (h: number): void => {
@@ -1109,6 +1112,10 @@ export function buildGameView(
     // badges to their force-cast form ("za" → "Za") while it's engaged.
     onShiftChange: on => view.classList.toggle('shift-on', on),
   })
+  new ResizeObserver(([entry]) => {
+    xslotBox = { w: entry.contentRect.width, h: entry.contentRect.height }
+    scheduleMinimapRepaint()
+  }).observe(touchControls.xModeSlot)
 
   const menuControls = document.createElement('div')
   menuControls.id = 'menu-controls'
@@ -1247,8 +1254,8 @@ export function buildGameView(
     })
   }
   // Every re-fit goes through here, never a bare mapView.fitToContainer():
-  // a re-fit resizes the viewport, so the minimaps' you-are-here rect (and
-  // the X inset's size box, a fraction of the map area) must follow. The
+  // a re-fit resizes the viewport, so the minimaps' you-are-here rect must
+  // follow. The
   // double-tap zoom and the render-mode swap once re-fit directly and left
   // the rect stale until the next move.
   function fitNow(): void {
@@ -2370,7 +2377,7 @@ export function buildGameView(
           if (msg.loc) mapJumper.onCursor(msg.loc)
           if (msg.loc && !inXMode) enterXMode()
           else if (!msg.loc && inXMode) exitXMode()
-          scheduleMinimapRepaint()  // the inset's cursor ring
+          scheduleMinimapRepaint()  // the X minimap's cursor ring
         } else if (!msg.loc && inXMode) {
           exitXMode()
         }
@@ -2497,7 +2504,7 @@ export function buildGameView(
     // Hidden until its first paint (scheduleFit below schedules it) — a
     // fresh canvas would flash its 300×150 default.
     xmodeMinimap.element.hidden = true
-    view.appendChild(xmodeMinimap.element)
+    touchControls.xModeSlot.appendChild(xmodeMinimap.element)
     mapView.setFontScale(X_MODE_SCALE)
     // Zoom mode is left untouched: tiles already had zoom-on (forced at
     // construction by setRenderMode), and the scale shrinks each cell by
@@ -3939,22 +3946,13 @@ export function buildGameView(
     )
   }
 
-  // Size box: a fraction of the map area, so the inset scales with the
-  // phone and flips shape on rotation. With maxCellCss 3 a full 80×70
-  // level lands around 120×105 CSS px on a portrait phone.
-  // Hidden while the whole explored level is already on screen — it would
-  // only repeat the map in miniature (common in ASCII X on a small level).
-  // It reappears as soon as a pan, `[`/`]` or tiles' narrower view leaves
-  // part of the level off-screen.
-  // A landscape sidebar minimap, when shown, carries the cursor ring and
-  // stands in for the inset.
+  // Size box: the d-pad slot. Shown even when the whole explored level is
+  // already on screen — the slot is the strip's own space, and an empty one
+  // reads as broken. A landscape sidebar minimap, when shown, carries the
+  // cursor ring and stands in for it.
   function repaintXmodeMinimap(): void {
-    const view = mapView.viewRect()
-    const b = store.mfBounds()
-    const fits = !!b && cursorInView({ x: b.left, y: b.top }, view)
-      && cursorInView({ x: b.right, y: b.bottom }, view)
-    xmodeMinimap.element.hidden = sidebarMinimapShown || fits || !xmodeMinimap.paint(
-      view, mapWrap.clientWidth * 0.38, mapWrap.clientHeight * 0.24, cursorLoc)
+    xmodeMinimap.element.hidden = sidebarMinimapShown || !xmodeMinimap.paint(
+      mapView.viewRect(), xslotBox.w, xslotBox.h, cursorLoc)
   }
 
   // Off while a full overlay hides the map (landscape overlays leave the
@@ -3970,7 +3968,7 @@ export function buildGameView(
   // Message-driven repaints coalesce through rAF: a movement turn delivers
   // player + map in one batch, and without this each message would repaint
   // (and restyle) the lens separately. Serves all three hosts; the sidebar
-  // goes before the inset, which reads sidebarMinimapShown.
+  // goes before the X minimap, which reads sidebarMinimapShown.
   let minimapRepaintQueued = false
   function scheduleMinimapRepaint(): void {
     const sidebarLive = sidebarBox.h >= SIDEBAR_MINIMAP_MIN_H || sidebarMinimapShown

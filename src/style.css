@@ -2753,30 +2753,6 @@ html.map-hold, html.map-hold * {
 #game-view.spell-row .minimap-lens {
   padding-bottom: calc(var(--msglog-box-h) + var(--spell-rail-h) + 0.25rem);
 }
-/* X-mode corner inset (game-view xmodeMinimap): the minimap renderer at a
-   small fixed box, bottom-left over the map, stacked on the describe strip
-   via --xdesc-h (the strip's peak height this X session — a grow-only
-   ResizeObserver in game-view). Translucent, no box: unexplored cells stay
-   clear, so the level's silhouette floats over the map (a dark-scrim
-   variant was A/B'd on phone and lost). Passive: taps fall through to the
-   map (tap-walk / drag-pan). */
-.minimap-inset {
-  grid-area: map;
-  position: absolute;
-  left: 0;
-  bottom: var(--xdesc-h, 0px);
-  z-index: 3;
-  padding: 0.25rem;
-  pointer-events: none;
-  line-height: 0;  /* no descender gap under the inline canvas */
-}
-.minimap-inset .minimap-canvas {
-  background: transparent;
-  opacity: 0.75;
-}
-/* A spectator's lens survives the watched player entering X (enterXMode);
-   the inset would then draw a small minimap over the big one. */
-#map-wrap:has(> .minimap-lens) ~ .minimap-inset { display: none; }
 /* Landscape sidebar minimap (game-view sidebarMinimap): portrait has no
    slot for it; the landscape block gives it the `mini` grid area. */
 .minimap-sidebar-slot { display: none; }
@@ -4287,52 +4263,48 @@ html.map-hold, html.map-hold * {
 .tc-tab:active,
 .tc-tab.pressed { background: var(--tc-press); color: var(--accent); }
 
-/* X level map: the strip becomes two full-width rows (touch.ts
-   renderXModeContent) — d-pad and tab header hidden, the footer cut down
-   to abc▴ (below).
-   The rows take the d-pad's cell height, so the strip loses its third row
-   to the map (~5 rows at the 0.7 map scale). `[` `]` sit at full key size
-   on purpose: the level check ("what was down these stairs?") is the set's
-   reason to exist, and in the header track they were the smallest keys on
-   screen (the 2026-09-21 first build). */
-#touch-controls.x-mode .tc-dpad,
-#touch-controls.x-mode .tc-header { display: none; }
-#touch-controls.x-mode .tc-row { min-height: var(--tc-dpad); }
-/* The footer stays, padded by the d-pad + gap it no longer sits beside, so
-   it keeps normal play's width and abc▴ lands on its normal-play pixels.
-   With abc▴ out of the key row, the six X keys share the full width and
-   `<` `>` fall within a few px of the > tab's `<` `>` (measured in WebKit
-   at 402pt, 2026-09-23): X → `>` → Enter → `>` is the same thumb spot
-   twice, as it was before X had its own keys. ⇧ ⌃ stay hidden but keep
-   their slots: Ctrl-E/F/U/C must never be one stray tap away
-   (x-mode-keys.ts). */
-#touch-controls.x-mode .tc-footer {
-  padding-left: calc(var(--tc-dpad) * 3 + 4px + 0.35rem);
-}
+/* X level map: the strip keeps normal play's shape, so Esc / Enter (the
+   header) and abc▴ stay on their normal-play pixels — every X visit ends on
+   one of them. The tab grid shows the X key grid (touch.ts
+   renderXModeContent), the tabs give way to the viewed level's name, and
+   the d-pad's slot holds the minimap (game-view xmodeMinimap). ⇧ ⌃ stay
+   hidden but keep their slots: Ctrl-E/F/U/C must never be one stray tap
+   away (x-mode-keys.ts). */
 #touch-controls.x-mode .tc-shift,
 #touch-controls.x-mode .tc-ctrl { visibility: hidden; }
-/* Width: the strip's own normal-play width — d-pad, gap and the panel's
-   portrait cap (.tc-panel max-width + margin-left:auto, above). The bare
-   cap is 20rem = 320pt, which a 393pt phone exceeds: with no d-pad beside
-   it the panel hit the cap and sat pinned right with a gap on the left
-   (seen on-device 2026-09-22). This sum is wider than any phone (full
-   width) and bounds the rows to a block under the right thumb on a
-   tablet, where the other hand pans the map. */
-#touch-controls.x-mode .tc-panel {
-  max-width: calc(var(--touch-panel-cap) + var(--tc-dpad) * 3 + 4px + 0.35rem);
-}
-
-/* The level name is the `G` button: a bordered face marks it as tappable
-   among plain keys; it takes double width because it carries a word. */
-#touch-controls.x-mode .tc-place {
-  flex: 2;
+#touch-controls.x-mode .tc-dpad,
+#touch-controls.x-mode .tc-tabs { display: none; }
+.tc-xslot,
+.tc-xplace { display: none; }
+#touch-controls.x-mode .tc-xplace {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  height: 1.4rem;  /* = .tc-tabs, which it replaces */
   min-width: 0;
-  white-space: nowrap;
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--tc-label) 45%, transparent);
+  white-space: nowrap;
+  color: var(--tc-label);
+  font-size: 0.8rem;
 }
-/* Necropolis / Desolation, the two longest labels; touch.ts sets .long. */
-#touch-controls.x-mode .tc-place.long { font-size: 0.8rem; }
+/* The d-pad's footprint (.tc-dpad: 3 cells + 2 gaps), so the strip keeps
+   its height. Passive: the minimap is a picture, not a control. */
+#touch-controls.x-mode .tc-xslot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: calc(var(--tc-dpad) * 3 + 4px);
+  height: calc(var(--tc-dpad) * 3 + 4px);
+  box-sizing: border-box;
+  padding: 2px;
+  border: 1px solid var(--tc-border);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.minimap-xslot { line-height: 0; }  /* no descender gap under the inline canvas */
+.minimap-xslot .minimap-canvas { background: transparent; }
 
 /* Content area: tab-specific buttons */
 .tc-content {
@@ -4784,8 +4756,7 @@ html.map-hold, html.map-hold * {
      so the scrim edge should track the text. Portrait reports 0 side
      insets, collapsing this to the base left:0. */
   #game-messages,
-  #xdesc-strip,
-  .minimap-inset {
+  #xdesc-strip {
     left: var(--safe-left);
   }
 
@@ -4922,6 +4893,23 @@ html.map-hold, html.map-hold * {
   .tc-dpad-btn.wait {
     color: color-mix(in srgb, var(--text-dim) 55%, transparent);
   }
+
+  /* The X minimap slot floats where the d-pad does, stacked on the describe
+     strip via --xdesc-h (its peak height this X session — a grow-only
+     ResizeObserver in game-view). Translucent, no box: unexplored cells
+     stay clear, so the level's silhouette floats over the map (a dark-scrim
+     variant of the old corner inset was A/B'd on phone and lost). Passive:
+     taps fall through to the map (tap-walk / drag-pan). */
+  #touch-controls.x-mode .tc-xslot {
+    grid-area: map;
+    align-self: end;
+    justify-self: start;
+    position: relative;
+    z-index: 3;
+    border: 0;
+    margin: 0 0 var(--xdesc-h, 0px) var(--safe-left);
+  }
+  .minimap-xslot .minimap-canvas { opacity: 0.75; }
 
   .tc-panel {
     grid-area: panel;

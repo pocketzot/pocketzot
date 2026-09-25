@@ -90,11 +90,11 @@ describe('MinimapView.paint', () => {
       { x: 10, y: 5, g: '.', mf: 1 },
       { x: 30, y: 20, g: '#', mf: 2 },
     ])
-    const mm = new MinimapView(store, { className: 'minimap-inset', maxCellCss: 3, growToView: false })
+    const mm = new MinimapView(store, { className: 'minimap-xslot', maxCellCss: 3, growToView: false })
     // Same crop and view rect as the growth test above: the box would allow
     // 17px/cell (capped to 3 here), and the region stays the 23×18 crop.
     expect(mm.paint({ x: 8, y: 3, w: 33, h: 21 }, 400, 600, { x: 12, y: 6 })).toBe(true)
-    expect(mm.element.className).toBe('minimap-inset')
+    expect(mm.element.className).toBe('minimap-xslot')
     expect(mm.cellPx).toBe(3)
     expect(mm.originX).toBe(9)
     expect(mm.originY).toBe(4)

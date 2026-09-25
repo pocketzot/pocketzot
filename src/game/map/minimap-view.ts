@@ -3,7 +3,7 @@
 // Same idea as the reference client's minimap.js, but rendered on demand
 // instead of as an always-on panel. One class, several hosts, each with its
 // own sizing (MinimapOpts): the place-chip lens fills #map-wrap, the X-mode
-// corner inset stays small, the landscape sidebar one fills the spare row.
+// one fills the d-pad's slot, the landscape sidebar one fills the spare row.
 //
 // `mf` values follow the map_feature enum ordering in crawl's map-feature.h.
 // That header — NOT the server-loaded enums.js — is the wire truth: the
@@ -196,8 +196,8 @@ export class MinimapView {
     if (!ctx) return true
 
     // Clear, not black: the backdrop is CSS's call (.minimap-canvas is black;
-    // the X-mode inset's is transparent, letting the map show through
-    // unexplored cells).
+    // the X-mode one's is transparent, letting the map show through
+    // unexplored cells in landscape, where it floats over the map).
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
 
     this.store.forEachCell((x, y, cell) => {
