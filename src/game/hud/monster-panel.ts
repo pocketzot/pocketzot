@@ -123,7 +123,11 @@ export class MonsterPanelView {
     nameEl.className = 'mp-name'
     nameEl.style.color = color
     nameEl.textContent = mon.name ?? '?'
-    const statuses = monsterStatusLabels(cell?.fg, cell?.icons ?? [], att, this.iconNames, { withSprite: true })
+    // The marks withSprite defers to are drawn by appendIconOverlays from the
+    // same icons module that fills iconNames — until it resolves (or if it
+    // never does: the setLoader catch only warns) the words stay as fallback.
+    const statuses = monsterStatusLabels(cell?.fg, cell?.icons ?? [], att, this.iconNames,
+      { withSprite: this.iconNames !== null })
     if (statuses.length > 0) {
       const statusEl = document.createElement('span')
       statusEl.className = 'mp-status'
