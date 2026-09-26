@@ -28,7 +28,7 @@ export const SLOP_PX = 12
 // happens. The felt distance is this plus one round trip of finger travel
 // (nothing moves until X mode arrives — game-view onDrag), so keep the
 // margin over SLOP_PX modest.
-export const DRAG_PX = 20
+export const DRAG_PX = 24
 
 // Mirror of enums.mouse_mode in the reference client. Only the modes the
 // gesture gates need are named; the engine sends the index (input_mode msg).
