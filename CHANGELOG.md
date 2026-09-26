@@ -7,8 +7,6 @@ formatting and HTML chrome differ. Drift is a bug.
 
 # What's new
 
-Notable changes to PocketZot, newest first.
-
 ## 2026-09-26
 
 - Dragging the map in normal play now opens X-mode.

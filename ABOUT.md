@@ -39,6 +39,7 @@ Obligatory virtual keyboard also available.
 - Tap place name in HUD (e.g. @D:1) to toggle minimap
 - Long press on map cell to see what's there
 - Tap or drag on map while targeting or examining (`x`) to move the cursor
+- Drag map to open level map (`X`)
 - Drag level map (`X`) to pan it
 - Tap level map (`X`) to place the cursor
 - Double tap on map to toggle zoom level
