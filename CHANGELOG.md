@@ -9,20 +9,20 @@ formatting and HTML chrome differ. Drift is a bug.
 
 Notable changes to PocketZot, newest first.
 
-## 2026-09-25
+## 2026-09-26
 
 - Dragging the map in normal play now opens X-mode.
-- X-mode now has its own control set and shows the minimap for
-  orientation.
+- X-mode now has its own buttons and a minimap.
 - Landscape now shows the minimap in the sidebar on tablets, and on
   phones while spectating.
 - The Standard control set has changed on the `@` and `>` tabs.
   Custom control sets are not affected. If you'd like a copy of the old
   layout, import it in Settings:
   `pocketzot-controls{v1|Old Standard|@4:{Tab} 5 i o q r f v a ' x ,|>4:w R t P d {^F} G {^O} X e < >|?4:@ % ^ = A m {rb} \ $ M I ?}`
-- Ctrl-O (dungeon overview) is now reformatted for portrait.
-- God power costs are now listed under the power instead of requiring
-  panning to the right.
+- Ctrl-O (dungeon overview) branch, altar, and shop lists are now
+  reformatted for portrait.
+- God power costs are now listed under the power instead of offscreen
+  to the right.
 - The monster panel now shows more text labels for various status
   effects.
 - Other improvements.
