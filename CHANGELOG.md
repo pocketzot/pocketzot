@@ -19,7 +19,7 @@ Notable changes to PocketZot, newest first.
   Custom control sets are not affected. If you'd like a copy of the old
   layout, import it in Settings:
   `pocketzot-controls{v1|Old Standard|@4:{Tab} 5 i o q r f v a ' x ,|>4:w R t P d {^F} G {^O} X e < >|?4:@ % ^ = A m {rb} \ $ M I ?}`
-- Ctrl-O (dungeon overview) branch, altar, and shop lists are now
+- Dungeon overview (`^O`) branch, altar, and shop lists are now
   reformatted for portrait.
 - God power costs are now listed under the power instead of offscreen
   to the right.
