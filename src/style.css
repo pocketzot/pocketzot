@@ -4880,7 +4880,7 @@ html.map-hold, html.map-hold * {
   }
   .tc-dpad-btn {
     background: color-mix(in srgb, var(--surface2) 20%, transparent);
-    color: color-mix(in srgb, var(--text) 55%, transparent);
+    color: color-mix(in srgb, var(--text) 40%, transparent);
     /* The 20%-opaque fill leaves the border as the button's visible edge
        over the map, so the app-wide border is needed here — the dimmer
        --tc-border is tuned for the solid portrait strip and all but
@@ -4891,7 +4891,7 @@ html.map-hold, html.map-hold * {
      .tc-dpad-btn, so fade it explicitly too. :active stays fully opaque (the
      base var(--accent) rule wins) for press feedback. */
   .tc-dpad-btn.wait {
-    color: color-mix(in srgb, var(--text-dim) 55%, transparent);
+    color: color-mix(in srgb, var(--text-dim) 40%, transparent);
   }
 
   /* The X minimap slot floats where the d-pad does, stacked on the describe
