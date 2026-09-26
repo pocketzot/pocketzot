@@ -20,6 +20,15 @@
      was tried as the press fill and is only ~1.1:1 against --surface —
      invisible on an OLED phone; don't reuse a resting surface token here. */
   --press:     #302e2c;
+  /* List rows in scrolling views hold their press state back this long
+     (`transition: background-color 0s var(--press-delay)` on :active), so
+     a scroll that starts on a row never lights it — native lists wait the
+     same way (UIScrollView's touch-down timer). A tap shorter than this
+     shows nothing, as in iOS Settings (checked on device 2026-09-25); off
+     is instant on lift. Each rule is also gated on
+     :root:not(.press-cancelled): iOS keeps :active through a scroll, so a
+     row pressed longer than this would stay lit (main.ts has the why). */
+  --press-delay: 100ms;
   --accent:    #f59e0b;
   --text:      #e7e5e4;
   --text-dim:  #a8a29e;
@@ -110,6 +119,15 @@ html, body {
      property is inherited, and Blink kept the -webkit- spelling — there is
      no unprefixed form). Don't re-add per-element copies. */
   -webkit-tap-highlight-color: transparent;
+}
+/* Controls aren't text: a long-press on one must not start iOS text
+   selection (observed on device 2026-09-25 — holding a lobby row selected
+   its text with a haptic). Element-level only, never on a container: an
+   inherited user-select:none leaves iOS text fields uneditable (WebKit bug
+   82692). */
+button, summary, [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
 }
 /* Installed-app (home screen) mode with viewport-fit=cover: iOS misreports
    every dynamic viewport measure (100dvh/100svh, innerHeight,
@@ -242,6 +260,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.login-moved-link:active { opacity: 0.5; }
 .login-moved-sub {
   margin: 0;
   font-size: 0.78rem;
@@ -259,6 +278,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   line-height: 1;
   cursor: pointer;
 }
+.login-moved-x:active { opacity: 0.5; }
 
 .login-title {
   font-size: 1.4rem;
@@ -422,6 +442,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   touch-action: manipulation; /* no iOS double-tap zoom on the tap target */
 }
 .login-avatars:empty { display: none; }
+.login-avatars:active { opacity: 0.5; }
 
 /* Full-screen "crypt": the complete retained character history (src/avatars.ts),
    a vertical-scrolling 4-wide grid of doll sprites. Opened by tapping the login
@@ -476,7 +497,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   cursor: pointer;
   touch-action: manipulation;
 }
-.crypt-doll:active { transform: scale(0.92); }
+:root:not(.press-cancelled) .crypt-doll:active { transform: scale(0.92); transition: transform 0s var(--press-delay); }
 /* Tap-a-doll card modal: the char-card itself is the dialog, centered over
    the crypt. The backdrop IS a .doc-backdrop (mountBackdrop, overlay.ts) —
    only the card sizing is crypt-specific. */
@@ -542,6 +563,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   -webkit-user-select: none;
   touch-action: manipulation;
 }
+.login-group-toggle > summary:active { opacity: 0.5; }
 .login-group-toggle > summary::-webkit-details-marker { display: none; }
 .login-group:first-of-type > .login-group-toggle > summary { --hit-up: var(--login-head-gap); }
 .login-group-toggle:not([open]) > summary {
@@ -604,7 +626,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   width: 100%;
 }
 
-.login-account-card:active { background: var(--press); }
+:root:not(.press-cancelled) .login-account-card:active { background: var(--press); transition: background-color 0s var(--press-delay); }
 .login-account-card:disabled { opacity: 0.5; cursor: default; }
 
 .login-account-tag {
@@ -681,6 +703,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   color: var(--text-dim);
   list-style: none;
 }
+.login-add-section > summary:active { opacity: 0.5; }
 .login-add-section > summary::-webkit-details-marker { display: none; }
 /* Leading disclosure chevron, same right/down state pair (and the same
    border-drawn glyph) as the section headers above it — one grammar per page. */
@@ -956,6 +979,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   color: var(--text-dim);
 }
 button.lobby-account-chip.is-guest { cursor: pointer; }
+button.lobby-account-chip:active { background: var(--press); }
 
 /* No accent in a chip (see --accent-line): your account name leads by weight. */
 .lobby-chip-user { color: var(--text); font-weight: 600; }
@@ -1145,6 +1169,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   padding: 0.3rem 0;
   list-style: none;
 }
+.lobby-more-games > summary:active { opacity: 0.5; }
 
 /* The leading chevron is the login expanders' (.login-add-section). */
 .lobby-more-games > summary::-webkit-details-marker { display: none; }
@@ -1226,7 +1251,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   pointer-events: none;
 }
 
-.lobby-game-row:active { background: var(--press); }
+:root:not(.press-cancelled) .lobby-game-row:active { background: var(--press); transition: background-color 0s var(--press-delay); }
 .lobby-game-row:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
@@ -1357,7 +1382,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
 .offline-device-row.offline-nav-row { align-items: center; cursor: pointer; }
 .offline-nav-row .offline-device-label { font-size: 0.95rem; }
 .offline-nav-row::after { content: "→"; color: var(--text-dim); font-size: 0.95rem; }
-.offline-nav-row:active { background: var(--press); }
+:root:not(.press-cancelled) .offline-nav-row:not(.is-disabled):active { background: var(--press); transition: background-color 0s var(--press-delay); }
 .offline-nav-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .offline-nav-row.is-disabled { opacity: 0.5; cursor: default; }
 /* The name form, opened in place of the New game row: the card is its
@@ -1641,6 +1666,7 @@ button.lobby-account-chip.is-guest { cursor: pointer; }
   text-decoration: underline;
   font-size: 0.95rem;
 }
+.lobby-exit-link:active { opacity: 0.5; }
 /* Peer of the morgue link, not a CTA: a light dim text button, padded only
    enough for a comfortable tap target. */
 .lobby-exit-close {
@@ -3823,6 +3849,10 @@ html.map-hold, html.map-hold * {
   outline-offset: 2px;
   border-radius: 3px;
 }
+/* Press sits over the armed tint; the ring stays, so arming reads through. */
+:root:not(.press-cancelled) .ngv-card:active,
+:root:not(.press-cancelled) .ngv-row:active { background: var(--press); transition: background-color 0s var(--press-delay); }
+.ngv-action:active { opacity: 0.5; }
 
 .ngv-doll { flex-shrink: 0; }
 
@@ -5236,6 +5266,7 @@ html.map-hold, html.map-hold * {
 /* Selected = accent border + amber fill, matching the .settings-seg active
    segment so selection reads the same everywhere on the page. */
 .set-row.active .set-row-main { border-color: var(--accent); background: var(--accent-tint); }
+:root:not(.press-cancelled) .set-row-main:active { background: var(--press); transition: background-color 0s var(--press-delay); }
 .set-radio { color: var(--text-dim); flex-shrink: 0; }
 .set-row.active .set-radio { color: var(--accent); }
 .set-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -5557,6 +5588,7 @@ html.map-hold, html.map-hold * {
   font-size: 0.72rem;
   cursor: pointer;
 }
+.ed-size-btn:active { background: var(--press); }
 
 /* Fused segmented control (Map display picker, editor's 3×3/3×4 toggle):
    segments overlap their 1px shared edge; the active one wins it via
@@ -5583,6 +5615,7 @@ html.map-hold, html.map-hold * {
   font-size: 0.95rem;
   cursor: pointer;
 }
+.ed-slot:not(.static):active { background: var(--press); }
 .ed-slot.empty { color: var(--text-dim); border-style: dashed; background: transparent; }
 .ed-slot.picking { border-color: var(--accent); color: var(--accent); }
 /* Read-only viewer slots are inert divs, not buttons */
@@ -5784,6 +5817,7 @@ html.map-hold, html.map-hold * {
   text-overflow: ellipsis;
   cursor: pointer;
 }
+:root:not(.press-cancelled) .chat-names:active { opacity: 0.5; transition: opacity 0s var(--press-delay); }
 /* Tap-to-unfold full spectator list (chat-view.ts toggles the class): wraps in
    place, capped at ~3 lines then scrolls within — CNCPublicChat regularly has
    30+ spectators and the header must not swallow the sheet. */
@@ -5806,6 +5840,7 @@ html.map-hold, html.map-hold * {
   padding: 0.1rem 0.4rem;
   cursor: pointer;
 }
+.chat-close:active { opacity: 0.5; }
 
 .chat-history {
   /* ~8 lines at 0.8rem × 1.45, then scrolls; shrinks to fit fewer. */
@@ -5876,7 +5911,7 @@ html.map-hold, html.map-hold * {
   text-align: left;
 }
 .char-card-tappable { cursor: pointer; }
-.char-card-tappable:active { background: var(--press); }
+:root:not(.press-cancelled) .char-card-tappable:active { background: var(--press); transition: background-color 0s var(--press-delay); }
 .char-card-doll {
   flex: none;
   display: flex;
@@ -6009,6 +6044,7 @@ html.map-hold, html.map-hold * {
   padding: calc(0.35rem - 2px) 0.7rem;
   cursor: pointer;
 }
+.records-sort-btn:active { background: var(--press); }
 /* Selected = raised thumb + bright label, both luminance cues (--text is
    ~1.9:1 over --text-dim; an orange label was ~1.2:1, hue only). No accent:
    this is the header chips' family. --press says why the thumb isn't
