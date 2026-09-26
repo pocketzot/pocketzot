@@ -1743,6 +1743,7 @@ button.lobby-account-chip:active { background: var(--press); }
 .doc-body h1 { font-size: 1.2rem; margin: 1.2rem 0 0.6rem; color: var(--text); }
 .doc-body h2 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; color: var(--text); }
 .doc-body h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; color: var(--text); }
+.doc-body > :first-child { margin-top: 0; }
 .doc-body p { margin: 0 0 0.8rem; }
 .doc-body ul { margin: 0 0 0.9rem; padding-left: 1.2rem; }
 .doc-body li { margin-bottom: 0.4rem; }
