@@ -3,16 +3,17 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { ChatView, type ChatViewOpts } from './chat-view'
 
-// Wire shapes below are verbatim captures from crawl.dcss.io (2026-07):
-// the server pre-formats chat as sender/msg spans, marks notices with
-// meta:true (no sender span), and linkifies spectator names to scoring pages.
+// Wire shapes below follow captures from crawl.dcss.io (2026-07), with
+// synthetic names and text: the server pre-formats chat as sender/msg spans,
+// marks notices with meta:true (no sender span), and linkifies spectator
+// names to scoring pages.
 const WIRE_CHAT =
-  "<span class='chat_sender'>gammafunk</span>: <span class='chat_msg'>oh nice, a MiFi with a broad axe already</span>"
+  "<span class='chat_sender'>demo_spec1</span>: <span class='chat_msg'>nice, a broad axe already</span>"
 const WIRE_META =
-  "<span class='chat_msg'>rakuen is now watching</span>"
+  "<span class='chat_msg'>demo_spec2 is now watching</span>"
 const WIRE_NAMES_LINKIFIED =
-  "<a href='http://crawl.akrasiac.org/scoring/players/roinerr.html' target='_blank' class='player'>RoinerR</a>, " +
-  "<a href='http://crawl.akrasiac.org/scoring/players/bram.html' target='_blank' class='watcher'>bram</a>"
+  "<a href='http://crawl.akrasiac.org/scoring/players/demoplayer.html' target='_blank' class='player'>DemoPlayer</a>, " +
+  "<a href='http://crawl.akrasiac.org/scoring/players/demo_spec2.html' target='_blank' class='watcher'>demo_spec2</a>"
 
 function make(opts: Omit<ChatViewOpts, 'onSend'> = {}) {
   const sent: string[] = []
@@ -36,8 +37,8 @@ describe('wire parsing and rendering', () => {
     const { view } = make()
     view.handleChat(WIRE_CHAT, false)
     const line = view.sheet.querySelector('.chat-line')!
-    expect(line.textContent).toBe('<gammafunk> oh nice, a MiFi with a broad axe already')
-    expect(line.querySelector('.chat-line-sender')!.textContent).toBe('<gammafunk>')
+    expect(line.textContent).toBe('<demo_spec1> nice, a broad axe already')
+    expect(line.querySelector('.chat-line-sender')!.textContent).toBe('<demo_spec1>')
   })
 
   it('renders meta notices dim with a * prefix', () => {
@@ -45,7 +46,7 @@ describe('wire parsing and rendering', () => {
     view.handleChat(WIRE_META, true)
     const line = view.sheet.querySelector('.chat-line')!
     expect(line.classList.contains('chat-line-meta')).toBe(true)
-    expect(line.textContent).toBe('* rakuen is now watching')
+    expect(line.textContent).toBe('* demo_spec2 is now watching')
   })
 
   it('treats a senderless message as meta even without the flag', () => {
@@ -69,7 +70,7 @@ describe('wire parsing and rendering', () => {
   it('extracts plain names from the linkified spectator list', () => {
     const { view } = make()
     view.handleSpectators(1, WIRE_NAMES_LINKIFIED)
-    expect(view.sheet.querySelector('.chat-names')!.textContent).toBe('◉ RoinerR, bram')
+    expect(view.sheet.querySelector('.chat-names')!.textContent).toBe('◉ DemoPlayer, demo_spec2')
     expect(view.chip.textContent).toContain('◉1')
   })
 
@@ -108,17 +109,17 @@ describe('wire parsing and rendering', () => {
   it('linkifies pasted URLs as safe anchors, keeping sentence punctuation out', () => {
     const { view } = make()
     view.handleChat(
-      "<span class='chat_sender'>gammafunk</span>: <span class='chat_msg'>morgue at http://crawl.akrasiac.org/rawdata/rr/morgue-rr.txt, rip</span>",
+      "<span class='chat_sender'>demo_spec1</span>: <span class='chat_msg'>morgue at http://crawl.akrasiac.org/rawdata/demoplayer/morgue-demoplayer.txt, rip</span>",
       false,
     )
     const a = view.sheet.querySelector('.chat-line a') as HTMLAnchorElement
-    expect(a.getAttribute('href')).toBe('http://crawl.akrasiac.org/rawdata/rr/morgue-rr.txt')
+    expect(a.getAttribute('href')).toBe('http://crawl.akrasiac.org/rawdata/demoplayer/morgue-demoplayer.txt')
     expect(a.target).toBe('_blank')
     expect(a.rel).toBe('noopener')
     // The full line survives intact around the anchor — trailing ", rip"
     // stays text, and the comma is not part of the link.
     expect(view.sheet.querySelector('.chat-line')!.textContent)
-      .toBe('<gammafunk> morgue at http://crawl.akrasiac.org/rawdata/rr/morgue-rr.txt, rip')
+      .toBe('<demo_spec1> morgue at http://crawl.akrasiac.org/rawdata/demoplayer/morgue-demoplayer.txt, rip')
   })
 
   it('keeps a balanced trailing paren inside the URL, sheds an unbalanced one', () => {
@@ -130,12 +131,12 @@ describe('wire parsing and rendering', () => {
     )
     // …while a link merely wrapped in parens sheds the stray closer.
     view.handleChat(
-      "<span class='chat_sender'>x</span>: <span class='chat_msg'>(morgue: http://crawl.akrasiac.org/rawdata/rr/morgue-rr.txt)</span>",
+      "<span class='chat_sender'>x</span>: <span class='chat_msg'>(morgue: http://crawl.akrasiac.org/rawdata/demoplayer/morgue-demoplayer.txt)</span>",
       false,
     )
     const [balanced, wrapped] = view.sheet.querySelectorAll('.chat-line a')
     expect(balanced.getAttribute('href')).toBe('https://crawl.chaosforge.org/Vault_(DCSS)')
-    expect(wrapped.getAttribute('href')).toBe('http://crawl.akrasiac.org/rawdata/rr/morgue-rr.txt')
+    expect(wrapped.getAttribute('href')).toBe('http://crawl.akrasiac.org/rawdata/demoplayer/morgue-demoplayer.txt')
   })
 
   it('does not linkify schemeless or non-http text', () => {
@@ -250,7 +251,7 @@ describe('pill', () => {
     const { view } = make()
     view.handleChat(WIRE_CHAT, false)
     expect(view.pill.style.display).not.toBe('none')
-    expect(view.pill.textContent).toBe('<gammafunk> oh nice, a MiFi with a broad axe already')
+    expect(view.pill.textContent).toBe('<demo_spec1> nice, a broad axe already')
     vi.advanceTimersByTime(4100)
     // Expiry starts the opacity fade; the element hides after it lands.
     expect(view.pill.classList.contains('chat-pill-fade')).toBe(true)

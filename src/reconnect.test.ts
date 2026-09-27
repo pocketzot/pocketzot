@@ -172,7 +172,7 @@ describe('resumeOnConn — played game', () => {
     const p = resumeOnConn(conn, { kind: 'watch', username: 'bob' }, { username: USER, guest: false }, fakeUi())
     feed({ msg: 'login_success', username: USER })
     feed({ msg: 'game_client', version: 'v', content: '' })
-    feed({ msg: 'update_spectators', count: 1, names: 'RoinerR' })
+    feed({ msg: 'update_spectators', count: 1, names: 'DemoPlayer' })
     feed({ msg: 'chat', content: 'hi' })
     feed({ msg: 'watching_started', username: 'bob' })
 

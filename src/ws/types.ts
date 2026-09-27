@@ -192,7 +192,7 @@ export type ServerMsg =
   | { msg: 'chat'; content: string; meta?: boolean }
   // Sent to everyone (player included) on spectator join/leave. count excludes
   // the player and chat-hidden spectators; names is a pre-joined display string
-  // ("gammafunk, Sequell and 2 Anon") with the player's name first.
+  // ("demo_spec1, demo_spec2 and 2 Anon") with the player's name first.
   | { msg: 'update_spectators'; count: number; names: string }
   // Server-initiated removal of the chat UI (restricted accounts).
   | { msg: 'super_hide_chat' }

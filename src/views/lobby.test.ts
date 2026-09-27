@@ -114,7 +114,7 @@ describe('lobby tile-loader hand-off', () => {
 // view's handler right after onGameStart mounts it — without this the chat
 // chip starts blind (no spectator count) and join-time chat is lost.
 describe('lobby pre-game chat-state replay', () => {
-  const SPECTATORS: ServerMsg = { msg: 'update_spectators', count: 1, names: 'RoinerR' }
+  const SPECTATORS: ServerMsg = { msg: 'update_spectators', count: 1, names: 'DemoPlayer' }
   const CHAT: ServerMsg = { msg: 'chat', content: 'hi' }
 
   it('replays pre-transition update_spectators and chat, in order, after mount', () => {

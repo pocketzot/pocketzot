@@ -1549,18 +1549,18 @@ export function buildGameView(
         // Fake the audience joining. names arrives as the reference's wrapped
         // HTML — each watcher a .watcher span, with an unwrapped Anon tail —
         // so handleSpectators recovers the countable names exactly as on wire.
-        const watchers = lines ? ['gammafunk'] : ['gammafunk', 'rakuen']
+        const watchers = lines ? ['demo_spec1'] : ['demo_spec1', 'demo_spec2']
         const namesHtml = watchers
           .map((n) => `<span class="watcher">${n}</span>`)
           .join(', ') + ', and 1 Anon'
         chatView.handleSpectators(watchers.length + 1, namesHtml)
         const script: Array<[number, string, string]> = lines
-          ? lines.map((l, i) => [i * 2000, 'gammafunk', l])
+          ? lines.map((l, i) => [i * 2000, 'demo_spec1', l])
           : [
-              [0, 'gammafunk', 'oh nice, a MiFi with a broad axe already'],
-              [1500, 'rakuen', 'grab the whip for the hydra later too'],
-              [6500, 'gammafunk', 'you should swap to the broad axe before D:4, reach will not help once the orcs surround you'],
-              [11500, 'Sequell', 'gammafunk: 300 games, best XL:27 MiBe'],
+              [0, 'demo_spec1', 'nice, a broad axe already'],
+              [1500, 'demo_spec2', 'grab the whip for the hydra later too'],
+              [6500, 'demo_spec1', 'you should swap to the broad axe before D:4, reach will not help once the orcs surround you'],
+              [11500, 'demo_bot', 'demo_spec1: 300 games, best XL:27 MiBe'],
             ]
         for (const [t, sender, text] of script) {
           setTimeout(() => chatView.handleChat(
