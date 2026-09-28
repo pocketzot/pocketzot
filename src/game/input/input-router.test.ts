@@ -57,6 +57,12 @@ describe('routeInput precedence', () => {
     expect(log).toEqual(['leave'])
   })
 
+  it('a spectator backdrop tap is not a leave', () => {
+    const { t, log } = targets({ spectating: true })
+    routeInput(input(ESC, { origin: 'touch' }), t)
+    expect(log).not.toContain('leave')
+  })
+
   it('a key typed into a focused field is left to the field', () => {
     const { t, log } = targets({ panel: true })
     expect(routeInput(input(A, { typing: true }), t)).toBe('ignored')

@@ -2524,6 +2524,19 @@ describe('monster panel → server selection menu hand-off', () => {
 // While spectating the panel is tap-anywhere-to-close (see openMonsterPanel):
 // a watcher has no touch-⎋/back affordance on iOS, so a full-screen list had
 // no dismiss target, and a watcher's click_cell is dropped server-side anyway.
+describe('spectator floating prompt', () => {
+  it('a backdrop tap stays in the game (the server drops the Esc)', () => {
+    const h = setup({ username: 'someone' })
+    h.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Save game and exit?' }, items: [] })
+    const ov = overlay(h)
+    expect(ov.classList.contains('overlay-float')).toBe(true)
+    ov.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    ov.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(h.onLobby).not.toHaveBeenCalled()
+    expect(sent(h)).not.toContainEqual({ msg: 'go_lobby' })
+  })
+})
+
 describe('monster panel while spectating', () => {
   const openPanel = (h: Harness) => {
     h.dispatch({ msg: 'map', cells: [{ x: 5, y: 5, g: 'o', col: 7, mon: { id: 1, name: 'orc', att: 1, type: 1 } }] })

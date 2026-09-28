@@ -56,10 +56,12 @@ export function routeInput(input: RoutedInput, t: RouterTargets): Verdict {
   // stays live under it, so a tapped Esc is meant for the game. The back
   // gesture closes chat before it routes.
   if (input.origin === 'kbd' && input.esc && t.chatOpen()) { t.closeChat(); return 'handled' }
-  // The server discards a spectator's game input: Esc leaves client-side and
-  // everything else is dropped. Ahead of `typing` so Esc still leaves while a
-  // synced prompt field has focus.
-  if (t.spectating) {
+  // The server discards a spectator's game input: a physical Esc leaves
+  // client-side and every other key is dropped. Ahead of `typing` so Esc
+  // still leaves while a synced prompt field has focus. Keyboard only: a
+  // spectator has no touch strip, and the one touch input left — a floating
+  // prompt's backdrop tap — must stay a no-op, never a leave.
+  if (t.spectating && input.origin === 'kbd') {
     if (!input.esc) return 'ignored'
     t.leave()
     return 'handled'
