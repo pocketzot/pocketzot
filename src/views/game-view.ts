@@ -2048,10 +2048,10 @@ export function buildGameView(
           uiStack[uiStack.length - 1].body = body
           restoreTopLayer()
         }
-        // from_webtiles=true is the server echoing our own
-        // formatted_scroller_scroll back — our scroll position is already
-        // correct (we set it locally before sending).
-        if (scroll !== undefined && !fromWebtiles) scrollOverlayBody(scroll)
+        // from_webtiles=true is the player's own formatted_scroller_scroll
+        // coming back: the player skips it (already scrolled there locally),
+        // a spectator follows it (ui-layouts.js:808).
+        if (scroll !== undefined && (!fromWebtiles || spectating)) scrollOverlayBody(scroll)
         break
       }
 
@@ -2066,20 +2066,21 @@ export function buildGameView(
         const raw = msg as unknown as Record<string, unknown>
         const scroll = raw['scroll'] as number | undefined
         const fromWebtiles = raw['from_webtiles'] === true
-        if (scroll !== undefined && !fromWebtiles) scrollOverlayBody(scroll)
+        if (scroll !== undefined && (!fromWebtiles || spectating)) scrollOverlayBody(scroll)
         break
       }
 
       case 'ui-state-sync': {
         // Server-driven updates to a focused input widget. from_webtiles=true
-        // means the server is echoing our own edit back, so skip to avoid
-        // clobbering the cursor mid-typing. Handled widgets:
+        // is the player's own edit coming back: the player skips it (it would
+        // clobber the cursor mid-typing), a spectator applies it so the
+        // field follows what the player types (ui.js:483). Handled widgets:
         //   "input"        — msgwin-get-line single text field
         //   "seed"         — seed-selection seed entry
         //   "pregenerate"  — seed-selection checkbox
         //   "btn-*"        — buttons; presence-only, no state to apply
         const m = msg as unknown as { widget_id?: string; text?: string; checked?: boolean; from_webtiles?: boolean; has_focus?: boolean }
-        if (m.from_webtiles) break
+        if (m.from_webtiles && !spectating) break
         if (m.widget_id === 'input') {
           const input = uiOverlay.querySelector<HTMLInputElement>('.input-dialog-field')
           if (!input) break
@@ -4183,9 +4184,10 @@ export function buildGameView(
   // scrollbar is owned by the *client*: page/arrow/home/end keys scroll the
   // body locally, the new position is debounced back to the server as
   // `formatted_scroller_scroll`, and server-pushed scrolls with
-  // `from_webtiles=true` are skipped (they're the server echoing our own
-  // request). `ui-scroller-scroll` messages are ignored entirely when the
-  // top popup is a formatted-scroller — the server emits them with a
+  // `from_webtiles=true` are skipped by the player (they're the server
+  // echoing its own request) but followed by spectators.
+  // `ui-scroller-scroll` messages are ignored entirely when the top popup
+  // is a formatted-scroller — the server emits them with a
   // hardcoded `from_webtiles: false` (ui.cc:1501-1503 says "always false,
   // since we do not yet synchronize webtiles client-side scrolls"), so the
   // ui-state pair is the sole valid sync channel here.

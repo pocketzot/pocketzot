@@ -1651,6 +1651,29 @@ describe('show_dialog / hide_dialog', () => {
   })
 })
 
+// from_webtiles marks the player's own edit/scroll coming back. Reference:
+// ui.js:483 and ui-layouts.js:808 skip it only when not watching.
+describe('from_webtiles echoes: the player skips them, spectators follow', () => {
+  const push = { msg: 'ui-push', type: 'msgwin-get-line', prompt: 'Describe what? ', generation_id: 3 }
+  const echo = { msg: 'ui-state-sync', widget_id: 'input', text: 'orc', from_webtiles: true, generation_id: 3 }
+  const field = (h: Harness) => overlay(h).querySelector<HTMLInputElement>('.input-dialog-field')!
+
+  it('player: an echoed edit leaves the field alone', () => {
+    const h = setup()
+    h.dispatch(push)
+    field(h).value = 'or'
+    h.dispatch(echo)
+    expect(field(h).value).toBe('or')
+  })
+
+  it('spectator: an echoed edit fills the field', () => {
+    const h = setup({ username: 'someone' })
+    h.dispatch(push)
+    h.dispatch(echo)
+    expect(field(h).value).toBe('orc')
+  })
+})
+
 describe('X-mode (eXamine level map) via cursor', () => {
   it('enters X-mode on an id:2 cursor (hiding the message log) and exits when the cursor clears', () => {
     const h = setup()
