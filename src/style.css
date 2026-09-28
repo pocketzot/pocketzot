@@ -3424,8 +3424,8 @@ html.map-hold, html.map-hold * {
   text-indent: calc(-1 * var(--hang-col, 2ch));
 }
 
-/* Server `show_dialog` modal (save-transfer prompt on trunk resume,
-   end-of-game prompts). The server HTML carries class="button" and inline
+/* Server `show_dialog` modal (CDI's save-transfer prompt; no upstream
+   emitter). The server HTML carries class="button" and inline
    float:right; we neutralize that and present a content-sized card centered
    in the overlay. Buttons are grouped into .dialog-buttons (row-reverse to
    mirror the server's float:right order, e.g. "Yes  No") as equal-width

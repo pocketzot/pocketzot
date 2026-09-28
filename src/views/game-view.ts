@@ -481,8 +481,8 @@ export function buildGameView(
     charMeta.runes = [...(charMeta.runes ?? []), rune] // runesCounted already dedups
     if (gameId && !cheatSeen) countEach(gameId === 'offline' ? 'rune-each-offline' : 'rune-each')
   }
-  // True while a server `show_dialog` HTML overlay is up (e.g. trunk's
-  // save-transfer prompt on resume). Tracked like crtActive so it can't be
+  // True while a server `show_dialog` HTML overlay is up (e.g. CDI's
+  // save-transfer prompt). Tracked like crtActive so it can't be
   // orphaned if the server proceeds without an explicit hide_dialog.
   let dialogActive = false
   // Focus sink of the live newgame-choice render (ui-state routing below).
@@ -1686,10 +1686,11 @@ export function buildGameView(
         if (msg.layer === 'game') { uiStack.length = 0; crtActive = false; dialogActive = false; crtTag = undefined; menuStack.length = 0; activeMenu = null; uiCutoff = -1; closeClientOverlays(); harvester.reset(); hideOverlay() }
         break
 
-      // Raw-HTML modal pushed by the server (save-transfer prompt on trunk
-      // resume, end-of-game prompts, etc.). Mirrors reference handle_dialog:
-      // inject the HTML, wire [data-key] buttons to send that key. Without
-      // this the game blocks on an invisible prompt — a black screen.
+      // Raw-HTML modal. No emitter in upstream trunk or 0.34.1 (the reference
+      // only handles it); the known sender is CDI's own save-transfer prompt
+      // on its trunk game. Mirrors reference handle_dialog: inject the HTML,
+      // wire [data-key] buttons to send that key. Without this the game
+      // blocks on an invisible prompt — a black screen.
       case 'show_dialog': {
         const html = msg.html ?? ''
         dialogActive = true
