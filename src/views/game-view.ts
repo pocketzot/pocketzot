@@ -17,7 +17,8 @@ import { buildTouchControls, bindPressedClass } from '../game/input/touch'
 import type { TouchControls } from '../game/input/touch'
 import { openSettings } from './settings-view'
 import { isOverlayOpen, closeTopOverlay } from './overlay'
-import { handleKeydown, CK_UP, CK_DOWN, CK_PGUP, CK_PGDN, CK_HOME, CK_END } from '../game/input/keyboard'
+import { keyToMsg } from '../game/input/keyboard'
+import { isEscMsg, keyNav, routeInput, wireNav, type NavKey, type RouterTargets } from '../game/input/input-router'
 import { createShiftToggle } from '../game/input/shift-state'
 import { attachMapGestures, canDescribe, canHover, canOpenLevelMap } from '../game/input/map-tap'
 import { attachCornerSwipe } from '../game/input/corner-swipe'
@@ -988,37 +989,29 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     }
   }
 
-  // Shared input dispatch for the touch-control buttons AND the Android
-  // back gesture (CloseWatcher below): the client-panel/lens/menu-nav
-  // guards here are what give an injected Esc the same meaning as a
-  // tapped one.
+  // Player input's precedence chain (../game/input/input-router.ts). Getters,
+  // since every flag here changes under the view's feet.
+  const routerTargets: RouterTargets = {
+    harvesting: () => isHarvesting(),
+    chatOpen: () => chatView.isOpen,
+    closeChat: () => chatView.closeSheet(),
+    spectating: !!spectating,
+    leave: () => leaveToLobby(),
+    monsterPanelOpen: () => monsterPanelOpen,
+    closeMonsterPanel: () => closeMonsterPanel(),
+    minimapOpen: () => minimapOpen,
+    closeMinimap: () => closeMinimap(),
+    menuNav: (nav) => menuNav(nav),
+    scrollerNav: (nav, page) => scrollerNav(nav, page),
+    send: (msg) => { conn.send(msg); afterUserSend(msg) },
+  }
+
+  // The touch strip's and the Android back gesture's way in: an injected Esc
+  // means exactly what a tapped one does.
   function dispatchTouchInput(msg: ClientMsg): void {
-    if (isHarvesting()) return  // suppress d-pad/macro input during silent harvest
-    // The monster panel is a client-only overlay and the touch controls stay
-    // visible over it (both orientations, like any plain menu). Route their
-    // Esc to close the panel — mirroring the physical Esc handler in
-    // docKeyHandler — and swallow every other key so a stray tap can't drive
-    // the hidden game beneath the overlay.
-    if (monsterPanelOpen) {
-      if (msg.msg === 'key' && msg.keycode === 27) closeMonsterPanel()
-      return
-    }
-    if (minimapOpen) {
-      // The lens is see-through to input: Esc closes it locally, everything
-      // else drives the game as normal (walk while watching the overview).
-      if (msg.msg === 'key' && msg.keycode === 27) { closeMinimap(); return }
-    }
-    if (msg.msg === 'key' && menuNavActive()) {
-      if (msg.keycode === CK_DOWN) { cycleMenuHover(false); return }
-      if (msg.keycode === CK_UP) { cycleMenuHover(true); return }
-      if (msg.keycode === CK_PGDN) { pageMenu(false); return }
-      if (msg.keycode === CK_PGUP) { pageMenu(true); return }
-      if (msg.keycode === CK_END) { jumpMenu(true); return }
-      if (msg.keycode === CK_HOME) { jumpMenu(false); return }
-    }
-    if (msg.msg === 'key' && handleScrollerKeycode(msg.keycode)) return
-    conn.send(msg)
-    afterUserSend(msg)
+    routeInput({
+      origin: 'touch', msg, nav: wireNav(msg), scrollPage: null, esc: isEscMsg(msg), typing: false,
+    }, routerTargets)
   }
 
   const touchControls: TouchControls = buildTouchControls(dispatchTouchInput, spectating ? {} : {
@@ -1442,39 +1435,13 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // owns the keyboard: don't forward anything to the game underneath. Its own
     // Escape listener (overlay.ts) handles dismissal, so no preventDefault here.
     if (isOverlayOpen()) return
-    if (isHarvesting()) { e.preventDefault(); return }  // suppress during silent harvest
-    // Chat sheet: Escape closes it, in both roles — checked before the
-    // spectator branch so it doesn't double as exit-to-lobby. (Keys typed
-    // while the chat input is focused never reach here — the input's own
-    // handler stops propagation.)
-    if (chatView.isOpen && e.key === 'Escape') {
-      e.preventDefault()
-      chatView.closeSheet()
-      return
-    }
-    if (spectating) {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        leaveToLobby()
-      }
-      return
-    }
-    if (document.activeElement instanceof HTMLInputElement) return
-    if (monsterPanelOpen) {
-      e.preventDefault()
-      if (e.key === 'Escape') closeMonsterPanel()
-      return
-    }
-    // Minimap lens: only Escape is intercepted (close); all other keys fall
-    // through and play the game under the lens.
-    if (minimapOpen && e.key === 'Escape') {
-      e.preventDefault()
-      closeMinimap()
-      return
-    }
-    if (handleMenuNavKey(e)) return
-    if (handleScrollerKey(e)) return
-    handleKeydown(e, (msg) => { conn.send(msg); afterUserSend(msg) })
+    // (Keys typed while the chat input is focused never reach here — the
+    // input's own handler stops propagation.)
+    const verdict = routeInput({
+      origin: 'kbd', msg: keyToMsg(e), ...keyNav(e), esc: e.key === 'Escape',
+      typing: document.activeElement instanceof HTMLInputElement,
+    }, routerTargets)
+    if (verdict === 'handled') e.preventDefault()
   }
   document.addEventListener('keydown', docKeyHandler)
 
@@ -3239,17 +3206,18 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       && !!uiOverlay.querySelector('.overlay-list')
   }
 
-  // Returns true if the key was a menu-nav key we handled client-side.
-  function handleMenuNavKey(e: KeyboardEvent): boolean {
+  // The router's menu-nav layer: true when it drove the hover client-side.
+  function menuNav(nav: NavKey): boolean {
     if (!menuNavActive()) return false
-    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return false
-    if (e.key === 'ArrowDown') { e.preventDefault(); cycleMenuHover(false); return true }
-    if (e.key === 'ArrowUp') { e.preventDefault(); cycleMenuHover(true); return true }
-    if (e.key === 'PageDown') { e.preventDefault(); pageMenu(false); return true }
-    if (e.key === 'PageUp') { e.preventDefault(); pageMenu(true); return true }
-    if (e.key === 'Home') { e.preventDefault(); jumpMenu(false); return true }
-    if (e.key === 'End') { e.preventDefault(); jumpMenu(true); return true }
-    return false
+    switch (nav) {
+      case 'down': cycleMenuHover(false); break
+      case 'up': cycleMenuHover(true); break
+      case 'pageDown': pageMenu(false); break
+      case 'pageUp': pageMenu(true); break
+      case 'home': jumpMenu(false); break
+      case 'end': jumpMenu(true); break
+    }
+    return true
   }
 
   // Keep the dev inspection hook pointing at the current cache array, and
@@ -4042,47 +4010,25 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     bodyEl.addEventListener('scroll', onScrollerScroll, { passive: true })
   }
 
-  // Client-side scroll-key interception. Returns true when handled so the
-  // caller stops routing the key further (mirrors handleMenuNavKey).
-  function handleScrollerKey(e: KeyboardEvent): boolean {
+  // The router's scroller layer: client-side scrolling of a formatted
+  // scroller (see the block comment above). True when it scrolled.
+  function scrollerNav(nav: NavKey | null, pageDir: -1 | 1 | null): boolean {
     if (!formattedScrollerActive()) return false
-    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return false
     const el = uiOverlay.querySelector<HTMLElement>('.overlay-body')
     if (!el) return false
     const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
     const page = Math.max(lineH, el.clientHeight - 2 * lineH)
-    switch (e.key) {
-      case 'ArrowUp':   el.scrollTop -= lineH; break
-      case 'ArrowDown': el.scrollTop += lineH; break
-      case 'PageUp': case '<': case '-': case ';':
-        el.scrollTop -= page; break
-      case 'PageDown': case ' ': case '>': case '+': case "'":
-        el.scrollTop += page; break
-      case 'Home': el.scrollTop = 0; break
-      case 'End':  el.scrollTop = el.scrollHeight; break
-      default: return false
+    switch (nav) {
+      case 'up': el.scrollTop -= lineH; return true
+      case 'down': el.scrollTop += lineH; return true
+      case 'pageUp': el.scrollTop -= page; return true
+      case 'pageDown': el.scrollTop += page; return true
+      case 'home': el.scrollTop = 0; return true
+      case 'end': el.scrollTop = el.scrollHeight; return true
     }
-    e.preventDefault()
+    if (pageDir === null) return false
+    el.scrollTop += pageDir * page
     return true
-  }
-
-  // Touch-controls equivalent (the d-pad / macro buttons emit wire keycodes
-  // through the connection send path, not DOM key events).
-  function handleScrollerKeycode(keycode: number): boolean {
-    if (!formattedScrollerActive()) return false
-    const el = uiOverlay.querySelector<HTMLElement>('.overlay-body')
-    if (!el) return false
-    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
-    const page = Math.max(lineH, el.clientHeight - 2 * lineH)
-    switch (keycode) {
-      case CK_UP:   el.scrollTop -= lineH; return true
-      case CK_DOWN: el.scrollTop += lineH; return true
-      case CK_PGUP: el.scrollTop -= page; return true
-      case CK_PGDN: el.scrollTop += page; return true
-      case CK_HOME: el.scrollTop = 0; return true
-      case CK_END:  el.scrollTop = el.scrollHeight; return true
-    }
-    return false
   }
 
   function scrollOverlayBody(line: number): void {

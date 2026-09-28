@@ -232,65 +232,61 @@ const CAPTURED_CTRL = new Set([
   '1','2','3','4','5','6','7','8','9','0',
 ])
 
-export function handleKeydown(
-  e: KeyboardEvent,
-  send: (msg: ClientMsg) => void
-): void {
+// The wire message a physical key means, or null for a key with none (browser
+// shortcuts, bare modifiers, uncaptured Ctrl keys). Pure: the caller decides
+// whether the key is consumed (see handleKeydown and the game view's router).
+export function keyToMsg(e: KeyboardEvent): ClientMsg | null {
   const { keyCode, shiftKey, ctrlKey, altKey, metaKey } = e
 
   // Ignore browser shortcuts
-  if (altKey || metaKey) return
+  if (altKey || metaKey) return null
 
   // Try event.code first (modern numpad / function keys) — unmodified only,
   // as the reference (client.js handle_keydown): a modified numpad key or
   // Delete belongs to the SHIFT/CTRL tables below, and Shift+F1 sends nothing.
   if (!ctrlKey && !shiftKey && e.code && CODE_CONV[e.code] !== undefined) {
-    e.preventDefault()
-    send({ msg: 'key', keycode: CODE_CONV[e.code] })
-    return
+    return { msg: 'key', keycode: CODE_CONV[e.code] }
   }
 
   // Ctrl+letter → control character
   if (ctrlKey && !shiftKey) {
     const upper = e.key.toUpperCase()
-    if (CAPTURED_CTRL.has(upper)) {
-      e.preventDefault()
-      send({ msg: 'key', keycode: ctrlKeycode(upper) })
-      return
-    }
+    if (CAPTURED_CTRL.has(upper)) return { msg: 'key', keycode: ctrlKeycode(upper) }
   }
 
   // Modifier + navigation key
   if (ctrlKey && shiftKey) {
     const kc = CTRLSHIFT_CONV[keyCode]
-    if (kc !== undefined) { e.preventDefault(); send({ msg: 'key', keycode: kc }); return }
+    if (kc !== undefined) return { msg: 'key', keycode: kc }
   }
   if (ctrlKey) {
     const kc = CTRL_CONV[keyCode]
-    if (kc !== undefined) { e.preventDefault(); send({ msg: 'key', keycode: kc }); return }
+    if (kc !== undefined) return { msg: 'key', keycode: kc }
   }
   if (shiftKey) {
     const kc = SHIFT_CONV[keyCode]
-    if (kc !== undefined) { e.preventDefault(); send({ msg: 'key', keycode: kc }); return }
+    if (kc !== undefined) return { msg: 'key', keycode: kc }
   }
 
   // Plain navigation / special keys
   const plain = KEY_CONV[keyCode]
-  if (plain !== undefined) {
-    e.preventDefault()
-    send({ msg: 'key', keycode: plain })
-    return
-  }
+  if (plain !== undefined) return { msg: 'key', keycode: plain }
 
   // Printable characters — send as text input
-  if (e.key.length === 1 && !ctrlKey) {
-    e.preventDefault()
-    send({ msg: 'input', text: e.key })
-  }
+  if (e.key.length === 1 && !ctrlKey) return { msg: 'input', text: e.key }
 
   // Enter sends as newline
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    send({ msg: 'key', keycode: 13 })
-  }
+  if (e.key === 'Enter') return { msg: 'key', keycode: 13 }
+  return null
+}
+
+// Sends the key's wire message, consuming the event, when it has one.
+export function handleKeydown(
+  e: KeyboardEvent,
+  send: (msg: ClientMsg) => void
+): void {
+  const msg = keyToMsg(e)
+  if (!msg) return
+  e.preventDefault()
+  send(msg)
 }
