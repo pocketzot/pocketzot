@@ -202,10 +202,14 @@ export async function buildReplayView(params: URLSearchParams): Promise<HTMLElem
 
   const conn = new ReplayConnection(rec.wsUrl, rec.httpBase)
   let exited = false
-  const view = buildGameView(conn, () => {
-    // game_ended / go_lobby in the recording tears the view down; just stop.
-    exited = true
-  }, undefined, undefined, 'replay')
+  const view = buildGameView({
+    conn,
+    onLobby: () => {
+      // game_ended / go_lobby in the recording tears the view down; just stop.
+      exited = true
+    },
+    username: 'replay',
+  })
 
   // The game view owns onMessage now — wrap it for per-message-type cost.
   // (ui-stack items re-enter the handler internally and are attributed to

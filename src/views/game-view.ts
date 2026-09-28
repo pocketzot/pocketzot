@@ -133,27 +133,33 @@ const CREATION_PUSHES = new Set(['newgame-choice', 'seed-selection', 'newgame-ra
 
 // Identifies a spectated game when transitioning lobby → game. Carries only the
 // spectated player's name; the per-version tile loader is passed separately (see
-// the `initialLoader` param of buildGameView) because it's orthogonal to whether
+// the `initialLoader` option of buildGameView) because it's orthogonal to whether
 // we're spectating — a played game can also arrive with a pre-resolved loader.
 export interface SpectateTarget {
   username: string
 }
 
-export function buildGameView(
-  conn: GameConnection,
-  onLobby: (exit?: GameExit) => void,
-  spectating?: SpectateTarget,
-  initialLoader?: TileLoader,
-  username = '',
-  gameId = '',
-  guest = false,
+export interface GameViewOptions {
+  conn: GameConnection
+  onLobby: (exit?: GameExit) => void
+  spectating?: SpectateTarget
+  initialLoader?: TileLoader
+  username?: string
+  gameId?: string
+  guest?: boolean
   // Offline only (app.ts passes boot.readMorgue): reads a '#' dump out of
   // the engine's live FS by its wire stem. Presence of this callback is
   // also the gate for decorating the dump log line with a download button.
-  readMorgue?: (filename: string) => Promise<Uint8Array<ArrayBuffer> | null>,
+  readMorgue?: (filename: string) => Promise<Uint8Array<ArrayBuffer> | null>
   // Mounted by auto-resume (app.ts startResume) — see abandoningResume.
-  resumed = false,
-): HTMLElement {
+  resumed?: boolean
+}
+
+export function buildGameView(opts: GameViewOptions): HTMLElement {
+  const {
+    conn, onLobby, spectating, initialLoader, readMorgue,
+    username = '', gameId = '', guest = false, resumed = false,
+  } = opts
   const store = new MapStore()
   if (import.meta.env.DEV) (window as unknown as { __dcssStore: MapStore }).__dcssStore = store
   // Map render mode. Starts in ASCII regardless of the saved preference; tile

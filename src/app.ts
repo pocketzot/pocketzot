@@ -142,9 +142,9 @@ async function showOfflineGame(name: string): Promise<void> {
   conn = boot.conn
   currentUsername = name
   currentIsGuest = false
-  setView(buildGameView(
-    boot.conn,
-    (exit) => {
+  setView(buildGameView({
+    conn: boot.conn,
+    onLobby: (exit) => {
       boot.dispose()
       conn = null
       // Drop the ?offline flag with the session: a later reload (e.g. the
@@ -158,13 +158,11 @@ async function showOfflineGame(name: string): Promise<void> {
       history.replaceState(null, '', location.pathname + (qs ? `?${qs}` : ''))
       showOfflineLobby(exit)
     },
-    undefined,
-    undefined,
-    currentUsername,
+    username: currentUsername,
     gameId,
-    currentIsGuest,
-    (filename) => boot.readMorgue(filename),
-  ))
+    guest: currentIsGuest,
+    readMorgue: (filename) => boot.readMorgue(filename),
+  }))
   boot.start()
 }
 
@@ -239,17 +237,16 @@ function showGame(
 ): void {
   count(spectating ? 'spectate' : 'play', gameStartFlags())
   state = 'game'
-  setView(buildGameView(
-    conn!,
-    (exit) => showLobby(currentUsername, currentIsGuest, exit),
+  setView(buildGameView({
+    conn: conn!,
+    onLobby: (exit) => showLobby(currentUsername, currentIsGuest, exit),
     spectating,
-    loader,
-    currentUsername,
+    initialLoader: loader,
+    username: currentUsername,
     gameId,
-    currentIsGuest,
-    undefined,
+    guest: currentIsGuest,
     resumed,
-  ))
+  }))
 }
 
 function adoptConn(c: GameConnection): void {

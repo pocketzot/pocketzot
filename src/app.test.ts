@@ -223,7 +223,7 @@ describe('lifecycle gates', () => {
     conn.onClose()
     const opts = h.attemptResume.mock.calls[0]![0] as { onGame: (c: unknown) => void }
     opts.onGame(fakeConn())
-    const resumedArg = (call: unknown[]) => call[8]
+    const resumedArg = (call: unknown[]) => (call[0] as { resumed?: boolean }).resumed
     expect(resumedArg(h.buildGameView.mock.calls[0]!)).toBe(false)
     expect(resumedArg(h.buildGameView.mock.calls[1]!)).toBe(true)
   })

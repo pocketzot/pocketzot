@@ -42,7 +42,7 @@ function setup(spectating?: SpectateTarget, gameId = '', resumed = false): Harne
     close: vi.fn(),
   } as unknown as WsConnection
   const onLobby = vi.fn()
-  const view = buildGameView(conn, onLobby, spectating, undefined, '', gameId, false, undefined, resumed)
+  const view = buildGameView({ conn, onLobby, spectating, gameId, resumed })
   document.body.appendChild(view)
   return { view, send, onLobby, dispatch: (msg) => conn.onMessage(msg as ServerMsg) }
 }
@@ -52,7 +52,7 @@ afterEach(() => {
 })
 
 // Offline variant: wires the readMorgue seam the way app.ts does from
-// boot.readMorgue (positional tail of buildGameView).
+// boot.readMorgue.
 function setupOffline(readMorgue: (f: string) => Promise<Uint8Array<ArrayBuffer> | null>): Harness {
   const send = vi.fn()
   const conn = {
@@ -65,7 +65,7 @@ function setupOffline(readMorgue: (f: string) => Promise<Uint8Array<ArrayBuffer>
     close: vi.fn(),
   } as unknown as WsConnection
   const onLobby = vi.fn()
-  const view = buildGameView(conn, onLobby, undefined, undefined, 'Dumptest', 'offline', false, readMorgue)
+  const view = buildGameView({ conn, onLobby, username: 'Dumptest', gameId: 'offline', readMorgue })
   document.body.appendChild(view)
   return { view, send, onLobby, dispatch: (msg) => conn.onMessage(msg as ServerMsg) }
 }
