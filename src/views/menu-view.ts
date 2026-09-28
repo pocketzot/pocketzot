@@ -21,18 +21,24 @@ import { menuTagHasBar, type MenuBar } from './menu-bar'
 // here, the formatted scroller in the game view.
 export const SCROLL_SYNC_DEBOUNCE_MS = 100
 
+// Where a menu shows: the whole overlay, a card floating over the live map,
+// or a card layered over the covered frame beneath it.
+export type MenuPlacement = 'full' | 'float' | 'layered'
+
 export interface MenuViewDeps {
   model: MenuModel
   bar: MenuBar
   shift: ShiftToggle
-  // #ui-overlay, and where overlay content is appended (the overlay itself,
-  // or a floated prompt's card).
-  overlay: HTMLElement
+  // Where the menu's content is appended: the overlay itself, or a floated
+  // or layered prompt's card. Every query of the menu's DOM is scoped to
+  // it — a layered prompt shares the overlay with the covered frame's copy.
   content(): HTMLElement
-  renderOverlay(title: string, build: () => void, opts: { float: boolean }): void
-  // Whether a menu shows as a floating prompt over the map (layering policy;
-  // asked before the menu is adopted).
-  floats(msg: MenuMsg): boolean
+  // The element carrying the prompt-menu classes: #ui-overlay, or a layered
+  // prompt's backdrop.
+  promptHost(): HTMLElement
+  renderOverlay(title: string, build: () => void, placement: MenuPlacement): void
+  // Layering policy; asked before the menu is adopted.
+  placement(msg: MenuMsg): MenuPlacement
   // Arrows go to the server regardless (a CRT on the stack, X mode).
   navBlocked(): boolean
   // Swap the touch strip for the (already built) menu bar.
@@ -105,10 +111,9 @@ export class MenuView {
 
   show(msg: MenuMsg): void {
     const promptFamily = isPromptFamily(msg)
-    const float = this.d.floats(msg)
+    const placement = this.d.placement(msg)
     this.adopt(msg)
     const title = stripDcss(msg.title?.text ?? '')
-    const overlay = this.d.overlay
     this.d.renderOverlay(title, () => {
       this.renderItems(msg.items ?? [])
       // Created empty; updateFooter fills it at the end of show, once the
@@ -120,11 +125,12 @@ export class MenuView {
       const footerEl = document.createElement('div')
       footerEl.className = 'overlay-footer menu-footer'
       this.d.content().appendChild(footerEl)
-    }, { float })
+    }, placement)
     // Prompt menus centre their question + 2-3 answer rows vertically
     // instead of pinning them under the status bar. The overlay layout
     // clears the class on every render, so re-add it every render.
-    overlay.classList.toggle('prompt-menu', promptFamily)
+    const host = this.d.promptHost()
+    host.classList.toggle('prompt-menu', promptFamily)
     // yesno()'s rejected-key error never arrives as update_menu: set_more
     // runs after pop.show() returned, so Menu::update_more's webtiles send
     // is skipped (`if (!alive) return`) and the loop *reopens* the popup as
@@ -136,7 +142,7 @@ export class MenuView {
     // additionally survives a re-render of the same menu (ui-pop restore)
     // after an alive-path update_menu raised the alert.
     const promptMoreIsInfo = (msg.more ?? '') !== '' && msg.more === msg.alt_more
-    overlay.classList.toggle('prompt-menu-alert',
+    host.classList.toggle('prompt-menu-alert',
       promptFamily && (promptMoreIsInfo || (msg.more ?? '') !== this.model.promptInitialMore))
     if (menuTagHasBar(msg.tag)) {
       this.d.bar.build(msg.tag, msg.flags)
@@ -172,7 +178,7 @@ export class MenuView {
     const active = this.model.active
     if (!active || this.d.navBlocked()) return false
     if (((active.flags ?? 0) & MF_ARROWS_SELECT) === 0) return false
-    if (!this.d.overlay.querySelector('.overlay-list')) return false
+    if (!this.d.content().querySelector('.overlay-list')) return false
     switch (nav) {
       case 'down': this.setHover(this.model.cycleTarget(false)); break
       case 'up': this.setHover(this.model.cycleTarget(true)); break
@@ -196,9 +202,9 @@ export class MenuView {
       // On a prompt popup a changed `more` is yesno()'s error channel
       // (see MenuModel promptInitialMore) — un-hide the footer so the
       // rejection ("Uppercase [Y]es or [N]o only, please.") is visible.
-      const overlay = this.d.overlay
-      if (overlay.classList.contains('prompt-menu') && m.more !== this.model.promptInitialMore)
-        overlay.classList.add('prompt-menu-alert')
+      const host = this.d.promptHost()
+      if (host.classList.contains('prompt-menu') && m.more !== this.model.promptInitialMore)
+        host.classList.add('prompt-menu-alert')
     }
     // Deliberately no hover revalidation after a truncation: the list is
     // transient scaffolding (the flip's real items land in the next
@@ -215,7 +221,7 @@ export class MenuView {
       // currently the prompt label. The title re-renders when the filter
       // closes.
       if (!this.filterInput) {
-        const titleSpan = this.d.overlay.querySelector<HTMLElement>('.overlay-title span')
+        const titleSpan = this.d.content().querySelector<HTMLElement>('.overlay-title span')
         if (titleSpan) titleSpan.textContent = stripDcss(m.title.text)
       }
     }
@@ -273,7 +279,7 @@ export class MenuView {
   // the server's resumable_line_reader (whose init_input/close_input pair
   // the game view also suppresses while filterOpen).
   openFilter(prompt: string): void {
-    const titleEl = this.d.overlay.querySelector<HTMLElement>('.overlay-title')
+    const titleEl = this.d.content().querySelector<HTMLElement>('.overlay-title')
     if (!titleEl) return
     titleEl.innerHTML = ''
     const promptEl = document.createElement('span')
@@ -311,7 +317,7 @@ export class MenuView {
   closeFilter(): void {
     if (!this.filterInput) return
     this.filterInput = null
-    const titleEl = this.d.overlay.querySelector<HTMLElement>('.overlay-title')
+    const titleEl = this.d.content().querySelector<HTMLElement>('.overlay-title')
     const active = this.model.active
     if (titleEl && active) {
       titleEl.innerHTML = ''
@@ -322,15 +328,15 @@ export class MenuView {
   }
 
   private listEl(): HTMLElement | null {
-    return this.d.overlay.querySelector<HTMLElement>('.overlay-list')
+    return this.d.content().querySelector<HTMLElement>('.overlay-list')
   }
 
   // scroll=false when the caller already positioned the list (paging) and
   // scrollIntoView would fight the manual scroll.
   private highlightHovered(scroll = true): void {
-    const overlay = this.d.overlay
-    overlay.querySelectorAll<HTMLElement>('.item-hovered').forEach(el => el.classList.remove('item-hovered'))
-    const el = overlay.querySelector<HTMLElement>(`[data-menu-idx="${this.model.hovered}"]`)
+    const root = this.d.content()
+    root.querySelectorAll<HTMLElement>('.item-hovered').forEach(el => el.classList.remove('item-hovered'))
+    const el = root.querySelector<HTMLElement>(`[data-menu-idx="${this.model.hovered}"]`)
     if (el) {
       el.classList.add('item-hovered')
       if (scroll) el.scrollIntoView({ block: 'nearest' })
@@ -471,7 +477,7 @@ export class MenuView {
     // ResizeObserver notification lands right after that overlay renders.
     // Matching the bare class here overwrote the actions bar with the
     // menu's keyhelp (or display:none'd it).
-    const footerEl = this.d.overlay.querySelector<HTMLElement>('.menu-footer')
+    const footerEl = this.d.content().querySelector<HTMLElement>('.menu-footer')
     if (!footerEl) return
     const listEl = this.listEl()
     const scrollable = !!listEl && listEl.scrollHeight > listEl.clientHeight
@@ -511,7 +517,7 @@ export class MenuView {
     }, { passive: true })
     this.listResize?.disconnect()
     this.listResize?.observe(listEl)
-    const footer = this.d.overlay.querySelector('.menu-footer')
+    const footer = this.d.content().querySelector('.menu-footer')
     this.d.content().insertBefore(listEl, footer)
     this.d.bar.syncShiftLabels()
   }

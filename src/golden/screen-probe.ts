@@ -24,9 +24,20 @@ function overlayState(view: HTMLElement): string {
   const ov = view.querySelector<HTMLElement>('#ui-overlay')
   if (!ov || !shown(ov, view)) return 'overlay:none'
   const parts: string[] = []
-  const mode = ov.classList.contains('overlay-float') ? 'float' : 'full'
-  const flags = ['prompt-menu', 'prompt-menu-alert'].filter(c => ov.classList.contains(c))
+  // A prompt layered over a covered frame: report the prompt (the top
+  // popup) and just name what it covers.
+  const layer = ov.querySelector<HTMLElement>('.overlay-layer')
+  const host = layer ?? ov
+  const mode = layer ? 'layered' : ov.classList.contains('overlay-float') ? 'float' : 'full'
+  const flags = ['prompt-menu', 'prompt-menu-alert'].filter(c => host.classList.contains(c))
   parts.push(`overlay:${mode}${flags.length ? `(${flags.join(',')})` : ''}`)
+  const under = ov.querySelector('.overlay-covered .overlay-title')
+  if (layer && under) parts.push(`over="${clip(under.textContent ?? '', 24)}"`)
+  return parts.concat(overlayBody(layer ?? ov, view)).join(' ')
+}
+
+function overlayBody(ov: HTMLElement, view: HTMLElement): string[] {
+  const parts: string[] = []
   // The opening words tell screens apart (title, or body when untitled).
   // Footer and item rows are read separately below.
   const text = clip(ov.textContent ?? '', 40)
@@ -47,7 +58,7 @@ function overlayState(view: HTMLElement): string {
   if (field && shown(field, view)) parts.push(`field="${field.value}"`)
   const footer = ov.querySelector('.menu-footer, .overlay-footer')
   if (footer && shown(footer, view) && footer.textContent?.trim()) parts.push(`footer="${clip(footer.textContent)}"`)
-  return parts.join(' ')
+  return parts
 }
 
 export function probeScreen(view: HTMLElement): string {

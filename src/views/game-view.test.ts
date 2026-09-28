@@ -808,7 +808,7 @@ describe('overlay-stack cross-reads', () => {
     expect(overlay(h).classList.contains('overlay-float')).toBe(false)
   })
 
-  it('a prompt floats over the map mid-cutoff, but is full-screen over a visible menu', () => {
+  it('a prompt floats over the map mid-cutoff, but over a visible menu it floats over that menu', () => {
     const cut = setup()
     cut.dispatch(inv())
     cut.dispatch({ msg: 'ui_cutoff', cutoff: 1 })
@@ -819,6 +819,8 @@ describe('overlay-stack cross-reads', () => {
     over.dispatch(inv())
     over.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Really drop?' }, items: [] })
     expect(overlay(over).classList.contains('overlay-float')).toBe(false)
+    expect(shown(over, '#map-grid')).toBe(false)
+    expect(overlay(over).querySelector('.overlay-covered')?.textContent).toContain('Inventory')
   })
 
   it('YESNO inside a menu swaps its bar to ⎋ Y N and back', () => {
@@ -907,6 +909,116 @@ describe('overlay-stack cross-reads', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// A prompt over another frame shows as a card over an inert copy of that
+// frame (the reference's #ui-stack keeps the covered popup mounted).
+describe('prompt layered over the frame it covers', () => {
+  const PROMPT = { msg: 'menu', tag: 'prompt', title: { text: 'Really drop?' }, flags: 0x40000, last_hovered: 1,
+    items: [{ level: 2, text: 'Y - Yes', hotkeys: [89] }, { level: 2, text: 'N - No', hotkeys: [78] }] }
+  const longInv = () => ({ msg: 'menu', tag: 'inventory', title: { text: 'Inventory' }, flags: 0x40000,
+    items: Array.from({ length: 30 }, (_, i) => ({ level: 2, text: `${String.fromCharCode(97 + i % 26)} - item ${i}`, hotkeys: [97 + i % 26] })) })
+  const covered = (h: Harness) => overlay(h).querySelector<HTMLElement>('.overlay-covered')
+  const card = (h: Harness) => overlay(h).querySelector<HTMLElement>('.overlay-layer .overlay-card')
+
+  it('shows the covered menu, inert and where it was scrolled, under the prompt card', () => {
+    const h = setup()
+    h.dispatch(longInv())
+    overlay(h).querySelector<HTMLElement>('.overlay-list')!.scrollTop = 300
+    h.dispatch(PROMPT)
+    expect(covered(h)?.inert).toBe(true)
+    expect(covered(h)?.textContent).toContain('item 29')
+    expect(covered(h)?.querySelector<HTMLElement>('.overlay-list')?.scrollTop).toBe(300)
+    expect(card(h)?.textContent).toContain('Really drop?')
+    expect(overlay(h).querySelector('.overlay-layer')?.classList.contains('prompt-menu')).toBe(true)
+  })
+
+  it('the prompt, not the covered menu, owns hover and the backdrop tap is Esc', () => {
+    const h = setup()
+    h.dispatch(longInv())
+    h.dispatch(PROMPT)
+    h.send.mockClear()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', keyCode: 38, bubbles: true }))
+    expect(sent(h)).toEqual([{ msg: 'menu_hover', hover: 0, mouse: false }])
+    expect(card(h)?.querySelector('.item-hovered')?.textContent).toContain('Yes')
+    expect(covered(h)?.querySelector('.item-hovered')).toBeNull()
+    h.send.mockClear()
+    const layer = overlay(h).querySelector<HTMLElement>('.overlay-layer')!
+    layer.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+    layer.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(sent(h)).toEqual([{ msg: 'key', keycode: 27 }])
+  })
+
+  it('stays layered after a help screen over it pops, and closing it returns to the live menu', () => {
+    const h = setup()
+    h.dispatch(longInv())
+    h.dispatch(PROMPT)
+    h.dispatch({ msg: 'ui-push', type: 'formatted-scroller', text: 'Help text' })
+    expect(covered(h)).toBeNull()
+    h.dispatch({ msg: 'ui-pop' })
+    expect(covered(h)?.textContent).toContain('Inventory')
+    expect(card(h)?.textContent).toContain('Really drop?')
+    h.dispatch({ msg: 'close_menu' })
+    expect(covered(h)).toBeNull()
+    expect(overlay(h).querySelector('.overlay-title span')?.textContent).toBe('Inventory')
+  })
+
+  it('layers over a describe too', () => {
+    const h = setup()
+    h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'a wand of flame', body: 'A magical device.' })
+    h.dispatch(PROMPT)
+    expect(covered(h)?.textContent).toContain('a wand of flame')
+    expect(card(h)?.textContent).toContain('Really drop?')
+  })
+
+  // A spectator joining re-sends the covered CRT's text under the prompt
+  // (tileweb.cc _send_everything → m_text_menu.send(true)).
+  it('txt for a covered CRT updates its lines, not the copy or the prompt’s bar', () => {
+    const h = setup()
+    h.dispatch({ msg: 'menu', type: 'crt', tag: 'skills' })
+    h.dispatch({ msg: 'txt', id: 'crt', lines: { '0': 'old row' } })
+    overlay(h).querySelector<HTMLElement>('#crt-display')!.scrollLeft = 40
+    h.dispatch(PROMPT)
+    const letterRows = document.querySelectorAll('.skill-letter-row').length
+    h.dispatch({ msg: 'txt', id: 'crt', clear: true, lines: { '0': 'new row' } })
+    expect(covered(h)?.textContent).toContain('old row')
+    expect(covered(h)?.querySelector<HTMLElement>('#crt-display')?.scrollLeft).toBe(40)
+    expect(document.querySelectorAll('.skill-letter-row').length).toBe(letterRows)
+    h.dispatch({ msg: 'close_menu' })
+    expect(overlay(h).querySelector('#crt-display')?.textContent).toContain('new row')
+  })
+
+  // A rejected key closes the popup and pushes a fresh one carrying the
+  // error as `more` (prompt.cc, pop.show() each loop).
+  it('a yesno reopened with its error stays layered, the alert on the layer', () => {
+    const h = setup()
+    h.dispatch(longInv())
+    h.dispatch(PROMPT)
+    h.dispatch({ msg: 'close_menu' })
+    const err = 'Uppercase [Y]es or [N]o only, please.'
+    h.dispatch({ ...PROMPT, more: err, alt_more: err })
+    expect(covered(h)?.textContent).toContain('Inventory')
+    const layer = overlay(h).querySelector('.overlay-layer')
+    expect(layer?.classList.contains('prompt-menu-alert')).toBe(true)
+    expect(card(h)?.querySelector('.overlay-footer')?.textContent).toContain(err)
+  })
+
+  it('the live menu keeps its scroll when the prompt over it closes', () => {
+    const h = setup()
+    h.dispatch(longInv())
+    overlay(h).querySelector<HTMLElement>('.overlay-list')!.scrollTop = 300
+    h.dispatch(PROMPT)
+    h.dispatch({ msg: 'close_menu' })
+    expect(overlay(h).querySelector<HTMLElement>('.overlay-list')?.scrollTop).toBe(300)
+  })
+
+  it('under a server dialog the prompt stays full-screen', () => {
+    const h = setup()
+    h.dispatch(longInv())
+    h.dispatch({ msg: 'show_dialog', html: '<button data-key="N">No</button>' })
+    h.dispatch(PROMPT)
+    expect(covered(h)).toBeNull()
   })
 })
 

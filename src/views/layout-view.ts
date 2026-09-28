@@ -25,7 +25,8 @@ import { SCROLL_SYNC_DEBOUNCE_MS } from './menu-view'
 export interface ExportSource { runs: () => DcssRun[][]; slug: string }
 
 export interface LayoutViewDeps {
-  overlay: HTMLElement
+  // The live overlay content root — never the inert copy of a covered frame.
+  content(): HTMLElement
   renderOverlay(title: string, build: () => void): void
   send(msg: ClientMsg): void
   focusView(): void
@@ -86,7 +87,7 @@ export class LayoutView {
 
   get scrollerActive(): boolean {
     return this.d.topLayout()?.type === 'formatted-scroller'
-      && !!this.d.overlay.querySelector('.overlay-body')
+      && !!this.d.content().querySelector('.overlay-body')
   }
 
   show(msg: UiPushMsg): void {
@@ -158,8 +159,8 @@ export class LayoutView {
       .replace(/\s+((?:<[^>]+>)*)$/, '$1')
       .trim()
 
-    const overlay = this.d.overlay
     this.d.renderOverlay(title, () => {
+      const overlay = this.d.content()
       const tileSpec = deriveTileSpec(msg)
       if (tileSpec && tileSpec.length > 0) {
         const headerEl = overlay.querySelector('.overlay-title')
@@ -337,7 +338,7 @@ export class LayoutView {
   //   "btn-*"        — buttons; presence-only, no state to apply
   onStateSync(m: { widget_id?: string; text?: string; checked?: boolean; from_webtiles?: boolean; has_focus?: boolean }): void {
     if (m.from_webtiles && !this.d.spectating) return
-    const overlay = this.d.overlay
+    const overlay = this.d.content()
     if (m.widget_id === 'input') {
       const input = overlay.querySelector<HTMLInputElement>('.input-dialog-field')
       if (!input) return
@@ -363,7 +364,7 @@ export class LayoutView {
   // scroller (see the class comment). True when it scrolled.
   scrollerNav(nav: NavKey | null, pageDir: -1 | 1 | null): boolean {
     if (!this.scrollerActive) return false
-    const el = this.d.overlay.querySelector<HTMLElement>('.overlay-body')
+    const el = this.d.content().querySelector<HTMLElement>('.overlay-body')
     if (!el) return false
     const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
     const page = Math.max(lineH, el.clientHeight - 2 * lineH)
@@ -388,7 +389,7 @@ export class LayoutView {
   private flushScrollerSync(): void {
     this.scrollerSyncTimer = undefined
     if (!this.scrollerActive) return
-    const el = this.d.overlay.querySelector<HTMLElement>('.overlay-body')
+    const el = this.d.content().querySelector<HTMLElement>('.overlay-body')
     if (!el) return
     // Reference client: `Math.round(scrollTop / line_height)`. The value the
     // server stores is opaque to it (m_scroll is just a saved position; see
@@ -405,7 +406,7 @@ export class LayoutView {
   }
 
   private scrollBody(line: number): void {
-    const el = this.d.overlay.querySelector('.overlay-body') as HTMLElement | null
+    const el = this.d.content().querySelector('.overlay-body') as HTMLElement | null
     if (!el) return
     // Setting scrollTop synchronously (reading scrollHeight/offsetTop forces
     // a layout flush) lands the position before the next paint; an rAF wait

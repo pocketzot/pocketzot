@@ -202,7 +202,9 @@ function buildKeyboardOverlay(
   }
 
   function activeTextInput(): HTMLInputElement | null {
-    return document.querySelector<HTMLInputElement>('.game-text-input, .input-dialog-field')
+    // Not a field in the inert copy of a covered frame (game-view frameDom).
+    return [...document.querySelectorAll<HTMLInputElement>('.game-text-input, .input-dialog-field')]
+      .find(el => !el.closest('.overlay-covered')) ?? null
   }
 
   // Programmatic value changes don't fire native `input` events, so dispatch

@@ -215,25 +215,53 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   uiOverlay.id = 'ui-overlay'
   uiOverlay.style.display = 'none'
   // Where overlay content (title/list/footer) is appended. Normally uiOverlay
-  // itself; in float mode (prompt modal) enterOverlayLayout points it at a
-  // bordered .overlay-card so uiOverlay can act as the dim backdrop. Only
-  // append sites need this — querySelector lookups on uiOverlay see through it.
+  // itself; for a prompt card (floated over the map, or layered over the
+  // frame it covers) enterOverlayLayout points it at a bordered
+  // .overlay-card so the card's surround can act as the dim backdrop.
   let overlayContent: HTMLElement = uiOverlay
-  // Float backdrop tap = Esc. Require the press on the backdrop too, so a
-  // gesture begun before the prompt appeared can't cancel it unseen. The
-  // press must be on THIS prompt's backdrop: enterOverlayLayout and
-  // hideOverlay drop it, else a swap between press and lift (server-driven
-  // ui-pop + push) would Esc the successor.
+  // The element around the card that carries the prompt classes and
+  // catches backdrop taps: uiOverlay itself, or a layered prompt's layer.
+  let promptHost: HTMLElement = uiOverlay
+  // Backdrop tap = Esc: the dim area around a floated or layered prompt
+  // card. Require the press on the backdrop too, so a gesture begun before
+  // the prompt appeared can't cancel it unseen. The press must be on THIS
+  // prompt's backdrop: enterOverlayLayout and hideOverlay drop it, else a
+  // swap between press and lift (server-driven ui-pop + push) would Esc
+  // the successor.
   let backdropPress = false
+  const isBackdrop = (t: EventTarget | null): boolean =>
+    (t === uiOverlay && uiOverlay.classList.contains('overlay-float'))
+    || (t instanceof HTMLElement && t.classList.contains('overlay-layer'))
   uiOverlay.addEventListener('pointerdown', (e) => {
-    backdropPress = e.target === uiOverlay && uiOverlay.classList.contains('overlay-float')
+    backdropPress = isBackdrop(e.target)
   })
   uiOverlay.addEventListener('click', (e) => {
-    const fire = backdropPress && e.target === uiOverlay
-      && uiOverlay.classList.contains('overlay-float')
+    const fire = backdropPress && isBackdrop(e.target)
     backdropPress = false
     if (fire) dispatchTouchInput({ msg: 'key', keycode: 27 })
   })
+  // The DOM each popup frame last showed, kept when the overlay moves on so
+  // a prompt that later covers the frame can show it underneath. The
+  // reference appends each popup to #ui-stack and leaves the covered ones
+  // mounted (ui.js show_popup); a click outside the top one sends Esc
+  // (popup_clickoutside_handler). Our single overlay repaints, so it keeps
+  // the retired nodes instead, and the copy is display only: live queries
+  // go through overlayContent, never uiOverlay. Scroll offsets ride along
+  // as [top, left] pairs: a copy re-inserted starts at the origin.
+  const SCROLLERS = '.overlay-list, .overlay-body, #crt-display'
+  const frameDom = new WeakMap<object, { nodes: Node[]; scrolls: [number, number][] }>()
+  // The popup frame whose DOM the overlay holds (null: a client panel, a
+  // server dialog, a prompt card, or nothing).
+  let shownFrame: object | null = null
+  function retireOverlay(): void {
+    // A popped frame can't be covered again; skip its layout reads.
+    if (shownFrame && popups.includes(shownFrame) && overlayMode === 'full' && overlayContent === uiOverlay) {
+      const scrolls = [uiOverlay, ...uiOverlay.querySelectorAll<HTMLElement>(SCROLLERS)]
+        .map((el): [number, number] => [el.scrollTop, el.scrollLeft])
+      frameDom.set(shownFrame, { nodes: [...uiOverlay.childNodes], scrolls })
+    }
+    shownFrame = null
+  }
 
   // WebTiles chat. The view handles history/pill/chip; we supply transport.
   // Spectators always get the chip — chat is half the point of watching;
@@ -873,25 +901,28 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     model: menus,
     bar: menuBar,
     shift: menuShift,
-    overlay: uiOverlay,
     content: () => overlayContent,
-    renderOverlay,
-    // The PromptMenu family (isPromptFamily) floats as a modal over the
-    // still-visible game when arriving from normal play, like the reference
-    // .ui-popup: these questions are about the map you're standing on. A
-    // prompt fired while another menu/overlay owns the screen (shop purchase
-    // confirm, prompts over a CRT) keeps the full-screen treatment — the map
-    // isn't the context there, and un-hiding it would flash the wrong
-    // background. Asked before the menu is adopted; a re-render of the same
-    // prompt (ui-pop restore) stays floating.
-    floats: (msg) => isPromptFamily(msg) && !popups.has('ui')
-      && !popups.has('crt') && !dialogActive
-      && (menus.active === null || menus.active === msg
-        // Everything beneath this menu is cutoff-hidden (msg is already on
-        // the stack when it shows, so beneath = depth - 1): a prompt
-        // arriving mid-targeting is a question about the live map, exactly
-        // the from-normal-play case, so it floats too.
-        || popups.covers(popups.depth - 1)),
+    promptHost: () => promptHost,
+    renderOverlay: (title, build, placement) => renderOverlay(title, build,
+      placement === 'float' ? { float: true }
+        : placement === 'layered' ? { over: popups.below() }
+        : undefined),
+    // The PromptMenu family (isPromptFamily) shows as a card over whatever
+    // it's a question about. The prompt is the top frame when it shows, so
+    // the frame below it decides:
+    //   - none, or cutoff-hidden (a prompt arriving mid-targeting): the
+    //     live map — the card floats over the game;
+    //   - a menu, layout or CRT on screen (shop purchase confirm, a drop
+    //     confirm from a describe, prompts over the skills screen): the card
+    //     floats over that frame's kept DOM (frameDom) — full-screen when
+    //     none was kept.
+    // A server dialog keeps the full-screen treatment.
+    placement: (msg) => {
+      if (!isPromptFamily(msg) || dialogActive) return 'full'
+      const below = popups.below()
+      if (!below || popups.covers(popups.depth - 1)) return 'float'
+      return frameDom.has(below) || shownFrame === below ? 'layered' : 'full'
+    },
     navBlocked: () => popups.has('crt') || inXMode,
     showBar: showMenuBarForStrip,
     send: (msg) => conn.send(msg),
@@ -904,14 +935,20 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   // ui-push layouts and the formatted scroller (./layout-view.ts).
   const layoutView = new LayoutView({
-    overlay: uiOverlay,
+    content: () => overlayContent,
     renderOverlay: (title, build) => renderOverlay(title, build),
     send: (msg) => conn.send(msg),
     focusView,
     guardedFocus,
     loader: () => loader,
     spectating: !!spectating,
-    topLayout: () => popups.topUi(),
+    // The top frame when it is a layout (the engine only sends ui-state for
+    // a top UI frame, tileweb.cc ui_state_change) — never one under a
+    // prompt, whose layered copy must not scroll.
+    topLayout: () => {
+      const top = popups.top()
+      return top?.kind === 'ui' ? top.push : undefined
+    },
     repaint: () => restoreTopLayer(),
     showTextPage: (text) => showTxtPage(text),
     setExportSource: (src) => setExportSource(src),
@@ -2039,7 +2076,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   function renderCrtEl(): void {
-    const el = uiOverlay.querySelector('#crt-display')
+    const el = overlayContent.querySelector('#crt-display')
     const crt = popups.topCrt()
     if (!el || !crt) return
     el.innerHTML = ''
@@ -2414,7 +2451,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // the parent would take an open virtual keyboard down with it (and the
   // keyboard covers the d-pad anyway when open); screens with no use for
   // the d-pad (newgame-choice, CRT) pass touch:false.
-  function enterOverlayLayout(opts?: { touch?: boolean; float?: boolean; screen?: 'newgame' }): void {
+  // `over`: layer the content as a prompt card over a copy of that frame's
+  // last DOM (see frameDom), when there is one.
+  function enterOverlayLayout(opts?: { touch?: boolean; float?: boolean; screen?: 'newgame'; over?: object }): void {
     // Every server-driven overlay passes through here; the map-area minimap
     // lens must not linger over (or under) it, and neither may a chat pill
     // already mid-display (new pills are vetoed via pillAllowed, but that
@@ -2427,6 +2466,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // (showUiPush) re-sets this after it has laid content down.
     setExportSource(null)
     newgameFocus = null
+    retireOverlay()
+    const covered = opts?.over ? frameDom.get(opts.over) : undefined
     uiOverlay.innerHTML = ''
     uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert')
     uiOverlay.classList.toggle('overlay-float', !!opts?.float)
@@ -2445,7 +2486,25 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     applyLayout()
     touchControls.setOverlayMode(true)
     chatView.syncChip()
-    if (opts?.float) {
+    promptHost = uiOverlay
+    if (covered) {
+      // The covered frame's copy (frameDom) under a dim layer holding the
+      // prompt's card.
+      const under = document.createElement('div')
+      under.className = 'overlay-covered'
+      under.inert = true
+      for (const n of covered.nodes) under.appendChild(n.cloneNode(true))
+      uiOverlay.appendChild(under)
+      const els = [under, ...under.querySelectorAll<HTMLElement>(SCROLLERS)]
+      els.forEach((el, i) => { [el.scrollTop, el.scrollLeft] = covered.scrolls[i] ?? [0, 0] })
+      const layer = document.createElement('div')
+      layer.className = 'overlay-layer'
+      overlayContent = document.createElement('div')
+      overlayContent.className = 'overlay-card'
+      layer.appendChild(overlayContent)
+      uiOverlay.appendChild(layer)
+      promptHost = layer
+    } else if (opts?.float) {
       // Content goes into a reference-style bordered card.
       overlayContent = document.createElement('div')
       overlayContent.className = 'overlay-card'
@@ -2453,6 +2512,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     } else {
       overlayContent = uiOverlay
     }
+    // What the overlay now holds, for retireOverlay: a popup frame's full
+    // screen — not a client panel's, a server dialog's, or a prompt card's.
+    shownFrame = monsterPanelOpen || dialogActive || covered || opts?.float
+      ? null : popups.top() ?? null
     menuBar.clear()
     scheduleMinimapRepaint()  // the sidebar minimap follows the map's display
   }
@@ -2473,7 +2536,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     isSpectating: () => !!spectating,
   }
 
-  function renderOverlay(title: string, buildBody: () => void, opts?: { float?: boolean; screen?: 'newgame' }): void {
+  function renderOverlay(title: string, buildBody: () => void, opts?: { float?: boolean; screen?: 'newgame'; over?: object }): void {
     autoCloseKbdIfOurs()
     enterOverlayLayout(opts)
 
@@ -2499,6 +2562,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     autoCloseKbdIfOurs()
     setExportSource(null)
     newgameFocus = null
+    retireOverlay()  // before the layout state it reads resets
     overlayMode = 'none'
     touchHidden = false
     menuBarOn = false
@@ -2508,6 +2572,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     backdropPress = false
     view.classList.remove('newgame')
     overlayContent = uiOverlay
+    promptHost = uiOverlay
     chatView.syncChip()  // chip retracts while an overlay is up; map's back
     menuBar.clear()
     touchControls.setOverlayMode(false)

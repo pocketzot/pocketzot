@@ -3298,11 +3298,13 @@ html.map-hold, html.map-hold * {
    Centre the block vertically; the list shrinks to its content instead of
    flex-growing, and a pathologically tall question falls back to top-aligned
    (`safe`; browsers without safe-alignment keep the plain center). */
-#ui-overlay.prompt-menu {
+/* The class sits on the prompt's host: #ui-overlay, or a layered prompt's
+   .overlay-layer (game-view promptHost). */
+#ui-overlay.prompt-menu, .overlay-layer.prompt-menu {
   justify-content: center;
   justify-content: safe center;
 }
-#ui-overlay.prompt-menu .overlay-list {
+.prompt-menu .overlay-list {
   flex: 0 1 auto;
   height: auto;
 }
@@ -3313,7 +3315,7 @@ html.map-hold, html.map-hold * {
    pop.set_more("Uppercase [Y]es or [N]o only, please.") on a rejected key
    — so a changed `more` re-reveals the footer via .prompt-menu-alert
    (set by game-view's update_menu handler). */
-#ui-overlay.prompt-menu:not(.prompt-menu-alert) .overlay-footer { display: none; }
+.prompt-menu:not(.prompt-menu-alert) .overlay-footer { display: none; }
 /* Floating prompt modal (yesno() arriving from normal play): the overlay
    becomes a dim backdrop over the still-visible game — spanning the map,
    hud and chat rows so everything above the touch controls dims, leaving
@@ -3323,6 +3325,20 @@ html.map-hold, html.map-hold * {
   grid-row: 1 / 4;
   background: rgba(0, 0, 0, 0.65);
 }
+/* A prompt over the frame it covers (game-view frameDom): the covered
+   copy is laid out as #ui-overlay lays out its own content; the layer dims
+   it like the float backdrop and centres the card. Both fill the overlay's
+   box rather than scrolling with it. */
+.overlay-covered, .overlay-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: inherit;
+}
+.overlay-covered { overflow: hidden; }
+.overlay-layer { background: rgba(0, 0, 0, 0.65); }
 .overlay-card {
   align-self: center;
   display: flex;

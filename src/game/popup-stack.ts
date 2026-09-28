@@ -31,6 +31,15 @@ export class PopupStack<M, U> {
     return this.frames[this.frames.length - 1]
   }
 
+  // The frame directly under the top one.
+  below(): PopupFrame<M, U> | undefined {
+    return this.frames[this.frames.length - 2]
+  }
+
+  includes(frame: object): boolean {
+    return (this.frames as object[]).includes(frame)
+  }
+
   // The top frame, or undefined when the cutoff hides the whole stack.
   visibleTop(): PopupFrame<M, U> | undefined {
     return this.hidesAll() ? undefined : this.top()
