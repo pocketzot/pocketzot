@@ -472,7 +472,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const spellRail = document.createElement('div')
   spellRail.id = 'spell-rail'
   spellRail.style.display = 'none'
-  let activePromptEl: HTMLElement | null = null
+  // The live prompt: the prompt rows of one msgs batch (see the msgs loop).
+  let activePromptEls: HTMLElement[] = []
   // Armed by {msg:'dump'} (offline '#'); the msgs loop spends it on the
   // engine's "Char dumped to …" line, which renders with a download button.
   let pendingDumpFile: string | null = null
@@ -2099,6 +2100,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
           // strip rebuilds from this batch's lines alone.
           if (inXMode) xdescReset()
         }
+        let promptBatch = false
         for (const m of msg.messages ?? []) {
           if (!m.text) continue
           // Spell-harvest line hooks (see ../game/spell-harvest onMsgLine):
@@ -2118,14 +2120,22 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
           // keep rollback counts consistent, so skip the (invisible) prompt
           // row + its buttons/listeners and append a plain line instead.
           if (inXMode) xdescAdd(m.text, m.channel)
-          // Any new MSGCH_PROMPT line (2, mpr.h) means the engine has moved
-          // past the prompt whose buttons are live, even when the new line
+          // One prompt = the MSGCH_PROMPT (2, mpr.h) lines of one batch. The
+          // engine never merges prompt lines (message.cc add: the merge is
+          // skipped for MSGCH_PROMPT, and each is flushed at once), so a
+          // multi-line prompt arrives as several lines of the batch sent
+          // before its key read — PromptMenu::show_in_msgpane (prompt.cc,
+          // RC prompt_menu = false) prints its option rows, then the title.
+          // Every row of the batch stays live. The first prompt line of a
+          // later batch means the engine has moved on, even when that line
           // gets no buttons of its own: adjust's "Adjust to which letter?"
           // writes its `?` hint as <white>?</white>, which PROMPT_TRIGGER_RE
           // doesn't match, and the prior "(g)ear, (s)pells…" row stayed
-          // tappable under it. Same-turn prompt mprs arrive joined on one
-          // line, so a separate line is never a continuation.
-          if (m.channel === 2) disableActivePrompt()
+          // tappable under it.
+          if (m.channel === 2 && !promptBatch) {
+            disableActivePrompt()
+            promptBatch = true
+          }
           // "dumped to" as well as the stem: the stem is the character's
           // NAME, which many unrelated lines contain (welcome line, prompts
           // naming the player) — and this branch outranks the prompt one.
@@ -2142,7 +2152,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
             pushMsgRow(row)
           } else if (!inXMode && m.channel === 2 && PROMPT_TRIGGER_RE.test(m.text)) {
             const row = makePromptRow(m.text)
-            activePromptEl = row
+            activePromptEls.push(row)
             pushMsgRow(row)
           } else {
             appendMessage(m.text, true)
@@ -3338,10 +3348,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // auto/re-harvest fired during a `--more--` or a channel-2 prompt leaked a
   // stray keystroke into it (eating the pager/answering the prompt, or — for
   // a harvest — getting the `I` swallowed so the probe times out and clears
-  // the rail). `moreActive`/`activePromptEl` are exactly that missing state.
+  // the rail). `moreActive`/`activePromptEls` are exactly that missing state.
   function uiQuiet(): boolean {
     return popups.empty && !dialogActive && !activeMenu
-      && !inXMode && activePromptEl === null && !moreActive
+      && !inXMode && activePromptEls.length === 0 && !moreActive
   }
 
   // Truly idle at the command prompt — safe to inject a keystroke that must
@@ -4124,8 +4134,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   function disableActivePrompt(): void {
-    activePromptEl?.querySelectorAll('button').forEach(b => { (b as HTMLButtonElement).disabled = true })
-    activePromptEl = null
+    for (const el of activePromptEls) {
+      el.querySelectorAll('button').forEach(b => { (b as HTMLButtonElement).disabled = true })
+    }
+    activePromptEls = []
   }
 
   function removeTextInput(): void {

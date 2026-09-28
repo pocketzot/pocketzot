@@ -125,6 +125,20 @@ describe('message log (msgs)', () => {
     expect(buttons().every(b => b.disabled)).toBe(true)
   })
 
+  // PromptMenu::show_in_msgpane (RC prompt_menu = false) sends its option
+  // rows, then the title, as separate prompt lines of one batch.
+  it('every prompt row of one batch stays live, the title after them included', () => {
+    const h = setup()
+    h.dispatch({ msg: 'msgs', messages: [
+      { text: '(D) Dungeon  (T) Temple', channel: 2 },
+      { text: '(L) Lair  (O) Orcish Mines', channel: 2 },
+      { text: 'Where to? (_ - list branches)', channel: 2 },
+    ] })
+    const liveRows = [...msgLog(h).querySelectorAll('.game-prompt')]
+      .filter(r => r.querySelector('button:not([disabled])'))
+    expect(liveRows).toHaveLength(2)
+  })
+
   // The offline '#' dump line: {msg:'dump'} (mini-server synthesis) arms the
   // stem, and the engine's "Char dumped to '<path>'." line renders verbatim
   // as a whole-line tap target. The row PRE-READS through the readMorgue
