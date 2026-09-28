@@ -1579,7 +1579,7 @@ describe('non-prompt menu hover seeding', () => {
 
   // A yesno popup stacked over a menu (e.g. the shopping list's "cannot
   // afford; travel there anyway?" — shopping.cc, a non-null-prompt yesno
-  // while ui::has_layout()) seeds hoveredMenuIdx with no user action. When
+  // while ui::has_layout()) seeds the hover with no user action. When
   // it closes, the restored parent must get a fresh-look reset, not inherit
   // the prompt's hover as an index into the wrong menu's item space.
   it('does not leak a stacked prompt\'s seeded hover into the restored parent menu', () => {
