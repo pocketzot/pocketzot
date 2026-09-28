@@ -38,6 +38,7 @@ import { ensureDollBaked, isBakeableLoader } from '../game/tiles/avatar-bake'
 import { mergeRunes, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
 import { count, countEach } from '../counter'
 import { downloadPackFile } from '../offline/save-transfer'
+import { OFFLINE_WS_URL } from '../offline/offline-state'
 import { hasOrbLight, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from '../game/rune-messages'
 import { compactPlace, looksLikeWelcome, parseWelcome } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
@@ -387,6 +388,10 @@ export function buildGameView(
   }
 
   const uiStack: UiPushMsg[] = []
+  // Offline (the local engine, real or fake-fixture): no spectators, one
+  // player. Gates the ui-stack intake (see its handler).
+  const localEngine = conn.wsUrl === OFFLINE_WS_URL
+  let uiStackTaken = false
   const crtLines = new Map<number, string>()
   let crtActive = false
   // Latched when the engine pushes the "game-over" screen (end.cc end_game:
@@ -605,9 +610,17 @@ export function buildGameView(
   // (see menu.js:730 in the reference client). titlePromptInput non-null =
   // both that suppression and the local-only typing state.
   let titlePromptInput: HTMLInputElement | null = null
-  // Last cursor loc from the server. Tracked here so an ASCII↔tiles swap
-  // can re-apply it to the new view (each view keeps its own cursor state).
-  let cursorLoc: { x: number; y: number } | null = null
+  // One loc per server cursor id (cursor-type.h: 0 the direction chooser's
+  // target, 1 tutorial, 2 the X level map), as the reference keeps
+  // view_data.cursor_locs. Never collapse them into one slot: a spectator
+  // joining makes the engine re-send ids 0 and 1 to the player too
+  // (tileweb.cc _send_everything), and a single slot let that loc-less
+  // resend clear the aiming reticle and bounce X mode. Also re-applied to
+  // the new view on an ASCII↔tiles swap (each view keeps its own cursor).
+  const cursors: Array<{ x: number; y: number } | undefined> = [undefined, undefined, undefined]
+  // Map views draw one cursor: the X map's, else the chooser's, else the
+  // tutorial's.
+  const shownCursor = () => cursors[2] ?? cursors[0] ?? cursors[1]
   // X-map tap-to-jump: walks the level-map cursor with synthesized vi-keys
   // in one atomic `input` message (see map-jump.ts). Fed every id-2 cursor
   // loc below.
@@ -904,8 +917,9 @@ export function buildGameView(
     // the cursor's own cell is clicked (CMD_MAP_GOTO_TARGET) — deliberately
     // not mirrored: no tap on the map ever acts.
     onTap: (cell) => {
-      if (spectating || !inXMode || !cursorLoc) return
-      mapJumper.tap(cursorLoc, cell)
+      const mapCursor = cursors[2]
+      if (spectating || !inXMode || !mapCursor) return
+      mapJumper.tap(mapCursor, cell)
       // An edge-ring destination re-centers now, not along the flight
       // (map-pan.ts).
       const dest = mapJumper.destination()
@@ -1292,7 +1306,8 @@ export function buildGameView(
     // by default, which would visibly un-zoom the map mid-X-mode. inXMode
     // is the source of truth (global flag), so re-apply directly.
     if (inXMode) next.setFontScale(X_MODE_SCALE)
-    if (cursorLoc) next.setCursor(cursorLoc)
+    const shown = shownCursor()
+    if (shown) next.setCursor(shown)
     next.setPlayerStats(playerStats)
     // Carry the overlay layouts' hide: "map element displayed" is the
     // sidebar minimap's map-on-screen test (repaintSidebarMinimap).
@@ -1913,23 +1928,32 @@ export function buildGameView(
       }
 
       case 'ui-stack': {
-        // _send_everything()'s snapshot of the engine-side UI stack, sent on
-        // attach (spectator join; offline, the mini-server's boot handshake).
-        // Each item carries its own `msg` field (ui-push, menu, ...), so we
-        // re-dispatch through this handler — but the snapshot can duplicate
-        // pushes that already arrived live (offline the newgame screen is
-        // always up before the forced snapshot lands), so it REPLACES the
-        // client stack rather than appending. The reference client instead
-        // drops the message unless watching (ui-layouts.js recv_ui_stack);
-        // replacing is equivalent on a fresh spectate view and also
-        // self-heals a desynced stack.
+        // _send_everything()'s snapshot of the engine-side UI stack, sent to
+        // every receiver — the player too — on each spectator join, and
+        // offline by the mini-server's attach. A player online already holds
+        // that stack live; taking it doubled menuStack, reset the targeting
+        // cutoff and repainted the menus. So, as the reference
+        // (ui-layouts.js recv_ui_stack): a spectator takes the first one
+        // only, a player online none. Offline has no spectators, and the
+        // boot watchdog's rescue resend (mini-server.ts) may carry the only
+        // good copy, so it takes every one.
+        if (!localEngine && (!spectating || uiStackTaken)) break
         const items = (msg as unknown as { items?: ServerMsg[] }).items
         if (!Array.isArray(items)) break
+        uiStackTaken = true
+        // Each item carries its own `msg` (ui-push, menu, crt menu), so it
+        // re-dispatches through this handler — onto an emptied engine stack:
+        // offline the newgame screen is already up live when the snapshot
+        // lands, and appending left a phantom copy under it. The snapshot
+        // never replays ui_cutoff (tileweb.cc _send_everything), so a stale
+        // cutoff must not hide the re-sent stack.
         uiStack.length = 0
-        // The attach snapshot never replays ui_cutoff (tileweb.cc
-        // _send_everything), so a stale pre-reconnect cutoff must not hide
-        // the re-sent stack.
+        menuStack.length = 0
+        activeMenu = null
+        crtActive = false
+        crtTag = undefined
         uiCutoff = -1
+        titlePromptInput = null  // its DOM goes with the menu being rebuilt
         for (const item of items) handleMsg(item)
         // An empty snapshot must also clear a stale overlay — mirror
         // ui-pop's restore chain (dialogs live outside the engine stack).
@@ -2365,23 +2389,24 @@ export function buildGameView(
       }
 
       case 'cursor': {
-        const cursorId = (msg as unknown as { id: number }).id
-        cursorLoc = msg.loc ?? null
-        mapView.setCursor(msg.loc)
-        // Track the d-pad's steering-a-cursor state for the non-X cursors
-        // too (x examine, targeting). X mode (id 2) is excluded: its own
-        // x-mode class carries that state, and paths that leave X without a
-        // cursor-clear (e.g. exit-for-text-input) must not strand this one.
-        touchControls.setCursorMode(cursorId !== 2 && !!msg.loc)
-        if (cursorId === 2) {
+        const id = msg.id
+        if (id !== 0 && id !== 1 && id !== 2) break
+        cursors[id] = msg.loc
+        mapView.setCursor(shownCursor())
+        // The d-pad's steering-a-cursor state: the chooser's cursor (x
+        // examine, targeting). X mode's own x-mode class covers id 2, and
+        // paths that leave X without a cursor-clear (exit-for-text-input)
+        // must not strand this one.
+        touchControls.setCursorMode(!!cursors[0])
+        // X mode follows id 2 only. While a text input has X stepped aside,
+        // close_input re-enters it — a resent id 2 must not do it early.
+        if (id === 2) {
           if (msg.loc) mapJumper.onCursor(msg.loc)
-          if (msg.loc && !inXMode) enterXMode()
+          if (msg.loc && !inXMode && !exitedXModeForInput) enterXMode()
           else if (!msg.loc && inXMode) exitXMode()
+          if (!msg.loc) exitedXModeForInput = false
           scheduleMinimapRepaint()  // the X minimap's cursor ring
-        } else if (!msg.loc && inXMode) {
-          exitXMode()
         }
-        if (!msg.loc) exitedXModeForInput = false
         break
       }
 
@@ -3952,7 +3977,7 @@ export function buildGameView(
   // cursor ring and stands in for it.
   function repaintXmodeMinimap(): void {
     xmodeMinimap.element.hidden = sidebarMinimapShown || !xmodeMinimap.paint(
-      mapView.viewRect(), xslotBox.w, xslotBox.h, cursorLoc)
+      mapView.viewRect(), xslotBox.w, xslotBox.h, cursors[2] ?? null)
   }
 
   // Off while a full overlay hides the map (landscape overlays leave the
@@ -3961,7 +3986,7 @@ export function buildGameView(
     sidebarMinimapShown = sidebarBox.h >= SIDEBAR_MINIMAP_MIN_H
       && mapView.element.style.display !== 'none'
       && sidebarMinimap.paint(mapView.viewRect(), sidebarBox.w, sidebarBox.h,
-                              inXMode ? cursorLoc : null)
+                              inXMode ? cursors[2] ?? null : null)
     sidebarMinimap.element.classList.toggle('empty', !sidebarMinimapShown)
   }
 

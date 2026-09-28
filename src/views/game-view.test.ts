@@ -449,6 +449,44 @@ describe('cursor-mode d-pad state class (x examine / targeting)', () => {
   })
 })
 
+// A spectator joining makes the engine re-send every cursor id to the player
+// too (tileweb.cc _send_everything: id 0, id 1, then id 2 after the map).
+// Each id has its own slot, so the loc-less resends of the others must not
+// touch the one in use.
+describe('spectator-join cursor resend', () => {
+  const touch = (h: Harness) => h.view.querySelector<HTMLElement>('#touch-controls')!
+  const cursorCell = (h: Harness) => h.view.querySelector('.map-cursor')
+
+  it('keeps the aiming reticle and cursor-mode through the burst', () => {
+    const h = setup()
+    h.dispatch({ msg: 'map', cells: [], vgrdc: { x: 3, y: 4 } })
+    h.dispatch({ msg: 'cursor', id: 0, loc: { x: 3, y: 4 } })
+    expect(cursorCell(h)).not.toBeNull()
+    for (const m of [
+      { msg: 'cursor', id: 0, loc: { x: 3, y: 4 } },
+      { msg: 'cursor', id: 1 },
+      { msg: 'cursor', id: 2 },
+    ]) {
+      h.dispatch(m)
+      expect(touch(h).classList.contains('cursor-mode')).toBe(true)
+      expect(cursorCell(h)).not.toBeNull()
+    }
+  })
+
+  it('never drops out of X mode mid-burst', () => {
+    const h = setup()
+    h.dispatch({ msg: 'cursor', id: 2, loc: { x: 3, y: 4 } })
+    for (const m of [
+      { msg: 'cursor', id: 0 },
+      { msg: 'cursor', id: 1 },
+      { msg: 'cursor', id: 2, loc: { x: 3, y: 4 } },
+    ]) {
+      h.dispatch(m)
+      expect(touch(h).classList.contains('x-mode')).toBe(true)
+    }
+  })
+})
+
 describe('ui_cutoff (engine runs the map under the popup stack)', () => {
   // Wire order captured from a live trunk engine: tapping e(v)oke in an item
   // describe pops the describe, then targeting starts with the inventory menu
@@ -974,7 +1012,7 @@ describe('ui-push / ui-pop overlay stack', () => {
   })
 
   it('ui-stack re-dispatches each nested item back through the handler (spectator join)', () => {
-    const h = setup()
+    const h = setup({ username: 'bob' })
     h.dispatch({ msg: 'ui-stack', items: [{ msg: 'ui-push', type: 'describe-item', title: 'SNAP', body: 'b' }] })
     expect(isHidden(overlay(h))).toBe(false)
     expect(overlay(h).querySelector('.overlay-title span')?.textContent).toBe('SNAP')
@@ -985,18 +1023,42 @@ describe('ui-push / ui-pop overlay stack', () => {
     // while the newgame screen is already up live: the snapshot re-sends the
     // same push. Appending would leave a phantom copy that one ui-pop later
     // uncovers (species screen stuck over the running game).
-    const h = setup()
+    const h = setupOffline(async () => null)
     h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
     h.dispatch({ msg: 'ui-stack', items: [{ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' }] })
     h.dispatch({ msg: 'ui-pop' })
     expect(isHidden(overlay(h))).toBe(true)
   })
 
-  it('an empty ui-stack snapshot clears a stale overlay', () => {
-    const h = setup()
+  it('an empty ui-stack snapshot clears a stale overlay (offline)', () => {
+    const h = setupOffline(async () => null)
     h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'STALE', body: 'b' })
     h.dispatch({ msg: 'ui-stack', items: [] })
     expect(isHidden(overlay(h))).toBe(true)
+  })
+
+  it('a player online ignores ui-stack: a live menu is not doubled', () => {
+    // Every spectator join sends the player the snapshot of the stack it
+    // already holds. Taken, the menu landed on menuStack twice, and the
+    // menu's own close_menu then uncovered the phantom copy.
+    const h = setup()
+    const inv = {
+      msg: 'menu', tag: 'inventory', title: { text: 'Inventory' },
+      items: [{ level: 2, text: 'a - a +0 dagger', hotkeys: [97] }],
+    }
+    h.dispatch(inv)
+    h.dispatch({ msg: 'ui-stack', items: [inv] })
+    h.dispatch({ msg: 'close_menu' })
+    expect(isHidden(overlay(h))).toBe(true)
+  })
+
+  it('a spectator takes only the first ui-stack', () => {
+    const h = setup({ username: 'bob' })
+    h.dispatch({ msg: 'ui-stack', items: [{ msg: 'ui-push', type: 'describe-item', title: 'SNAP', body: 'b' }] })
+    // Another spectator's join: the reference ignores every snapshot after
+    // the first (ui_stack_handled).
+    h.dispatch({ msg: 'ui-stack', items: [] })
+    expect(isHidden(overlay(h))).toBe(false)
   })
 })
 

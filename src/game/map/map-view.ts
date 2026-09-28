@@ -366,7 +366,7 @@ export class MapView {
   }
 
   // Show or hide the examine cursor.
-  // cursor.loc is absolute dungeon coords (same coordinate space as vgrdc/playerPos).
+  // cursor.loc is in the map frame (same coordinate space as vgrdc/playerPos).
   setCursor(loc?: { x: number; y: number }): void {
     this.cursorLoc = loc ?? null
     this.updateCursorSpan()

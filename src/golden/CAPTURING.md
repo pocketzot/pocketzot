@@ -84,7 +84,7 @@ internals are renamed:
   (high-word `0x80000000` / `0xE0000000`). The unit test for
   `decodeFgThreatTier` uses our own constants; this proves they still
   match what DCSS emits.
-- **Examine mode** — `cursor` messages with absolute coords. Replayer
+- **Examine mode** — `cursor` messages (map-frame coords). Replayer
   needs to be extended to handle them first.
 - **Newgame-choice** — `ui-push` with `type:"newgame-choice"`. Only
   emitted at character creation; a saved-game session can't capture it.
