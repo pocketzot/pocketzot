@@ -1,0 +1,5 @@
+start | overlay:none | shows:map,log,touch
+#4 ui-push type=newgame-choice
+  → {"msg":"go_lobby"}
+#10 go_lobby
+  ⇢ lobby

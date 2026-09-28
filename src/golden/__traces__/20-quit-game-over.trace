@@ -1,0 +1,19 @@
+start | overlay:none | shows:map,log,touch
+#3 init_input type=messages
+  = overlay:none | shows:map,log,touch | textinput
+#5 close_input
+  = overlay:none | shows:map,log,touch
+#8 player
+  = overlay:none | shows:map,log,hud,touch
+#9 msgs
+  = overlay:none | shows:map,log,hud,touch | view:more-active
+#12 menu tag=inventory "Gear: 4/52 gear slots (Left/Rig…" items=7
+  = overlay:full text="Gear: 4/52 gear slots (Left/Right/Tab t…" items=4 | shows:touch | view:more-active | touch:overlay-mode
+#13 msgs
+  = overlay:full text="Gear: 4/52 gear slots (Left/Right/Tab t…" items=4 | shows:touch | touch:overlay-mode
+#25 close_menu
+  = overlay:none | shows:map,log,hud,touch
+#27 ui-push type=game-over
+  = overlay:full text="Goodbye, Synthplayer.7 Synthplayer the …" | shows:touch | touch:overlay-mode
+#30 game_ended
+  ⇢ lobby {"reason":"quit","message":"       7 Synthplayer the Tinkerer (level 2, 19/19 HPs)\n             Began as a Gnoll Forgewright on July 31, 2026.\n             Quit the game on level 1 of the Dungeon on Sept 28, 2026.\n             The game lasted 00:13:58 (447 turns).\n             ","dump":"https://crawl.dcss.io/crawl/morgue/Synthplayer/morgue-Synthplayer-20260928-204110","spectated":false}
