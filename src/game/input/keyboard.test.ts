@@ -109,4 +109,22 @@ describe('handleKeydown — Numpad via event.code', () => {
     handleKeydown(makeEvent({ code: 'F1' }), send)
     expect(send).toHaveBeenCalledWith({ msg: 'key', keycode: -265 })
   })
+
+  // Values from the reference key_conversion.js shift/ctrl tables; the code
+  // table must not shadow them (client.js applies it unmodified only).
+  it.each([
+    ['Shift+Numpad8', { code: 'Numpad8', keyCode: 104, shiftKey: true }, -243],
+    ['Ctrl+Numpad4', { code: 'Numpad4', keyCode: 100, ctrlKey: true }, -230],
+    ['Shift+Delete', { code: 'Delete', keyCode: 46, shiftKey: true }, -202],
+  ])('%s uses the modifier table', (_, ev, keycode) => {
+    const send = vi.fn<(msg: ClientMsg) => void>()
+    handleKeydown(makeEvent(ev), send)
+    expect(send).toHaveBeenCalledWith({ msg: 'key', keycode })
+  })
+
+  it('Shift+F1 sends nothing', () => {
+    const send = vi.fn<(msg: ClientMsg) => void>()
+    handleKeydown(makeEvent({ code: 'F1', key: 'F1', keyCode: 112, shiftKey: true }), send)
+    expect(send).not.toHaveBeenCalled()
+  })
 })

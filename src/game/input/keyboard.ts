@@ -241,8 +241,10 @@ export function handleKeydown(
   // Ignore browser shortcuts
   if (altKey || metaKey) return
 
-  // Try event.code first (modern numpad / function keys)
-  if (e.code && CODE_CONV[e.code] !== undefined) {
+  // Try event.code first (modern numpad / function keys) — unmodified only,
+  // as the reference (client.js handle_keydown): a modified numpad key or
+  // Delete belongs to the SHIFT/CTRL tables below, and Shift+F1 sends nothing.
+  if (!ctrlKey && !shiftKey && e.code && CODE_CONV[e.code] !== undefined) {
     e.preventDefault()
     send({ msg: 'key', keycode: CODE_CONV[e.code] })
     return
