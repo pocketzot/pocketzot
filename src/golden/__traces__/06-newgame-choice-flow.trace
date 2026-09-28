@@ -1,0 +1,15 @@
+start | overlay:none | shows:map,log,touch
+#5 ui-push type=newgame-choice
+  = overlay:full text="Welcome, crawler. You have a choice of …" | shows:bar[⎋] | view:menu-bar,newgame | touch:overlay-mode
+#11 ui-pop
+  = overlay:none | shows:map,log,hud,touch
+#12 ui-push type=newgame-choice
+  = overlay:full text="Welcome, crawler. Please select your sp…" | shows:bar[⎋] | view:menu-bar,newgame | touch:overlay-mode
+#15 ui-pop
+  = overlay:none | shows:map,log,hud,touch
+#16 ui-push type=newgame-choice
+  = overlay:full text="Welcome, crawler. Please select your ba…" | shows:bar[⎋] | view:menu-bar,newgame | touch:overlay-mode
+#19 ui-pop
+  = overlay:none | shows:map,log,hud,touch
+#20 ui-push type=newgame-random-combo
+  = overlay:full text="You are a Naga Reaver.Do you want to pl…" footer="Yes (Y)Reroll (n)Quit (q)" | shows:touch | view:newgame | touch:overlay-mode

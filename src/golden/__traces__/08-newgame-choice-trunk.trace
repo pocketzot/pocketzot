@@ -1,0 +1,15 @@
+start | overlay:none | shows:map,log,touch
+#0 ui-push type=newgame-choice
+  = overlay:full text="Welcome, crawler. You have a choice of …" | shows:bar[⎋] | view:menu-bar,newgame | touch:overlay-mode
+#3 ui-pop
+  = overlay:none | shows:map,log,touch
+#4 ui-push type=newgame-choice
+  = overlay:full text="Welcome, crawler. Please select your sp…" | shows:bar[⎋] | view:menu-bar,newgame | touch:overlay-mode
+#7 ui-pop
+  = overlay:none | shows:map,log,touch
+#8 ui-push type=newgame-choice
+  = overlay:full text="Welcome, crawler the Minotaur. Please s…" | shows:bar[⎋] | view:menu-bar,newgame | touch:overlay-mode
+#11 ui-pop
+  = overlay:none | shows:map,log,touch
+#12 ui-push type=newgame-choice
+  = overlay:full text="Welcome, crawler the Minotaur Berserker…" | shows:bar[⎋] | view:menu-bar,newgame | touch:overlay-mode

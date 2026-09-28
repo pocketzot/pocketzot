@@ -1,0 +1,9 @@
+start | overlay:none | shows:map,log,touch
+#1 ui-push type=formatted-scroller tag=help
+  = overlay:full text="Dungeon Crawl Help Manual Contents Pres…" | shows:touch | touch:overlay-mode
+#2 ui-pop
+  = overlay:none | shows:map,log,touch
+#5 menu "Lookup information about:" items=16
+  = overlay:full text="Lookup information about: m - Monster s…" items=15 | shows:touch | touch:overlay-mode
+#10 ui-push type=msgwin-get-line
+  = overlay:full text="Describe a monster; partial names and r…" field="" | shows:touch | touch:overlay-mode

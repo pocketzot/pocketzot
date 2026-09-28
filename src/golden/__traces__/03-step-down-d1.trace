@@ -1,0 +1,3 @@
+start | overlay:none | shows:map,log,touch
+#0 player
+  = overlay:none | shows:map,log,hud,touch
