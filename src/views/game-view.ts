@@ -1,6 +1,5 @@
 import type { GameConnection } from '../ws/connection'
 import type { ClientMsg, ServerMsg, GameExit } from '../ws/types'
-import { fitToWidth } from './fit-terminal'
 import { registerViewDispose } from './view-dispose'
 import { MapStore } from '../game/map/map-store'
 import { MapView } from '../game/map/map-view'
@@ -11,42 +10,38 @@ import { StatusView } from '../game/hud/status-view'
 import { MonsterListView } from '../game/hud/monster-list'
 import { MonsterPanelView } from '../game/hud/monster-panel'
 import { MinimapView } from '../game/map/minimap-view'
-import { fgHaloDngnName } from '../game/hud/monster-style'
 import { InventoryStore } from '../game/inventory-store'
 import { buildTouchControls, bindPressedClass } from '../game/input/touch'
 import type { TouchControls } from '../game/input/touch'
 import { openSettings } from './settings-view'
 import { isOverlayOpen, closeTopOverlay } from './overlay'
 import { keyToMsg } from '../game/input/keyboard'
-import { isEscMsg, keyNav, routeInput, wireNav, type NavKey, type RouterTargets } from '../game/input/input-router'
+import { isEscMsg, keyNav, routeInput, wireNav, type RouterTargets } from '../game/input/input-router'
 import { createShiftToggle } from '../game/input/shift-state'
 import { attachMapGestures, canDescribe, canHover, canOpenLevelMap } from '../game/input/map-tap'
 import { attachCornerSwipe } from '../game/input/corner-swipe'
 import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { cursorInView, keepLocalCenter } from '../game/input/map-pan'
 import { uiColor, escHtml, dcssToHtml } from '../game/dcss-colors'
-import { htmlToRuns, exportScreenPng, screenSlug, type DcssRun } from './screen-export'
+import { exportScreenPng, type DcssRun } from './screen-export'
 import { extractSkillHotkeys } from './skill-hotkeys'
 import { reflowSkillCrt, plainText } from './skill-reflow'
-import { reflowOverview, isDungeonOverview } from './overview-reflow'
 import { TEX, getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
 import { formatDcssVersion, isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
-import { renderTiles, appendIconOverlays, monsterTileSpec, prependDngnLayer, type TileRef } from '../game/tiles/tile-view'
+import { renderTiles } from '../game/tiles/tile-view'
 import { primeFingerprint } from '../game/tiles/atlas-dedup'
 import { OFFLINE_WS_URL } from '../offline/offline-state'
 import { CharacterRecord } from '../game/character-record'
 import { PopupStack, type PopupFrame } from '../game/popup-stack'
 import { MenuBar, menuTagHasBar } from './menu-bar'
-import { MenuView, SCROLL_SYNC_DEBOUNCE_MS } from './menu-view'
+import { MenuView } from './menu-view'
+import { LayoutView } from './layout-view'
 import { MessageLog } from './message-log'
 import { MenuModel, isPromptFamily, type MenuMsg } from '../game/menu-model'
 import { compactPlace } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
-import {
-  renderBodyLines, propagateDarkgreyColor, unwrapHangingIndents, joinIndentedRuns,
-  splitGodPowerCosts, unpadMutationCategory, renderSpellbook, stripDcss,
-} from './overlay-body'
+import { stripDcss } from './overlay-body'
 import { SpellHarvester, type SpellEntry } from '../game/spell-harvest'
 import { ChatView } from './chat-view'
 import {
@@ -788,7 +783,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     minimapOpen: () => minimapOpen,
     closeMinimap: () => closeMinimap(),
     menuNav: (nav) => menuView.nav(nav),
-    scrollerNav: (nav, page) => scrollerNav(nav, page),
+    scrollerNav: (nav, page) => layoutView.scrollerNav(nav, page),
     send: (msg) => { conn.send(msg); afterUserSend(msg) },
   }
 
@@ -900,6 +895,21 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     autoOpenKbd,
     loader: () => loader,
     spectating: !!spectating,
+  })
+
+  // ui-push layouts and the formatted scroller (./layout-view.ts).
+  const layoutView = new LayoutView({
+    overlay: uiOverlay,
+    renderOverlay: (title, build) => renderOverlay(title, build),
+    send: (msg) => conn.send(msg),
+    focusView,
+    guardedFocus,
+    loader: () => loader,
+    spectating: !!spectating,
+    topLayout: () => popups.topUi(),
+    repaint: () => restoreTopLayer(),
+    showTextPage: (text) => showTxtPage(text),
+    setExportSource: (src) => setExportSource(src),
   })
 
   // Share chip for exportable fixed-width screens (screen-export.ts): the `%`
@@ -1650,85 +1660,17 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
           if (typeof focus === 'number') newgameFocus?.(focus, raw['from_client'] === true)
           break
         }
-        const text = raw['text'] as string | undefined
-        const body = raw['body'] as string | undefined
-        const highlight = raw['highlight'] as string | undefined
-        const scroll = raw['scroll'] as number | undefined
-        const fromWebtiles = raw['from_webtiles'] === true
-        const actions = raw['actions'] as string | undefined
-        const layout = popups.topUi()
-        if (text) {
-          const entry: UiPushMsg = { type: 'formatted-scroller', text, ...(highlight ? { highlight } : {}), ...(actions ? { actions } : {}) }
-          if (layout) {
-            Object.assign(layout, entry)
-            // Update state always; restoreTopLayer repaints, so a body swap
-            // can't resurface a cutoff-hidden layer over the map.
-            restoreTopLayer()
-          } else {
-            showTxtPage(text)
-          }
-        } else if (body !== undefined && layout) {
-          // describe-item / describe-monster swap body in/out when the user
-          // toggles `!` (spell-failure details, monster panes, etc.). Server
-          // sends a ui-state with the replacement body and keeps the parent
-          // push's title, actions, and tile intact, so update body in place.
-          layout.body = body
-          restoreTopLayer()
-        }
-        // from_webtiles=true is the player's own formatted_scroller_scroll
-        // coming back: the player skips it (already scrolled there locally),
-        // a spectator follows it (ui-layouts.js:808).
-        if (scroll !== undefined && (!fromWebtiles || spectating)) scrollOverlayBody(scroll)
+        layoutView.onUiState(raw)
         break
       }
 
-      case 'ui-scroller-scroll': {
-        // The reference client skips this entirely when the top popup is a
-        // formatted-scroller (ui-layouts.js:1066-1073: "formatted scrollers
-        // send their own synchronization messages"). The server emits these
-        // with a hardcoded from_webtiles=false (ui.cc:1501-1503), so without
-        // the popup-type guard we'd ricochet our own scroll position back
-        // through this channel.
-        if (formattedScrollerActive()) break
-        const raw = msg as unknown as Record<string, unknown>
-        const scroll = raw['scroll'] as number | undefined
-        const fromWebtiles = raw['from_webtiles'] === true
-        if (scroll !== undefined && (!fromWebtiles || spectating)) scrollOverlayBody(scroll)
+      case 'ui-scroller-scroll':
+        layoutView.onScrollerScroll(msg as unknown as Record<string, unknown>)
         break
-      }
 
-      case 'ui-state-sync': {
-        // Server-driven updates to a focused input widget. from_webtiles=true
-        // is the player's own edit coming back: the player skips it (it would
-        // clobber the cursor mid-typing), a spectator applies it so the
-        // field follows what the player types (ui.js:483). Handled widgets:
-        //   "input"        — msgwin-get-line single text field
-        //   "seed"         — seed-selection seed entry
-        //   "pregenerate"  — seed-selection checkbox
-        //   "btn-*"        — buttons; presence-only, no state to apply
-        const m = msg as unknown as { widget_id?: string; text?: string; checked?: boolean; from_webtiles?: boolean; has_focus?: boolean }
-        if (m.from_webtiles && !spectating) break
-        if (m.widget_id === 'input') {
-          const input = uiOverlay.querySelector<HTMLInputElement>('.input-dialog-field')
-          if (!input) break
-          if (m.has_focus) guardedFocus(input)
-          else if (typeof m.text === 'string' && input.value !== m.text) input.value = m.text
-        } else if (m.widget_id === 'seed') {
-          const input = uiOverlay.querySelector<HTMLInputElement>('.seed-input-field')
-          if (!input) break
-          if (m.has_focus) guardedFocus(input)
-          else if (typeof m.text === 'string' && input.value !== m.text) {
-            input.value = m.text
-            // Keep the revert-anchor aligned with the server so a non-digit
-            // edit doesn't snap the field back to empty.
-            input.dataset.lastValid = m.text
-          }
-        } else if (m.widget_id === 'pregenerate') {
-          const cb = uiOverlay.querySelector<HTMLInputElement>('.seed-pregen-checkbox')
-          if (cb && typeof m.checked === 'boolean') cb.checked = m.checked
-        }
+      case 'ui-state-sync':
+        layoutView.onStateSync(msg as unknown as Parameters<LayoutView['onStateSync']>[0])
         break
-      }
 
       case 'menu': {
         disarmCreationGuard()  // a menu rendered — see the 'txt' case
@@ -2015,29 +1957,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   // --- ui-push handler ---
 
-  // Decode status icons from msg.flag (low word of t.fg) and merge with
-  // any pre-decoded numeric ids in msg.icons. Bitmask tables live in
-  // monster-style.ts so the panel and this popup stay in lockstep.
-  function appendMonsterStatusOverlays(wrap: HTMLElement, msg: UiPushMsg, scale: number): void {
-    // The popup has no HP bar, so damage shows as the MDAM overlay (includeMdam),
-    // matching the reference's draw_foreground(prepare_fg_flags(desc.flag), desc.icons).
-    appendIconOverlays(loader, wrap, msg.flag ?? 0, msg.icons ?? [], scale, { includeMdam: true })
-  }
-
-  // Map each ui-push variant's tile-bearing fields onto a uniform tile list
-  // for the title icon. Returns undefined when the popup carries no tile.
-  function deriveTileSpec(msg: UiPushMsg): TileRef[] | undefined {
-    if (msg.tiles) return msg.tiles
-    if (msg.tile) return Array.isArray(msg.tile) ? msg.tile : [msg.tile]
-    if (msg.feats?.[0]?.tile) return [msg.feats[0].tile]
-    // describe-monster: doll = body parts (humanoid form), mcache = body + worn
-    // equipment with per-piece pixel offsets. Shared with the monster panel
-    // via monsterTileSpec so both render the same humanoid composition.
-    const monSpec = monsterTileSpec({ fg_idx: msg.fg_idx, doll: msg.doll, mcache: msg.mcache })
-    if (monSpec.length > 0) return monSpec
-    return undefined
-  }
-
   function showUiPush(msg: UiPushMsg): void {
     menuView.captureScroll()
     // Standalone screens (game-overlays.ts) own their ui-push type wholesale;
@@ -2057,188 +1976,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (msg.type === 'newgame-random-combo') { showRandomCombo(overlayCtx, msg); return }
     if (msg.type === 'msgwin-get-line') { showInputDialog(overlayCtx, msg); return }
     if (msg.type === 'seed-selection') { showSeedSelection(overlayCtx, msg); return }
-
-    let titleSrc = msg.title ?? msg.prompt ?? ''
-    let rawBody = msg.text ?? msg.body ?? msg.desc ?? ''
-    if (msg.type === 'version') {
-      rawBody = [msg.information, msg.features, msg.changes].filter(Boolean).join('\n\n')
-    }
-    // Unwrap hanging-indent label rows in the server-built body only, BEFORE
-    // the client-assembled sections below: those append plain-text quotes
-    // (msg.quote, feats[].quote) and god power lists, which must not be
-    // reflowed (dialogue-format quote lines look like label rows). game-over
-    // is one fixed-width terminal block — leave it alone.
-    if (msg.type === 'formatted-scroller') rawBody = reflowOverview(rawBody)
-    if (msg.type !== 'game-over') rawBody = unwrapHangingIndents(unpadMutationCategory(rawBody))
-    if (msg.type === 'describe-god') {
-      // describe-god has no `title`/`text` — name is the heading, and the
-      // body is split across pane fields (description / favour+powers_list /
-      // powers / wrath / extra). Flatten them into one scrollable body.
-      titleSrc = msg.name ? `<lightblue>${msg.name}</lightblue>` : ''
-      const sections: string[] = []
-      if (msg.description) sections.push(msg.description)
-      if (msg.favour) sections.push(`<lightblue>Favour:</lightblue> ${msg.favour}`)
-      if (msg.powers_list) {
-        const lines = splitGodPowerCosts(msg.powers_list.split('\n').slice(3, -1).filter(s => s.trim()))
-        if (lines.length) sections.push(`<lightblue>Powers:</lightblue>\n${lines.join('\n')}`)
-      }
-      if (msg.powers) sections.push(msg.powers)
-      if (msg.wrath) sections.push(`<lightblue>Wrath:</lightblue>\n${msg.wrath}`)
-      if (msg.extra) sections.push(msg.extra)
-      // Altar-only join prompt (ui-layouts.js:350-353). service_fee is non-empty
-      // only for Gozag — already pre-formatted with leading space and parens.
-      if (msg.is_altar) sections.push(`<cyan>J</cyan>/<cyan>Enter</cyan>: join religion${msg.service_fee ?? ''}`)
-      rawBody = sections.join('\n\n')
-    }
-    if (msg.type === 'describe-monster') {
-      // Reference client splits these into separate panes the user cycles
-      // with `!` (ui-layouts.js:443). On mobile we append them so the
-      // content is visible without an extra interaction. msg.quote arrives
-      // as plain text (unlike the body-embedded darkgrey quotes from
-      // describe.cc:4001) — render it as-is, preserving the source's
-      // original line structure (dialogue, stage directions, attribution).
-      const extra: string[] = []
-      if (msg.status) extra.push(`<lightblue>Status:</lightblue>\n${joinIndentedRuns(msg.status)}`)
-      if (msg.quote) extra.push(`<lightblue>Quote:</lightblue>\n${msg.quote}`)
-      if (extra.length) rawBody = (rawBody ? rawBody + '\n\n' : '') + extra.join('\n\n')
-    }
-    if (msg.type === 'describe-feature-wide' && msg.feats?.length) {
-      const feats = msg.feats
-      titleSrc = feats[0].title ?? ''
-      rawBody = feats.map((f, i) => {
-        const parts: string[] = []
-        if (i > 0 && f.title) parts.push(f.title)
-        if (f.body && f.body !== f.title) parts.push(f.body)
-        if (f.quote) parts.push(f.quote)
-        return parts.join('\n\n')
-      }).filter(Boolean).join('\n\n')
-    }
-    const title = stripDcss(titleSrc)
-    const spellset = msg.spellset
-    // Strip the placeholder when there's no spellset to render in its place;
-    // otherwise keep it so we can split the body around it below.
-    if (!spellset?.length) rawBody = rawBody.replace(/SPELLSET_PLACEHOLDER/g, '')
-    rawBody = propagateDarkgreyColor(rawBody)
-    rawBody = rawBody
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/^((?:<[^>]+>)*)\s+/, '$1')
-      .replace(/\s+((?:<[^>]+>)*)$/, '$1')
-      .trim()
-
-    renderOverlay(title, () => {
-      const tileSpec = deriveTileSpec(msg)
-      if (tileSpec && tileSpec.length > 0) {
-        const headerEl = uiOverlay.querySelector('.overlay-title')
-        if (headerEl) {
-          const tileEl = renderTiles(loader, tileSpec, 2, { expand: true })
-          tileEl.classList.add('overlay-title-tile')
-          headerEl.insertBefore(tileEl, headerEl.firstChild)
-          if (msg.type === 'describe-monster') {
-            const halo = fgHaloDngnName(msg.flag ?? 0)
-            if (halo) prependDngnLayer(loader, tileEl, halo, 2)
-            appendMonsterStatusOverlays(tileEl, msg, 2)
-          }
-        }
-      }
-      if (rawBody) {
-        const bodyEl = document.createElement('div')
-        bodyEl.className = 'overlay-body fg7'
-        // Scroller bodies take the tighter line pitch (style.css
-        // .overlay-body--scroller); describe-* panels stay at prose pitch.
-        if (msg.type === 'formatted-scroller') bodyEl.classList.add('overlay-body--scroller')
-        // The end-of-game screen (the "Goodbye, …" character summary + the
-        // server's high-score table) is a single fixed-width terminal block,
-        // not a prose panel: every line shares one 80-column coordinate
-        // system. renderBodyLines' per-line isTabularLine heuristic
-        // (overlay-body.ts) shreds it
-        // — score rows with short names get multi-space padding (nowrap) while
-        // long-name rows wrap — so render it as one nowrap block and scale the
-        // font so the widest line fits the viewport (mirrors the morgue / the
-        // official client). describe-monster/item/god panels stay per-line.
-        const terminal = msg.type === 'game-over'
-        if (spellset?.length && rawBody.includes('SPELLSET_PLACEHOLDER')) {
-          // Reference client splits the body on SPELLSET_PLACEHOLDER and
-          // renders the spellset between the halves (ui-layouts.js:24-31).
-          // monsters get colour=false so the spell name keeps the default
-          // text colour; items pass colour=true to highlight schools.
-          const colourSpells = msg.type !== 'describe-monster'
-          const onSpell = (letter: string) => conn.send({ msg: 'input', text: letter })
-          const parts = rawBody.split('SPELLSET_PLACEHOLDER')
-          parts.forEach((part, i) => {
-            if (i > 0) {
-              for (const book of spellset) {
-                bodyEl.appendChild(renderSpellbook(loader, book, colourSpells, onSpell))
-              }
-            }
-            if (part) bodyEl.insertAdjacentHTML('beforeend', renderBodyLines(part, msg.highlight ?? '', terminal))
-          })
-        } else {
-          bodyEl.innerHTML = renderBodyLines(rawBody, msg.highlight ?? '', terminal)
-        }
-        uiOverlay.appendChild(bodyEl)
-        // rAF re-fits once fonts settle (the sync call lands before paint).
-        if (terminal) {
-          fitToWidth(bodyEl)
-          requestAnimationFrame(() => fitToWidth(bodyEl))
-        }
-        // formatted-scroller is a client-owned scroll widget (see the block
-        // comment at scrollOverlayBody). Hook the scroll listener so touch
-        // swipes and our own page-key handler sync back to the server; honor
-        // FS_START_AT_END synchronously (reading scrollHeight forces a
-        // layout flush, so the position lands before the first paint).
-        if (msg.type === 'formatted-scroller') {
-          if (msg.start_at_end) {
-            suppressScrollerSync()
-            bodyEl.scrollTop = bodyEl.scrollHeight
-          }
-          attachScrollerListener(bodyEl)
-        }
-      }
-      // The scroller's `more` footer (scroller.cc m_more; reference renders
-      // it at ui-layouts.js:764). Usually empty — but when set it's real
-      // guidance (fatal-error popup's "Hit any key to exit…", arena results)
-      // that must not be silently dropped.
-      if (msg.more && stripDcss(msg.more).trim()) {
-        const moreEl = document.createElement('div')
-        moreEl.className = 'overlay-footer scroller-more'
-        moreEl.innerHTML = dcssToHtml(msg.more)
-        uiOverlay.appendChild(moreEl)
-      }
-      if (msg.actions) {
-        uiOverlay.appendChild(buildActionsBar(msg.actions))
-      }
-    })
-    // The share-culture screens — the `%` overview (scroller tag "resists",
-    // output.cc), the Ctrl-O dungeon overview (untagged: dgn_overview never
-    // set_tags, so it's recognised by its heading, isDungeonOverview), and
-    // the end screen — are exportable as a PNG at their native 80-column
-    // layout, from the wire text rather than the reflowed rawBody the phone
-    // renders. Deliberately an
-    // allowlist: every other scroller is a multi-page document (help, notes,
-    // Ctrl-P history…) that nobody shares and that would render an absurdly
-    // tall canvas, so unknown/future screens ship chip-less by default.
-    // renderOverlay → enterOverlayLayout just cleared the source, so
-    // non-exportable types need no else branch.
-    if (msg.type === 'formatted-scroller' || msg.type === 'game-over') {
-      // The end screen's headline ("Goodbye, <name>.") arrives ONLY in
-      // `title` — end.cc writes title and body separately, there is no
-      // combined text field — so prepend it or the PNG loses the line the
-      // overlay shows (and that the filename slug is built from).
-      const exportBody = msg.text ?? msg.body ?? msg.desc ?? ''
-      const exportText = msg.title?.trim() ? `${msg.title}\n\n${exportBody}` : exportBody
-      const firstLine = stripDcss(exportText).split('\n').find((l) => l.trim())?.trim() ?? ''
-      const exportable = msg.type === 'game-over' || msg.tag === 'resists'
-        || isDungeonOverview(exportBody)
-      if (exportable && exportText.trim()) {
-        // Scrollers usually carry no `title` — the heading is the text's own
-        // first line (the `%` overview's "Name the Title (Species Class)…"),
-        // which makes a filename that names the character.
-        const slugSrc = title || firstLine || msg.type
-        // Whole body through dcssToHtml in one call (unlike the per-line
-        // display path) so open colour switches persist across newlines.
-        setExportSource({ runs: () => htmlToRuns(dcssToHtml(exportText)), slug: screenSlug(slugSrc) })
-      }
-    }
+    layoutView.show(msg)
     // A ui-push layered over a menuTagHasBar menu (e.g. describe-item
     // after `!`) should keep the menu's bottom row. Same for the skills CRT
     // (`m` → `?` → letter opens a describe popup): keep the skills row (its ⎋
@@ -2748,117 +2486,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     focusView()
   }
 
-  // --- formatted-scroller: client-owned scroll widget ---
-  //
-  // Per the reference client (ui-layouts.js:613 scroller_handle_key,
-  // :720 update_server_scroll, :1066 recv_ui_scroll), the formatted-scroller's
-  // scrollbar is owned by the *client*: page/arrow/home/end keys scroll the
-  // body locally, the new position is debounced back to the server as
-  // `formatted_scroller_scroll`, and server-pushed scrolls with
-  // `from_webtiles=true` are skipped by the player (they're the server
-  // echoing its own request) but followed by spectators.
-  // `ui-scroller-scroll` messages are ignored entirely when the top popup
-  // is a formatted-scroller — the server emits them with a
-  // hardcoded `from_webtiles: false` (ui.cc:1501-1503 says "always false,
-  // since we do not yet synchronize webtiles client-side scrolls"), so the
-  // ui-state pair is the sole valid sync channel here.
-  //
-  // We follow this model. Passing End/Home/PgUp/PgDn through as raw
-  // keycodes doesn't work on phone widths because we wrap differently from
-  // the server, so the server-clamped scroll value lands above our real
-  // bottom and the user sees a visible jump-back-up.
-
-  function formattedScrollerActive(): boolean {
-    return popups.topUi()?.type === 'formatted-scroller'
-      && !!uiOverlay.querySelector('.overlay-body')
-  }
-
-  let scrollerSyncTimer: number | undefined
-  function scheduleScrollerSync(): void {
-    if (scrollerSyncTimer !== undefined) return
-    scrollerSyncTimer = window.setTimeout(flushScrollerSync, SCROLL_SYNC_DEBOUNCE_MS)
-  }
-  function flushScrollerSync(): void {
-    scrollerSyncTimer = undefined
-    if (!formattedScrollerActive()) return
-    const el = uiOverlay.querySelector<HTMLElement>('.overlay-body')
-    if (!el) return
-    // Reference client: `Math.round(scrollTop / line_height)`. The value the
-    // server stores is opaque to it (m_scroll is just a saved position; see
-    // scroller.cc:166); a wrap-induced drift of a few rows on the server's
-    // side is harmless because we never read it back — from_webtiles=true
-    // skips the echo.
-    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
-    const line = Math.max(0, Math.round(el.scrollTop / lineH))
-    conn.send({ msg: 'formatted_scroller_scroll', scroll: line })
-  }
-
-  // Programmatic scrollTop assignment fires a scroll event asynchronously.
-  // Suppress sync for a short window so a server-driven scrollOverlayBody
-  // doesn't bounce its value straight back through formatted_scroller_scroll.
-  let scrollerSyncSuppressUntil = 0
-  function suppressScrollerSync(): void {
-    scrollerSyncSuppressUntil = performance.now() + 50
-  }
-  function onScrollerScroll(): void {
-    if (performance.now() < scrollerSyncSuppressUntil) return
-    scheduleScrollerSync()
-  }
-  function attachScrollerListener(bodyEl: HTMLElement): void {
-    bodyEl.addEventListener('scroll', onScrollerScroll, { passive: true })
-  }
-
-  // The router's scroller layer: client-side scrolling of a formatted
-  // scroller (see the block comment above). True when it scrolled.
-  function scrollerNav(nav: NavKey | null, pageDir: -1 | 1 | null): boolean {
-    if (!formattedScrollerActive()) return false
-    const el = uiOverlay.querySelector<HTMLElement>('.overlay-body')
-    if (!el) return false
-    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
-    const page = Math.max(lineH, el.clientHeight - 2 * lineH)
-    switch (nav) {
-      case 'up': el.scrollTop -= lineH; return true
-      case 'down': el.scrollTop += lineH; return true
-      case 'pageUp': el.scrollTop -= page; return true
-      case 'pageDown': el.scrollTop += page; return true
-      case 'home': el.scrollTop = 0; return true
-      case 'end': el.scrollTop = el.scrollHeight; return true
-    }
-    if (pageDir === null) return false
-    el.scrollTop += pageDir * page
-    return true
-  }
-
-  function scrollOverlayBody(line: number): void {
-    const el = uiOverlay.querySelector('.overlay-body') as HTMLElement | null
-    if (!el) return
-    // Setting scrollTop synchronously (reading scrollHeight/offsetTop forces
-    // a layout flush) lands the position before the next paint; an rAF wait
-    // would let the user see one paint at the wrong position on a fresh
-    // open. Suppress the resulting scroll event so the listener doesn't
-    // echo our value back to the server.
-    suppressScrollerSync()
-    if (line === 2147483647) {
-      el.scrollTop = el.scrollHeight
-      return
-    }
-    // The server sends `line` as a source-text line index (count of `\n`s
-    // before the section header — see _get_help_section in command.cc, where
-    // webtiles-mode line_height is 1). renderBodyLines emits one
-    // `.overlay-line` per source line, so the index maps directly. We can't
-    // use `line * lineHeight` like the reference client does because long
-    // manual lines wrap on a phone-width body, so source lines and rendered
-    // rows diverge.
-    const lines = el.querySelectorAll<HTMLElement>('.overlay-line')
-    const target = lines[line]
-    if (target) {
-      el.scrollTop = target.offsetTop - el.offsetTop
-      return
-    }
-    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
-    el.scrollTop = Math.round(line * lineH)
-  }
-
   function hideOverlay(): void {
     autoCloseKbdIfOurs()
     setExportSource(null)
@@ -2983,35 +2610,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     numpadInput.appendChild(grid)
   }
 
-  function buildActionsBar(actionsText: string): HTMLElement {
-    const bar = document.createElement('div')
-    bar.className = 'overlay-footer overlay-actions'
-    const tokens = actionsText.replace(/\.\s*$/, '').split(/,\s*|\s+or\s+/)
-    for (const token of tokens) {
-      // ", or " gets split into ", " + "or X" because the comma alternative
-      // wins first; drop the vestigial "or " so labels read as plain items.
-      const t = token.trim().replace(/^or\s+/, '')
-      if (!t) continue
-      const keyMatch = t.match(/\((.)\)/)
-      if (keyMatch) {
-        const key = keyMatch[1]
-        const btn = document.createElement('button')
-        btn.className = 'action-btn'
-        btn.innerHTML = dcssToHtml(t)
-        btn.addEventListener('click', () => {
-          conn.send({ msg: 'input', text: key })
-          focusView()
-        })
-        bar.appendChild(btn)
-      } else {
-        const span = document.createElement('span')
-        span.innerHTML = dcssToHtml(t)
-        bar.appendChild(span)
-      }
-    }
-    return bar
-  }
-
   // Everything this view installed outside its own subtree. Idempotent: the
   // deliberate exits (exitToLobby) run it before handing over, and the app
   // shell runs it again when it replaces the view (views/view-dispose.ts) —
@@ -3032,7 +2630,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // The debounced senders would otherwise write to a connection the lobby
     // (or the next view) now owns.
     menuView.dispose()
-    if (scrollerSyncTimer !== undefined) window.clearTimeout(scrollerSyncTimer)
+    layoutView.dispose()
     cancelTileGesture()
     disarmCreationGuard()
   }
