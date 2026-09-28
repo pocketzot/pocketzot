@@ -89,6 +89,19 @@ describe('parsePromptText — level-up stat prompt', () => {
   })
 })
 
+// PromptMenu::show_in_msgpane (RC prompt_menu = false): build_prompt_menu
+// pads each "(X) item" to a column width with "%-*s".
+describe('parsePromptText — in-pane option columns', () => {
+  it('one button per padded column, each bound to its own key', () => {
+    const r = parsePromptText('<cyan>(D) Dungeon          (T) Temple           (L) Lair            ')
+    expect(buttons(r.segments)).toEqual([
+      { label: '(D) Dungeon', key: 'D' },
+      { label: '(T) Temple', key: 'T' },
+      { label: '(L) Lair', key: 'L' },
+    ])
+  })
+})
+
 describe('parsePromptText — Adjust prompt (in-word parens)', () => {
   it('walks back through word boundaries for "sc(r)olls" / "e(v)ocables"', () => {
     const r = parsePromptText(

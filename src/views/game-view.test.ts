@@ -134,9 +134,12 @@ describe('message log (msgs)', () => {
       { text: '(L) Lair  (O) Orcish Mines', channel: 2 },
       { text: 'Where to? (_ - list branches)', channel: 2 },
     ] })
-    const liveRows = [...msgLog(h).querySelectorAll('.game-prompt')]
-      .filter(r => r.querySelector('button:not([disabled])'))
-    expect(liveRows).toHaveLength(2)
+    const live = [...msgLog(h).querySelectorAll<HTMLButtonElement>('.game-prompt button:not([disabled])')]
+    const keys = live.map(b => b.textContent?.match(/\((.)\)/)?.[1]).sort()
+    expect(keys).toEqual(['D', 'L', 'O', 'T'])
+    h.send.mockClear()
+    live.find(b => b.textContent?.startsWith('(T)'))!.click()
+    expect(sent(h)).toEqual([{ msg: 'input', text: 'T' }])
   })
 
   // The offline '#' dump line: {msg:'dump'} (mini-server synthesis) arms the

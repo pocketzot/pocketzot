@@ -54,7 +54,11 @@ export function parsePromptText(text: string): PromptParse {
   const body = text.replace(/\.\s*$/, '')
   const segments: PromptSegment[] = []
   let hasButton = false
-  const parts = body.split(/(,\s*|\s+or\s+)/)
+  // Separators: ", ", " or ", and the column padding of an in-pane option
+  // row (PromptMenu::build_prompt_menu prints each "(X) item" with
+  // "%-*s", prompt.cc), so "(D) Dungeon    (T) Temple" gives one button
+  // per option instead of one bound to D.
+  const parts = body.split(/(,\s*|\s+or\s+|\s{2,})/)
   for (let i = 0; i < parts.length; i++) {
     const token = parts[i]
     if (i % 2 === 1) {
