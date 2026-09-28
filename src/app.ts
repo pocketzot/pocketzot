@@ -107,7 +107,7 @@ function showOfflineLobby(exit?: GameExit): void {
 // (both gate on a truthy id), so offline characters join the login doll shelf
 // and crypt — wsUrl 'local://offline' + username=name keep their slot keys
 // disjoint from every server's, and captures eager-bake PNG thumbnails off
-// the same-origin pack (game-view maybeSaveAvatar). guest=false keeps
+// the same-origin pack (CharacterRecord.captureAvatar). guest=false keeps
 // canResumeAfterClose() false, so the visibilitychange handler never
 // proactively closes the "socket" (LocalConnection never reconnects — see its
 // header). Exit returns to the offline lobby, which shows the same

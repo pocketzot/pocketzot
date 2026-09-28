@@ -112,7 +112,7 @@ export function isBakeableLoader(loader: TileLoader): boolean {
 // Bake-and-store when possible, cheap no-op otherwise: skips cross-origin
 // loaders (taint) and specs already baked under this fingerprint. The one
 // entry point both bake sites share (paint-time in avatar-tiles.ts,
-// capture-time in game-view.ts maybeSaveAvatar). Never rejects.
+// capture-time in character-record.ts captureAvatar). Never rejects.
 export async function ensureDollBaked(loader: TileLoader, fp: string, spec: TileRef[]): Promise<void> {
   try {
     if (!isBakeableLoader(loader)) return

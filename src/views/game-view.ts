@@ -32,15 +32,12 @@ import { reflowOverview, isDungeonOverview } from './overview-reflow'
 import { TEX, getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
 import { formatDcssVersion, isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
-import { renderTiles, appendIconOverlays, dollTileSpec, monsterTileSpec, prependDngnLayer, type TileRef } from '../game/tiles/tile-view'
-import { cachedFingerprint, primeFingerprint } from '../game/tiles/atlas-dedup'
-import { ensureDollBaked, isBakeableLoader } from '../game/tiles/avatar-bake'
-import { mergeRunes, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
-import { count, countEach } from '../counter'
+import { renderTiles, appendIconOverlays, monsterTileSpec, prependDngnLayer, type TileRef } from '../game/tiles/tile-view'
+import { primeFingerprint } from '../game/tiles/atlas-dedup'
 import { downloadPackFile } from '../offline/save-transfer'
 import { OFFLINE_WS_URL } from '../offline/offline-state'
-import { hasOrbLight, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from '../game/rune-messages'
-import { compactPlace, looksLikeWelcome, parseWelcome } from '../game/char-label'
+import { CharacterRecord } from '../game/character-record'
+import { compactPlace } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
 import {
   renderBodyLines, propagateDarkgreyColor, unwrapHangingIndents, joinIndentedRuns,
@@ -207,63 +204,12 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // under-tile mini-bars. Kept here so a render-mode swap can seed the freshly
   // created view, which otherwise starts at zero until the next player message.
   const playerStats: { hp?: number; hp_max?: number; mp?: number; mp_max?: number } = {}
-  // Login-screen character-doll shelf (see ../avatars + maybeSaveAvatar). The
-  // character name (from player) is needed to store a recipe; lastAvatarSig dedups
-  // unchanged captures. The gamedata version is read off `loader` (above) at
-  // save time, so it's available whether game_client arrived in the lobby (CPO)
-  // or in-view (CDI). Both reset per game (fresh closure).
-  let charName = ''
-  let lastAvatarSig = ''
-  // Rolling identity/progress snapshot (species, god, XL, place, …) merged from
-  // the delta-encoded player messages, persisted with the avatar recipe so the
-  // crypt can label entries. Also merged at game_ended so the stamped outcome
-  // carries the *final* XL/place, not those of the last capture.
-  const charMeta: AvatarMeta = {}
+  // Shelf captures, crypt outcome and counters for the played character.
+  const record = new CharacterRecord({
+    wsUrl: conn.wsUrl, httpBase: conn.httpBase, username, gameId, spectating: !!spectating,
+  })
   // Perception facts driving the zoom floor; see los.ts SightFacts.
   const sight: SightFacts = {}
-  // Most recent player.turn, handed to saveAvatar so the shelf can tell a reroll
-  // from the same character continuing (the turn count resets for a new char — see
-  // ../avatars). Delta-encoded after the game-start snapshot, so hold the last seen.
-  let lastTurn: number | undefined
-  // The game-start "Welcome[ back], <name> the <Species> <Job>." line — the
-  // wire's only statement of the background (no player-message job field)
-  // AND of whether this process created the character or restored a save
-  // (wire facts in char-label.ts parseWelcome). Held raw until name AND
-  // species are known (msgs-vs-player order varies) and parsed against
-  // each DISTINCT (name, species) pair, not just once: the creation-time
-  // player frame carries the SP_UNKNOWN placeholder species "Yak"
-  // (player-save-info.h; see 06-newgame-choice-flow.golden.json), so a
-  // welcome line that lands before the frame with the real species must
-  // get a retry when that frame arrives; retries are keyed on identity so a
-  // parse that fails for good never recompiles per frame.
-  //
-  // The 'newchar' counter keys on the same parse. Never arm it on the
-  // newgame-choice ui-push: an RC `species`/`background`/`combo` preset
-  // makes _choose_species_job (newgame.cc) skip _prompt_choice, so those
-  // creations show no screen. Nor on the first map frame — see the 'map'
-  // case. No fallback key: a drifted welcome line fails by dropping the
-  // count to zero. A resumed save counts nothing, including one
-  // resurrected after death (failed final IDBFS flush, or a backup import).
-  let welcomeLine: string | null = null
-  let welcomeSettled = false
-  let welcomeTried = ''  // (name, species) of the last failed parse
-  function tryResolveBackground(): void {
-    if (welcomeSettled || welcomeLine == null) return
-    if (!charName || !charMeta.species) return
-    const identity = `${charName}\0${charMeta.species}`
-    if (identity === welcomeTried) return
-    welcomeTried = identity
-    const welcome = parseWelcome(welcomeLine, charName, charMeta.species)
-    if (!welcome) return
-    welcomeSettled = true
-    welcomeLine = null
-    charMeta.background = welcome.background
-    if (!welcome.resumed && !spectating && gameId) {
-      const offline = gameId === 'offline' ? '-offline' as const : ''
-      count(`newchar${offline}`)
-      countEach(`newchar-each${offline}`)
-    }
-  }
   const inventoryStore = new InventoryStore()
   const statsView = new StatsView(inventoryStore)
   const statusView = new StatusView()
@@ -422,71 +368,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // go_lobby (the server stops the unstarted process) and drop everything
   // until its go_lobby hands us to the lobby.
   let abandoningResume = false
-  // Wizard/explore latch for the anonymous outcome counters (src/counter.ts):
-  // both modes can fabricate outcomes (wizmode conjures runes/the Orb, explore
-  // removes death), so latching either excludes this session's won/dead/rune
-  // rows — crawl's own scoring line (hiscores.cc suppresses DGL milestones for
-  // both, but still sends them to webtiles, hence our own gate). Sticky by
-  // construction: crawl persists you.wizard in the save and re-reports it in
-  // the first `player` message of a resumed session, so a per-view latch
-  // can't be dodged by a reload. Merely non-scoring-but-honest play (seeded
-  // games) deliberately does NOT latch.
-  let cheatSeen = false
-  // The terminal outcome has been recorded (crypt stamp + counters) by
-  // whichever of game_ending / game_ended arrived first (types.ts). Never
-  // reset: exitToLobby discards the whole view, like gameOverSeen.
-  let endingRecorded = false
-
-  // Stamp a terminal outcome onto the character's crypt entry (see
-  // ../avatars recordAvatarOutcome) and bump the anonymous outcome counters.
-  // The excluded reasons either leave a resumable save ('saved',
-  // 'disconnect', 'crash', 'error') or never had a character ('cancel', a
-  // creation abort). charName doubles as the this-session-played-a-character
-  // guard, so an exit with no character can't stamp the slot's previous
-  // entry.
-  function recordEnding(reason: string, message?: string, dump?: string): void {
-    const terminal = reason === 'dead' || reason === 'won'
-      || reason === 'quit' || reason === 'bailed out'
-    if (!terminal || spectating || !charName || !gameId || endingRecorded) return
-    endingRecorded = true
-    recordAvatarOutcome({ wsUrl: conn.wsUrl, username, gameId }, { reason, message, dump }, charMeta)
-    // Same own-real-game gate as the crypt write (fixture replays keep
-    // gameId ''), plus the wizard/explore latch — see cheatSeen. Win rows
-    // carry the rune count parsed from the end blurb (absent on parse miss,
-    // never 0).
-    if (cheatSeen || (reason !== 'won' && reason !== 'dead')) return
-    const offline = gameId === 'offline' ? '-offline' as const : ''
-    if (reason === 'won') {
-      countEach(`won-each${offline}`, {}, parseWinRuneCount(message))
-    } else {
-      count(`dead${offline}`)
-      countEach(`dead-each${offline}`)
-    }
-  }
-  // Runes already counted this view, by name. The pickup line reaches a live
-  // client at most once (rollback touches only temporary messages; neither
-  // reconnect nor the attach handshake replays history — message.cc
-  // buffer.send sends `unsent` only), so this Set is insurance against wire
-  // paths not traced, not a known dup. Names are unique per game, so it can
-  // never suppress a legitimate second rune.
-  const runesCounted = new Set<string>()
-
-  // Rune pickup line → (1) the character's persisted collection (charMeta
-  // .runes: the next map capture / the outcome stamp writes it to the crypt
-  // entry — see ../avatars mergeRunes) and (2) the unlatched anonymous
-  // counter (countEach: one row per rune — totals, never people-counts).
-  // Only the counter takes the honest-game gate: wizmode runes stay on the
-  // player's own card (policy is badge, not filter — char-card.ts), they
-  // just don't feed the public stats. Spectated games write neither (the
-  // avatar writers are gated on `spectating`; the counter gates here).
-  function onRunePickup(text: string): void {
-    if (spectating) return
-    const rune = parseRunePickup(text)
-    if (!rune || runesCounted.has(rune)) return
-    runesCounted.add(rune)
-    charMeta.runes = [...(charMeta.runes ?? []), rune] // runesCounted already dedups
-    if (gameId && !cheatSeen) countEach(gameId === 'offline' ? 'rune-each-offline' : 'rune-each')
-  }
   // True while a server `show_dialog` HTML overlay is up (e.g. CDI's
   // save-transfer prompt). Tracked like crtActive so it can't be
   // orphaned if the server proceeds without an explicit hide_dialog.
@@ -1453,65 +1334,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     exitToLobby()
   }
 
-  // Save the player's current doll as a login-screen avatar recipe when their
-  // appearance changes. Render-mode-independent: the doll/mcache layers ride in
-  // the player's map cell whatever we render (ASCII or tiles), and we store only
-  // the tile ids + gamedata location — the ~1 MB atlas is fetched later, on the
-  // login screen, never here. Skips spectated games (the shelf is *your* chars)
-  // and the pre-name character-creation screens (charName still empty). Called
-  // only from the 'map' handler (the one path that carries the doll); `player`
-  // messages never do. The server re-sends the doll on every *move* (not just on
-  // change), so the lastAvatarSig check is what filters those down to genuine
-  // appearance changes — it short-circuits the common case before any write.
-  function maybeSaveAvatar(): void {
-    // Need the identity (gameId, the dedup key) and the gamedata loader (whose
-    // version is the saved atlas URL) before storing. gameId comes from the
-    // lobby at mount; the loader is seeded from game_client whether it arrived
-    // in the lobby (CPO) or in-view (CDI); name from the first player snapshot —
-    // all land early in a played game. charName gates out the pre-name
-    // character-creation screens.
-    // endingRecorded: a closed entry always appends (avatars.ts saveAvatar),
-    // so a capture off the end screens' frames would mint a phantom live
-    // entry for the character that just died.
-    if (spectating || !charName || !gameId || !loader || endingRecorded) return
-    const cell = store.get(store.playerPos.x, store.playerPos.y)
-    if (!cell) return
-    const doll = cell.doll ?? null
-    const mcache = cell.mcache ?? null
-    if (!doll?.length && !mcache?.length) return
-    // The layout fingerprint, when already cached (offline games prime it on
-    // game_client; servers fill it lazily on shelf paints): stamped on the
-    // entry so the baked-thumbnail identity survives the offline pack
-    // changing content under its constant coords, and used to eager-bake
-    // right here where the loader is warm and same-origin. ensureDollBaked
-    // no-ops for cross-origin (server) loaders and already-baked specs, so
-    // this is a couple of cache reads per appearance change in the common
-    // case.
-    const fp = cachedFingerprint(conn.httpBase, loader.version) ?? undefined
-    // The sig includes charMeta so progress changes (level-up, floor change,
-    // conversion) refresh the stored entry too, not just appearance changes —
-    // still a handful of writes per game, vs one per move without the gate.
-    // (charMeta is one object mutated in place, so its key order — and thus
-    // the sig — is stable within this game's closure.) It also includes fp:
-    // the game_client prime is fire-and-forget, so an offline resume's first
-    // map can beat it and capture fp-less — folding fp into the sig makes
-    // the first map after the prime lands re-save once with the stamp,
-    // instead of the gate pinning the entry fp-less until the next
-    // appearance change.
-    const sig = JSON.stringify([doll, mcache, charMeta, fp])
-    if (sig === lastAvatarSig) return
-    lastAvatarSig = sig
-    // The turn count is the new-character signal (../avatars REROLL_TURN_MAX).
-    saveAvatar({
-      wsUrl: conn.wsUrl, username, gameId, charName,
-      httpBase: conn.httpBase, version: loader.version, fp, doll, mcache,
-      ...charMeta,
-    }, { turn: lastTurn })
-    if (fp !== undefined && isBakeableLoader(loader)) {
-      void ensureDollBaked(loader, fp, dollTileSpec({ doll, mcache }))
-    }
-  }
-
   // Dev-only console hook so the tile mode (otherwise only a hidden
   // two-finger long-press) can be toggled from desktop Safari, which has
   // no TouchEvent constructor to synthesize the gesture.
@@ -1754,7 +1576,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
           // gesture toggle gets its loader and starts painting.
           loader = getTileLoader(conn.httpBase, msg.version)
           // Offline games only (httpBase '' → the same-origin pack): refresh
-          // the pack's layout fingerprint so maybeSaveAvatar can stamp it on
+          // the pack's layout fingerprint so record.captureAvatar can stamp it on
           // captures synchronously and eager-bake against it. Forced because
           // the pack's content shifts under constant coords across engine
           // updates — and right now the mounted pack is what we'd bake from,
@@ -1779,14 +1601,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       case 'map': {
         // A map frame means we're in (or resumed) a real game — the old-
         // version creation guard's "nothing rendered" case can't apply.
+        // Not a creation signal, though (character-record.ts welcomeLine).
         mapSeen = true
         disarmCreationGuard()
-        // Not a creation signal: a spectator joining while a creation screen
-        // is up makes crawl broadcast a cell-less {clear:true} map to the
-        // PLAYER too (spectator_joined → _send_everything → _send_map(false),
-        // which lacks redraw()'s m_view_loaded gate — tileweb.cc). The
-        // 'newchar' counter keys on the welcome line instead; see
-        // tryResolveBackground.
         if (msg.clear) {
           store.clear()
           // `[`/`]` in the level map arrive as a cleared map (tile_new_level
@@ -1830,30 +1647,20 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         monsterListView.update(store.getMonsters())
         if (monsterPanelOpen) monsterPanel.update(store.getMonsters())
         scheduleMinimapRepaint()
-        maybeSaveAvatar()
+        record.captureAvatar(store.get(store.playerPos.x, store.playerPos.y), loader)
         break
       }
 
       case 'player': {
-        if (msg.wizard || msg.explore) cheatSeen = true
-        if (msg.name) charName = msg.name
-        if (msg.turn !== undefined) lastTurn = msg.turn // for the avatar shelf; see lastTurn decl
-        // Merge the avatar-shelf identity/progress snapshot; see charMeta decl.
-        if (msg.species !== undefined) charMeta.species = msg.species
-        if (msg.title !== undefined) charMeta.title = msg.title
-        if (msg.god !== undefined) charMeta.god = msg.god
+        record.onPlayer(msg)
         // Zoom floor follows what the character can perceive (los.ts).
         if (msg.species !== undefined) sight.species = msg.species
         if (msg.god !== undefined) sight.god = msg.god
         if (msg.piety_rank !== undefined) sight.pietyRank = msg.piety_rank
         if (mapView.setSight(sight)) scheduleFit()
-        if (msg.xl !== undefined) charMeta.xl = msg.xl
-        if (msg.place !== undefined) charMeta.place = msg.place
-        if (msg.depth !== undefined) charMeta.depth = msg.depth
         if (msg.place !== undefined || msg.depth !== undefined) {
-          touchControls.setXModePlace(compactPlace(charMeta.place ?? '', charMeta.depth))
+          touchControls.setXModePlace(compactPlace(record.meta.place ?? '', record.meta.depth))
         }
-        tryResolveBackground() // name/species may have just arrived; see welcomeLine
         if (msg.pos) {
           store.playerPos = { x: msg.pos.x, y: msg.pos.y }
           // Deliberately NO view-center change here: the view pans only on
@@ -1873,10 +1680,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         inventoryStore.update(msg.inv)
         statsView.update(msg)
         if (msg.status !== undefined) statusView.update(msg.status)
-        // Orb possession (rune-messages.ts hasOrbLight — why the light and
-        // not the pickup line). charMeta is in the capture sig, so the next
-        // map re-saves the entry; the outcome stamp merges it too.
-        if (!spectating && !charMeta.orb && hasOrbLight(msg.status)) charMeta.orb = true
         if (msg.time !== undefined) markLastMsg('turn')
         if (!hudRevealed) {
           hudRevealed = true
@@ -1931,14 +1734,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
           break
         }
         if (pushMsg.type === 'game-over') gameOverSeen = true
-        // The `%` overview lists every rune the character holds — the only
-        // online source for runes picked up on another client (the pickup
-        // line reaches a client once; see onRunePickup). Any scroller push
-        // is tried: the `}: N/15 runes:` line shape can't occur elsewhere.
-        if (!spectating && pushMsg.type === 'formatted-scroller' && pushMsg.text) {
-          const runes = mergeRunes(charMeta.runes, parseMorgueRunes(pushMsg.text))
-          if (runes) charMeta.runes = runes
-        }
+        record.onUiPush(pushMsg)
         // A server overlay supersedes our client-side monster panel and
         // minimap lens; clear/close so subsequent map updates don't rewrite
         // the overlay body or repaint a stale lens.
@@ -2363,14 +2159,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
           // assigned to…" / "Your memory of … unravels") and flags the rail
           // stale; reharvestIfDirty after this loop resolves it.
           if (harvester.onMsgLine(m.text)) continue
-          onRunePickup(m.text)
-          // Hold the game-start welcome line for the background parse (see
-          // welcomeLine decl); resolves now if name+species already arrived.
-          if (!welcomeSettled && looksLikeWelcome(m.text)) {
-            welcomeLine = m.text
-            welcomeTried = ''  // a new candidate line earns a fresh parse
-            tryResolveBackground()
-          }
+          record.onMessageLine(m.text)
           // Mirror into the X-mode describe strip; the line ALSO takes the
           // normal path below into the (hidden) real log, which is what
           // keeps the server's rollback counts consistent on X-mode exit.
@@ -2526,12 +2315,12 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         break
 
       case 'game_ending':
-        recordEnding(msg.reason, msg.message)
+        record.recordEnding(msg.reason, msg.message)
         break
 
       case 'game_ended': {
         disarmCreationGuard()
-        recordEnding(msg.reason, msg.message, msg.dump)
+        record.recordEnding(msg.reason, msg.message, msg.dump)
         // Forward exit details so the lobby renders the exit dialog after the
         // layer switch. The trailing go_lobby + lobby list (often batched with
         // this) land on the lobby's message handler, not ours.

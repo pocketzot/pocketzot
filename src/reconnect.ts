@@ -175,7 +175,8 @@ export interface ResumeSuccess {
   loader?: TileLoader
   // game_id of the replayed play (absent for watch resumes) — forwarded to the
   // rebuilt game view so the login-doll shelf keeps capturing after a resume;
-  // without it maybeSaveAvatar stays disabled for the rest of the session.
+  // without it CharacterRecord.captureAvatar stays disabled for the rest of
+  // the session.
   gameId?: string
   // Present when the lobby outcome came from game_ended (the replayed play
   // crashed on startup, or the spectated game ended mid-resume): the lobby

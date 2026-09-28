@@ -2459,7 +2459,7 @@ describe('minimap lens suspend/restore while spectating', () => {
 
 // The creation counter keys on crawl's game-start welcome line (" back" =
 // a restored save), parsed once name and species are known — see
-// tryResolveBackground in game-view.ts. Neither the creation screens nor
+// welcomeLine in character-record.ts. Neither the creation screens nor
 // the first map frame are signals: an RC-preset combo shows no screens, and
 // a spectator joining mid-creation makes crawl broadcast a cell-less map.
 describe('newchar counting', () => {
