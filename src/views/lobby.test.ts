@@ -148,6 +148,20 @@ describe('lobby game_ended before any game started', () => {
   })
 })
 
+// The server never echoes the game_id back, so the lobby's play is the only
+// point where auto-resume can learn what to replay.
+describe('lobby play records the resume context', () => {
+  it('a headline tap remembers the game id, then sends play', () => {
+    const { dispatch, view, conn } = setupLobby()
+    dispatch({ msg: 'set_game_links', content: '<a href="#play-0.34">v0.34</a>' } as unknown as ServerMsg)
+
+    view.querySelector<HTMLElement>('#lobby-games > button.lobby-btn-primary')!.click()
+
+    expect(activeGameStart()).toEqual({ kind: 'play', gameId: '0.34' })
+    expect(conn.send).toHaveBeenCalledWith({ msg: 'play', game_id: '0.34' })
+  })
+})
+
 // Chat/spectator state sent before the transition trigger. On a spectate join
 // CDI sends game_client → update_spectators → watching_started (captured
 // live 2026-07), so update_spectators lands while the lobby still owns

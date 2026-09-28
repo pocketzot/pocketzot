@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
+  attemptResume,
   resumeOnConn,
   ResumeFatal,
   rememberGameStart,
@@ -18,12 +19,12 @@ import { fakeStorage } from './test/fake-storage'
 import type { ClientMsg, ServerMsg } from './ws/types'
 
 // Coverage for the auto-resume state machine that replays login → play/watch
-// after an unexpected socket drop (iOS app-swap). The retry loop and overlay
-// around it are exercised in the browser; what must not regress silently is
-// the protocol conversation itself — especially the stale-process purge the
-// server runs when our previous session's zombie socket still holds the
-// game's lockfile (the *common* fast-swap case, per
-// process_handler.py:_purge_locks_and_start).
+// after an unexpected socket drop (iOS app-swap): the protocol conversation
+// itself — especially the stale-process purge the server runs when our
+// previous session's zombie socket still holds the game's lockfile (the
+// *common* fast-swap case, per process_handler.py:_purge_locks_and_start) —
+// and the retry loop's age cutoffs, whose failure is silent by hand (it
+// takes a 15-minute wait to see).
 
 const WS_URL = 'wss://test.example/socket'
 const HTTP_BASE = 'https://test.example'
@@ -31,6 +32,31 @@ const USER = 'tester'
 
 vi.stubGlobal('localStorage', fakeStorage())
 vi.stubGlobal('sessionStorage', fakeStorage())
+
+// attemptResume opens a fresh WsConnection per attempt. Each fake records what
+// it was sent; connect() refuses while `ws.refuse` is set.
+const ws = vi.hoisted(() => {
+  class FakeWs {
+    sent: unknown[] = []
+    closed = false
+    onMessage: (m: unknown) => void = () => {}
+    onClose: () => void = () => {}
+    onLoginCookie: (cookie: string, days: number) => void = () => {}
+    readonly httpBase: string
+    constructor(readonly wsUrl: string) {
+      this.httpBase = wsUrl.replace(/^ws/, 'http').replace(/\/socket\/?$/, '')
+      ws.instances.push(this)
+    }
+    connect(): Promise<void> {
+      return ws.refuse ? Promise.reject(new Error('refused')) : Promise.resolve()
+    }
+    send(m: unknown): void { this.sent.push(m) }
+    close(): void { this.closed = true }
+  }
+  const ws = { FakeWs, instances: [] as FakeWs[], refuse: false }
+  return ws
+})
+vi.mock('./ws/connection', () => ({ WsConnection: ws.FakeWs }))
 
 function fakeConn(): { conn: ResumeConn; sent: ClientMsg[]; feed: (m: ServerMsg) => void } {
   const sent: ClientMsg[] = []
@@ -438,5 +464,134 @@ describe('resume age limit', () => {
     clearInMemoryOnly()
     expect(loadPersistedResume()).not.toBeNull()
     expect(activeGameStart()).toEqual({ kind: 'play', gameId: 'dcss-0.34' })
+  })
+})
+
+describe('attemptResume — retry loop', () => {
+  const SESSION = { wsUrl: WS_URL, username: USER, guest: false }
+
+  function start(): { onGame: ReturnType<typeof vi.fn>; onLobby: ReturnType<typeof vi.fn>; onGiveUp: ReturnType<typeof vi.fn> } {
+    const cbs = { onGame: vi.fn(), onLobby: vi.fn(), onGiveUp: vi.fn() }
+    attemptResume({ ...SESSION, ...cbs })
+    return cbs
+  }
+  const overlay = (): Element | null => document.querySelector('.reconnect-backdrop')
+
+  afterEach(() => {
+    ws.instances.length = 0
+    ws.refuse = false
+    overlay()?.remove()
+  })
+
+  // The page survived the backgrounding, so the resume starts from the
+  // foreground edge, hours after the proactive close. Its age is the close's.
+  it('gives up silently, with no attempt, when foregrounded past the age cutoff', async () => {
+    vi.useFakeTimers()
+    withSession()
+    rememberGameStart({ kind: 'play', gameId: 'dcss-0.34' }, SESSION)
+    markProactiveClose()
+    vi.advanceTimersByTime(16 * 60_000)
+
+    const r = start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(r.onGiveUp).toHaveBeenCalledWith()
+    expect(ws.instances).toHaveLength(0)
+    expect(overlay()).toBeNull()
+  })
+
+  // Backoff sleeps freeze while iOS suspends the page; wall-clock does not.
+  it('gives up silently when a retry wakes past the age cutoff', async () => {
+    vi.useFakeTimers()
+    withSession()
+    rememberGameStart({ kind: 'play', gameId: 'dcss-0.34' }, SESSION)
+    ws.refuse = true
+
+    const r = start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ws.instances).toHaveLength(1)
+    vi.setSystemTime(Date.now() + 16 * 60_000)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(r.onGiveUp).toHaveBeenCalledWith()
+    expect(ws.instances).toHaveLength(1)
+    expect(overlay()).toBeNull()
+  })
+
+  it('a successful resume drops the proactive-close stamp, so a later drop ages from itself', async () => {
+    vi.useFakeTimers()
+    withSession()
+    rememberGameStart({ kind: 'play', gameId: 'dcss-0.34' }, SESSION)
+    markProactiveClose()
+    vi.advanceTimersByTime(60_000)
+
+    const r = start()
+    await vi.advanceTimersByTimeAsync(0)
+    const c = ws.instances[0]!
+    c.onMessage({ msg: 'login_success', username: USER })
+    expect(c.sent).toContainEqual({ msg: 'play', game_id: 'dcss-0.34' })
+    c.onMessage({ msg: 'game_started' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(r.onGame).toHaveBeenCalledTimes(1)
+    expect(r.onGame.mock.calls[0]![0]).toBe(c)
+    expect(overlay()).toBeNull()
+
+    // An hour of play later the network drops: a fresh disconnection.
+    vi.advanceTimersByTime(60 * 60_000)
+    const r2 = start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(r2.onGiveUp).not.toHaveBeenCalled()
+    expect(ws.instances).toHaveLength(2)
+  })
+
+  it('a server close ends the loop with its notice instead of retrying', async () => {
+    vi.useFakeTimers()
+    withSession()
+    rememberGameStart({ kind: 'play', gameId: 'dcss-0.34' }, SESSION)
+
+    const r = start()
+    await vi.advanceTimersByTimeAsync(0)
+    const c = ws.instances[0]!
+    c.onMessage({ msg: 'login_success', username: USER })
+    c.onMessage({ msg: 'close' })
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(r.onGiveUp).toHaveBeenCalledWith('The server closed the connection.')
+    expect(ws.instances).toHaveLength(1)
+    expect(c.closed).toBe(true)
+    expect(overlay()).toBeNull()
+  })
+
+  it('gives up with a notice once every backoff round has failed', async () => {
+    vi.useFakeTimers()
+    withSession()
+    rememberGameStart({ kind: 'play', gameId: 'dcss-0.34' }, SESSION)
+    ws.refuse = true
+
+    const r = start()
+    await vi.advanceTimersByTimeAsync(89_000)
+    expect(r.onGiveUp).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(ws.instances).toHaveLength(8)
+    expect(r.onGiveUp).toHaveBeenCalledWith(`Couldn't reconnect to ${WS_URL}.`)
+    expect(overlay()).toBeNull()
+  })
+
+  it('Cancel closes the attempt in flight and stops retrying, with no notice', async () => {
+    vi.useFakeTimers()
+    withSession()
+    rememberGameStart({ kind: 'play', gameId: 'dcss-0.34' }, SESSION)
+
+    const r = start()
+    await vi.advanceTimersByTimeAsync(0)
+    document.querySelector<HTMLElement>('.reconnect-cancel')!.click()
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(r.onGiveUp).toHaveBeenCalledTimes(1)
+    expect(r.onGiveUp).toHaveBeenCalledWith()
+    expect(ws.instances).toHaveLength(1)
+    expect(ws.instances[0]!.closed).toBe(true)
+    expect(r.onGame).not.toHaveBeenCalled()
+    expect(overlay()).toBeNull()
   })
 })
