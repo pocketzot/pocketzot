@@ -48,8 +48,8 @@ requirement. The colour palette is the standard Tango-derived terminal set:
 | `src/game/map/cell-flags.ts` | `webserver/game_data/static/enums.js` | Tile fg/bg flag bit masks |
 | `src/game/dcss-colors.ts` | DCSS WebTiles colour palette | Named colour → hex map |
 
-The 16-entry base palette in `src/game/map/colors.ts` is the standard
-IBM CGA/VGA color set and is not specific to DCSS.
+The map's 16-entry base palette (`src/game/map/colors.ts`) is the same
+Tango-derived set, taken from `src/game/dcss-colors.ts`.
 
 ## Derived from the DCSS WebTiles client
 

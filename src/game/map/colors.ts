@@ -15,24 +15,13 @@
 //
 // Reference: cell_renderer.js split_term_colour / term_colour_apply_attributes
 
-const PALETTE: readonly string[] = [
-  '#000000', // 0  BLACK
-  '#0000aa', // 1  BLUE
-  '#00aa00', // 2  GREEN
-  '#00aaaa', // 3  CYAN
-  '#aa0000', // 4  RED
-  '#aa00aa', // 5  MAGENTA
-  '#aa5500', // 6  BROWN
-  '#aaaaaa', // 7  LIGHTGREY
-  '#555555', // 8  DARKGREY
-  '#5555ff', // 9  LIGHTBLUE
-  '#55ff55', // 10 LIGHTGREEN
-  '#55ffff', // 11 LIGHTCYAN
-  '#ff5555', // 12 LIGHTRED
-  '#ff55ff', // 13 LIGHTMAGENTA
-  '#ffff55', // 14 YELLOW
-  '#ffffff', // 15 WHITE
-]
+import { DCSS_UI_COLOR } from '../dcss-colors'
+
+// The reference map reads its term colours back from the .fgN/.bgN classes
+// (cell_renderer.js, style.css --color-0..15: Tango). Never give the map its
+// own table — a separate CGA copy here drew the map darker than the log,
+// menus and HUD (blue at 1.58:1 on black).
+const PALETTE = DCSS_UI_COLOR
 
 export const DEFAULT_FG = PALETTE[7]   // LIGHTGREY
 export const DEFAULT_BG = PALETTE[0]   // BLACK

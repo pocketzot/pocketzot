@@ -4,14 +4,14 @@ import { fgColor, bgColor, decodeColor, flashColor, statusColor, DEFAULT_FG } fr
 describe('fgColor', () => {
   it('extracts the low 4 bits as palette index', () => {
     expect(fgColor(0)).toBe('#000000')   // BLACK
-    expect(fgColor(7)).toBe('#aaaaaa')   // LIGHTGREY
-    expect(fgColor(15)).toBe('#ffffff')  // WHITE
+    expect(fgColor(7)).toBe('#babdb6')   // LIGHTGREY
+    expect(fgColor(15)).toBe('#eeeeec')  // WHITE
   })
 
   it('ignores upper bits (attr + bg)', () => {
     // bg=4 (RED) in bits 12-15, attr=7 (HILITE) in bits 4-7, fg=9 (LIGHTBLUE)
     const col = (4 << 12) | (7 << 4) | 9
-    expect(fgColor(col)).toBe('#5555ff')
+    expect(fgColor(col)).toBe('#5e78ff')
   })
 })
 
@@ -25,31 +25,31 @@ describe('bgColor', () => {
   it('returns palette[bg] when HILITE attribute is set', () => {
     // attr=7 HILITE, bg=4 RED
     const col = (4 << 12) | (7 << 4) | 7
-    expect(bgColor(col)).toBe('#aa0000')
+    expect(bgColor(col)).toBe('#b30009')
   })
 })
 
 describe('decodeColor', () => {
   it('plain col returns fg with no bg', () => {
-    expect(decodeColor(7)).toEqual({ fg: '#aaaaaa', bg: null })
+    expect(decodeColor(7)).toEqual({ fg: '#babdb6', bg: null })
   })
 
   it('HILITE with distinct fg/bg keeps both', () => {
     // attr=HILITE, fg=9 LIGHTBLUE, bg=4 RED
     const col = (4 << 12) | (7 << 4) | 9
-    expect(decodeColor(col)).toEqual({ fg: '#5555ff', bg: '#aa0000' })
+    expect(decodeColor(col)).toEqual({ fg: '#5e78ff', bg: '#b30009' })
   })
 
   it('HILITE with matching fg/bg forces fg→black for readability', () => {
     // attr=HILITE, fg=4 RED, bg=4 RED — fg should drop to BLACK
     const col = (4 << 12) | (7 << 4) | 4
-    expect(decodeColor(col)).toEqual({ fg: '#000000', bg: '#aa0000' })
+    expect(decodeColor(col)).toEqual({ fg: '#000000', bg: '#b30009' })
   })
 
   it('REVERSE swaps fg→bg, fg becomes BLACK', () => {
     // attr=REVERSE, fg=2 GREEN — cell becomes green block w/ black glyph
     const col = (5 << 4) | 2
-    expect(decodeColor(col)).toEqual({ fg: '#000000', bg: '#00aa00' })
+    expect(decodeColor(col)).toEqual({ fg: '#000000', bg: '#4e9a06' })
   })
 })
 
@@ -81,6 +81,6 @@ describe('statusColor', () => {
   })
 
   it('masks to 4 bits', () => {
-    expect(statusColor(0xff)).toBe('#ffffff') // 0xff & 0xf = 15 WHITE
+    expect(statusColor(0xff)).toBe('#eeeeec') // 0xff & 0xf = 15 WHITE
   })
 })
