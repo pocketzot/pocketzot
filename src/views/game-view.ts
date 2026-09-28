@@ -353,8 +353,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     monsterPanelOpen = false
     if (popups.hidesAll()) {
       // Skip the resync when already hidden: hideOverlay's rAF tail forces
-      // layout (fitToContainer), a real cost for a message-path no-op.
-      if (!gameOverSeen && uiOverlay.style.display !== 'none') hideOverlay()
+      // layout (fitToContainer), a real cost for a message-path no-op. The
+      // layout state, not the element's display: a stash preview hides the
+      // element while its overlay (and DOM) is still up.
+      if (!gameOverSeen && overlayMode !== 'none') hideOverlay()
       return
     }
     const top = popups.top()
@@ -825,13 +827,16 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   //   menuBarOn: the menu-controls bar is up.
   // Derived: X mode hides the log and HUD (the map goes full-bleed), and the
   // stash-search preview — X mode with the stash results menu on top of the
-  // stack — shows the map and d-pad in place of that menu and its bar.
+  // stack — shows the map and d-pad in place of that menu and its bar,
+  // unless a client panel or server dialog took the overlay meanwhile (the
+  // monster list stays tappable in the preview; its panel must show).
   let overlayMode: 'none' | 'full' | 'float' = 'none'
   let touchHidden = false
   let menuBarOn = false
   function applyLayout(): void {
     const top = popups.top()
-    const stashPreview = inXMode && top?.kind === 'menu' && top.menu.tag === 'stash'
+    const stashPreview = inXMode && !monsterPanelOpen && !dialogActive
+      && top?.kind === 'menu' && top.menu.tag === 'stash'
     const overlayShown = overlayMode !== 'none' && !stashPreview
     const playfield = overlayMode !== 'full' && !inXMode
     uiOverlay.style.display = overlayShown ? '' : 'none'

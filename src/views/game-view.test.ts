@@ -738,6 +738,18 @@ describe('overlay-stack cross-reads', () => {
     expect(shown(h, '#menu-controls')).toBe(true)
   })
 
+  it('the monster panel opened during a stash preview is visible', () => {
+    const h = setup()
+    h.dispatch({ msg: 'menu', tag: 'stash', title: { text: 'Search results' }, flags: 0x40000,
+      items: [{ level: 2, text: 'a - a stone', hotkeys: [97] }] })
+    h.dispatch({ msg: 'ui_cutoff', cutoff: 1 })
+    h.dispatch({ msg: 'cursor', id: 2, loc: { x: 5, y: 5 } })
+    h.dispatch({ msg: 'map', cells: [{ x: 5, y: 5, g: 'o', col: 7, mon: { id: 1, name: 'orc', att: 1, type: 1 } }] })
+    h.view.querySelector<HTMLElement>('#monster-list')!.click()
+    expect(overlay(h).querySelector('.mp-list')).not.toBeNull()
+    expect(isHidden(overlay(h))).toBe(false)
+  })
+
   it('an offline empty ui-stack snapshot leaves a server dialog up', () => {
     const h = setupOffline(() => Promise.resolve(null))
     h.dispatch({ msg: 'show_dialog', html: 'Transfer? <button data-key="N">No</button>' })
