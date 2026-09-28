@@ -1678,9 +1678,11 @@ export function buildGameView(
   function handleMsg(msg: ServerMsg): void {
     if (abandoningResume && msg.msg !== 'go_lobby' && msg.msg !== 'close') return
     switch (msg.msg) {
-      // Both 0.34 and trunk send bare `layer` (client.js: "layer":
-      // do_set_layer). `set_layer` is a defensive alias the server never
-      // actually sends.
+      // No upstream emitter: trunk and 0.34.1 only receive it (client.js
+      // "layer": do_set_layer). The one sender seen is CDI's `layer:"crt"`
+      // ahead of its save-transfer show_dialog (wire capture 2026-09-27),
+      // a no-op here. The `game` reset is defensive; nothing sent it in that
+      // capture (stable + trunk start, exit, spectate) or in any recording.
       case 'layer':
       case 'set_layer':
         if (msg.layer === 'game') { uiStack.length = 0; crtActive = false; dialogActive = false; crtTag = undefined; menuStack.length = 0; activeMenu = null; uiCutoff = -1; closeClientOverlays(); harvester.reset(); hideOverlay() }

@@ -24,10 +24,10 @@ export function classifyTransition(msg: ServerMsg): TransitionTrigger | null {
       return { type: 'game', spectating: { username: msg.username } }
     case 'layer':
     case 'set_layer':
-      // `layer` is the real message (0.34 + trunk send bare `layer`);
-      // `set_layer` is a defensive alias the server never actually sends.
-      // Both game and crt (full-screen text UI, e.g. character creation)
-      // mean we're in the game.
+      // No upstream emitter (trunk, 0.34.1, crawl binary). CDI sends
+      // `layer:"crt"` after game_started, ahead of its save-transfer
+      // show_dialog (wire capture 2026-09-27), so there it's redundant.
+      // Kept as a trigger for a server that sends it before game_started.
       return msg.layer === 'game' || msg.layer === 'crt' ? { type: 'game' } : null
     default:
       return null
