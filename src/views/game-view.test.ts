@@ -659,8 +659,10 @@ describe('ui_cutoff (engine runs the map under the popup stack)', () => {
 // CRT, cutoff, dialog, game-over): each one pinned before those structures
 // merge into one popup stack.
 describe('overlay-stack cross-reads', () => {
-  const INV = { msg: 'menu', tag: 'inventory', title: { text: 'Inventory' },
-    items: [{ level: 2, text: 'a - a wand of flame (15)', hotkeys: [97] }] }
+  // A fresh message per use: the view keeps and mutates the menu it's given
+  // (update_menu writes into it), as the engine's messages are one-shot.
+  const inv = () => ({ msg: 'menu', tag: 'inventory', title: { text: 'Inventory' },
+    items: [{ level: 2, text: 'a - a wand of flame (15)', hotkeys: [97] }] })
   const bar = (h: Harness) => h.view.querySelector<HTMLElement>('#menu-controls')!
   const labels = (h: Harness) => [...bar(h).querySelectorAll<HTMLElement>('.menu-ctrl-btn')].map(b => b.textContent)
   const title = (h: Harness) => overlay(h).querySelector('.overlay-title span')?.textContent
@@ -670,11 +672,11 @@ describe('overlay-stack cross-reads', () => {
 
   it('the auto spell harvest waits while anything is open, a cutoff-hidden menu included', () => {
     const states: Array<(h: Harness) => void> = [
-      (h) => h.dispatch(INV),
+      (h) => h.dispatch(inv()),
       (h) => h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'x', body: 'y' }),
       (h) => h.dispatch({ msg: 'menu', type: 'crt', tag: 'skills' }),
       (h) => h.dispatch({ msg: 'show_dialog', html: '<button data-key="N">No</button>' }),
-      (h) => { h.dispatch(INV); h.dispatch({ msg: 'ui_cutoff', cutoff: 1 }) },
+      (h) => { h.dispatch(inv()); h.dispatch({ msg: 'ui_cutoff', cutoff: 1 }) },
     ]
     for (const open of states) {
       const h = setup()
@@ -696,7 +698,7 @@ describe('overlay-stack cross-reads', () => {
     back()
     expect(sent(h)).toEqual([{ msg: 'input', text: 'S' }])
     h.send.mockClear()
-    h.dispatch(INV)
+    h.dispatch(inv())
     back()
     expect(sent(h)).toEqual([{ msg: 'key', keycode: 27 }])
   })
@@ -767,13 +769,13 @@ describe('overlay-stack cross-reads', () => {
 
   it('a prompt floats over the map mid-cutoff, but is full-screen over a visible menu', () => {
     const cut = setup()
-    cut.dispatch(INV)
+    cut.dispatch(inv())
     cut.dispatch({ msg: 'ui_cutoff', cutoff: 1 })
     cut.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Really zap?' }, items: [] })
     expect(overlay(cut).classList.contains('overlay-float')).toBe(true)
     expect(shown(cut, '#map-grid')).toBe(true)
     const over = setup()
-    over.dispatch(INV)
+    over.dispatch(inv())
     over.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Really drop?' }, items: [] })
     expect(overlay(over).classList.contains('overlay-float')).toBe(false)
   })
@@ -786,18 +788,18 @@ describe('overlay-stack cross-reads', () => {
     expect(labels(shop)).toEqual(['⎋', 'Y', 'N'])
     shop.dispatch({ msg: 'input_mode', mode: 0 })
     expect(labels(shop)).toEqual(shopBar)
-    const inv = setup()
-    inv.dispatch(INV)
-    expect(shown(inv, '#menu-controls')).toBe(false)
-    inv.dispatch({ msg: 'input_mode', mode: 8 })
-    expect(shown(inv, '#menu-controls')).toBe(true)
-    inv.dispatch({ msg: 'input_mode', mode: 0 })
-    expect(shown(inv, '#menu-controls')).toBe(false)
+    const plain = setup()
+    plain.dispatch(inv())
+    expect(shown(plain, '#menu-controls')).toBe(false)
+    plain.dispatch({ msg: 'input_mode', mode: 8 })
+    expect(shown(plain, '#menu-controls')).toBe(true)
+    plain.dispatch({ msg: 'input_mode', mode: 0 })
+    expect(shown(plain, '#menu-controls')).toBe(false)
   })
 
   it('a monster-panel row tap under a cutoff-hidden menu closes the panel, no describe', () => {
     const h = setup()
-    h.dispatch(INV)
+    h.dispatch(inv())
     h.dispatch({ msg: 'ui_cutoff', cutoff: 1 })
     h.dispatch({ msg: 'map', cells: [{ x: 5, y: 5, g: 'o', col: 7, mon: { id: 1, name: 'orc', att: 1, type: 1 } }] })
     h.view.querySelector<HTMLElement>('#monster-list')!.click()
@@ -807,10 +809,29 @@ describe('overlay-stack cross-reads', () => {
     expect(overlay(h).querySelector('.mp-list')).toBeNull()
   })
 
+  it('the menu filter (title_prompt) types locally and sends once on Enter', () => {
+    const h = setup()
+    h.dispatch(inv())
+    h.dispatch({ msg: 'title_prompt', prompt: 'Search for what? ' })
+    h.dispatch({ msg: 'init_input', type: 'messages', prefill: '', maxlen: 80 })  // suppressed artifact
+    expect(msgLog(h).querySelector('.game-text-input-row')).toBeNull()
+    const field = () => overlay(h).querySelector<HTMLInputElement>('.menu-filter-input')
+    expect(field()).not.toBeNull()
+    h.dispatch({ msg: 'update_menu', title: { text: 'Inventory (filtered)' } })
+    expect(field()).not.toBeNull()                 // the title slot is still the field
+    h.dispatch({ msg: 'close_input' })             // suppressed artifact
+    field()!.value = 'wand'
+    h.send.mockClear()
+    field()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    expect(sent(h)).toEqual([{ msg: 'input', text: 'wand\r' }])
+    expect(field()).toBeNull()
+    expect(title(h)).toBe('Inventory (filtered)')
+  })
+
   // Single-stack order (tileweb.cc pop_menu pops the top frame of any kind).
   it('close_menu over [menu, CRT] ends the CRT and returns to the menu', () => {
     const h = setup()
-    h.dispatch(INV)
+    h.dispatch(inv())
     h.dispatch({ msg: 'menu', type: 'crt', tag: 'skills' })
     h.dispatch({ msg: 'close_menu' })
     expect(overlay(h).querySelector('#crt-display')).toBeNull()
@@ -821,7 +842,7 @@ describe('overlay-stack cross-reads', () => {
 
   it('closing a menu stacked on a describe returns to the describe, not the menu under it', () => {
     const h = setup()
-    h.dispatch(INV)
+    h.dispatch(inv())
     h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'a wand of flame', body: 'A magical device.' })
     h.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Really evoke?' }, items: [] })
     h.dispatch({ msg: 'close_menu' })
@@ -835,7 +856,7 @@ describe('overlay-stack cross-reads', () => {
     try {
       const h = setup()
       const items = Array.from({ length: 30 }, (_, i) => ({ level: 2, text: `${i}`, hotkeys: [97] }))
-      h.dispatch({ ...INV, flags: 0x40000, items })
+      h.dispatch({ ...inv(), flags: 0x40000, items })
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }))
       h.dispatch({ msg: 'go_lobby' })
       h.send.mockClear()
