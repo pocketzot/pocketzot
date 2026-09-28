@@ -292,7 +292,7 @@ export class MenuView {
       if (e.key === 'Enter') {
         e.preventDefault()
         // Submit via "input" (pty), not the 0.34+ "text_input" control message
-        // pre-0.34 engines drop — see the game view's showTextInput. No
+        // pre-0.34 engines drop — see MessageLog.showTextInput. No
         // prefill on a menu filter, so no Ctrl-U/Ctrl-K clear is needed.
         this.d.send({ msg: 'input', text: input.value + '\r' })
         this.closeFilter()

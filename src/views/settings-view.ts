@@ -424,7 +424,7 @@ function renderMsglogSection(body: HTMLElement): void {
   const preview = el('div', 'set-msglog-preview msglog-box')
   preview.setAttribute('aria-hidden', 'true')
   for (const line of SAMPLE_LINES) {
-    // Mirror appendMessage's row shape (game-view.ts): turn-mark slot plus
+    // Mirror the message log's row shape (message-log.ts row): turn-mark slot plus
     // dcssToHtml-rendered content, so metrics and colors match the real log.
     const p = el('p', 'game-msg')
     p.appendChild(el('span', 'msg-turn-mark', ' '))

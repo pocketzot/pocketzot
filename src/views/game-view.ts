@@ -26,7 +26,6 @@ import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { cursorInView, keepLocalCenter } from '../game/input/map-pan'
 import { uiColor, escHtml, dcssToHtml } from '../game/dcss-colors'
 import { htmlToRuns, exportScreenPng, screenSlug, type DcssRun } from './screen-export'
-import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
 import { extractSkillHotkeys } from './skill-hotkeys'
 import { reflowSkillCrt, plainText } from './skill-reflow'
 import { reflowOverview, isDungeonOverview } from './overview-reflow'
@@ -35,12 +34,12 @@ import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
 import { formatDcssVersion, isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
 import { renderTiles, appendIconOverlays, monsterTileSpec, prependDngnLayer, type TileRef } from '../game/tiles/tile-view'
 import { primeFingerprint } from '../game/tiles/atlas-dedup'
-import { downloadPackFile } from '../offline/save-transfer'
 import { OFFLINE_WS_URL } from '../offline/offline-state'
 import { CharacterRecord } from '../game/character-record'
 import { PopupStack, type PopupFrame } from '../game/popup-stack'
 import { MenuBar, menuTagHasBar } from './menu-bar'
 import { MenuView, SCROLL_SYNC_DEBOUNCE_MS } from './menu-view'
+import { MessageLog } from './message-log'
 import { MenuModel, isPromptFamily, type MenuMsg } from '../game/menu-model'
 import { compactPlace } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
@@ -398,20 +397,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const spellRail = document.createElement('div')
   spellRail.id = 'spell-rail'
   spellRail.style.display = 'none'
-  // The live prompt: the prompt rows of one msgs batch (see the msgs loop).
-  let activePromptEls: HTMLElement[] = []
-  // Armed by {msg:'dump'} (offline '#'); the msgs loop spends it on the
-  // engine's "Char dumped to …" line, which renders with a download button.
-  let pendingDumpFile: string | null = null
-  // Online twin: {msg:'dump', url} (process_handler.py:1180 broadcasts to
-  // player AND spectators, morgue_url servers only). Spent on the
-  // DGAMELAUNCH form of the log line (chardump.cc:1930 — no path online),
-  // which then opens the morgue URL. Unlike pendingDumpFile this survives
-  // msgs batches: the broadcast rides the control socket while the line
-  // rides the message flush, so their order isn't guaranteed — the dump
-  // case also decorates retroactively when the line arrived first.
-  const DUMP_OK_LINE = 'Char dumped successfully'
-  let pendingDumpUrl: string | null = null
   let inXMode = false
   let exitedXModeForInput = false
   // The server's last vgrdc. In X mode the view center may deliberately
@@ -542,117 +527,34 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // servers where neither is known yet at mount.
   maybeShowVersionNotice(gameId, loader?.version)
 
-  const msgLog = document.createElement('div')
-  msgLog.id = 'game-messages'
-  // Shared formatting with the settings-card log preview — see .msglog-box.
-  msgLog.className = 'msglog-box'
-  msgLog.addEventListener('click', (e) => {
-    if (isHarvesting()) return
-    if (uiOverlay.style.display === 'none' && !(e.target as HTMLElement).closest('button, input, .game-text-input-row')) {
-      // While --more-- is up the whole framed log is the dismiss target
-      // (Space); otherwise a tap opens scrollback (Ctrl-P).
-      conn.send({ msg: 'key', keycode: moreActive ? 32 : 16 })
-      focusView()
-    }
+  // The message log, --more--, prompt rows and the X-describe strip
+  // (./message-log.ts).
+  const messageLog = new MessageLog({
+    view,
+    send: (msg) => conn.send(msg),
+    focusView,
+    guardedFocus,
+    autoOpenKbd,
+    autoCloseKbdIfOurs,
+    harvesting: () => isHarvesting(),
+    overlayShown: () => uiOverlay.style.display !== 'none',
+    inXMode: () => inXMode,
+    // Spell-harvest line hooks (see ../game/spell-harvest onMsgLine):
+    // `true` = the line is the probe's own no-spells terminator ("You don't
+    // know any spells.") — the harvest just ended and the artifact line is
+    // swallowed so the player never sees our probe. The same hook watches
+    // for letter→spell map changes ("Spell assigned to…" / "Your memory of
+    // … unravels") and flags the rail stale; the msgs case's
+    // reharvestIfDirty resolves it.
+    onLine: (text) => {
+      if (harvester.onMsgLine(text)) return true
+      record.onMessageLine(text)
+      return false
+    },
+    readMorgue,
   })
-
-  // X-mode describe strip. Trunk (post-0.34) describes the cell under the
-  // level-map cursor via temporary messages (viewmap.cc _describe_cell):
-  // each cursor move sends one msgs batch — rollback of the previous cell's
-  // lines, a channel-2 keyboard prompt ("Press: ? - help, v - describe,
-  // . - travel"), then the Here:/items/feature/cloud lines on the examine
-  // channels. enterXMode hides the real log (the map goes full-bleed), so
-  // this strip mirrors each batch in the log's usual floating position,
-  // swapping the keyboard prompt for tappable buttons. Populated purely from
-  // wire traffic — servers that don't describe (≤0.34) never show it.
-  const xdescStrip = document.createElement('div')
-  xdescStrip.id = 'xdesc-strip'
-  xdescStrip.style.display = 'none'
-  const xdescLines = document.createElement('div')
-  const xdescActions = document.createElement('div')
-  xdescActions.className = 'xdesc-actions'
-  xdescActions.style.display = 'none'
-  xdescStrip.append(xdescLines, xdescActions)
-  // In landscape the X-mode minimap slot floats over the map and stacks on
-  // top of the strip (style.css .tc-xslot). Publish the strip's PEAK height
-  // this X session, not its live one: trunk rebuilds the strip per cursor
-  // move with 0–4 describe lines, and tracking that bounced the minimap up
-  // and down on every step.
-  // Grow-only means at most a few early rises; exitXMode resets it.
-  let xdescPeakH = 0
-  const setXdescPeak = (h: number): void => {
-    xdescPeakH = h
-    view.style.setProperty('--xdesc-h', `${h}px`)
-  }
-  new ResizeObserver(() => {
-    if (xdescStrip.offsetHeight > xdescPeakH) setXdescPeak(xdescStrip.offsetHeight)
-  }).observe(xdescStrip)
-
-  function xdescReset(): void {
-    xdescLines.textContent = ''
-    xdescActions.style.display = 'none'
-    xdescStrip.style.display = 'none'
-  }
-
-  // Rebuild the actions row from the wire prompt ("Press: ? - help,
-  // v - describe, . - travel"): the intro stays plain text and each
-  // "key - label" token becomes a button whose face IS that token, so the
-  // row reads like the reference line. Parsing the text (instead of a
-  // hardcoded row) keeps it honest against trunk rewording — an unparsable
-  // token stays text, and no buttons at all → false, so the caller renders
-  // the whole line as a plain one.
-  function xdescPromptRow(text: string): boolean {
-    const parsed = parsePromptText(text)
-    const intro = /^[^,<]*?:\s*/.exec(parsed.body)?.[0] ?? ''
-    const tokens = parsed.body.slice(intro.length).split(/,\s*/).map((tok) => {
-      const plain = stripDcss(tok).trim()
-      return { tok: tok.trim(), key: /^(\S)\s*-\s+\S/.exec(plain)?.[1] }
-    })
-    if (!tokens.some((t) => t.key)) return false
-    xdescActions.textContent = ''
-    xdescActions.style.color = parsed.color ?? ''
-    if (intro) {
-      const span = document.createElement('span')
-      span.textContent = intro
-      xdescActions.appendChild(span)
-    }
-    for (const t of tokens) {
-      if (t.key) appendActionBtn(xdescActions, t.tok, t.key)
-      else {
-        const span = document.createElement('span')
-        span.innerHTML = dcssToHtml(t.tok)
-        xdescActions.appendChild(span)
-      }
-    }
-    xdescActions.style.display = ''
-    return true
-  }
-
-  // Newest lines kept in the strip. Every message while the level map is up
-  // is temporary (viewmap.cc: msgwin_temporary_mode spans the session), and
-  // only a cursor move's _describe_cell rolls them back — so feedback from
-  // a key that doesn't move the cursor ("Okay, then." per cancelled G,
-  // canned_msg(MSG_OK)) piles up until then, in crawl too. The reference
-  // clips that pile to its fixed-height message window; this is our clip.
-  // 5 = a full describe's plain lines (Location, Here:, items, feature,
-  // cloud; the prompt rides the actions row), so a describe never loses one.
-  const XDESC_MAX_LINES = 5
-
-  function xdescAdd(text: string, channel?: number): void {
-    // The keyboard-hint prompt becomes the tappable row; match a substring
-    // of the wire text (same-turn messages can arrive glued onto one line),
-    // with markup stripped in case a future trunk decorates the hotkeys.
-    const isPrompt = channel === 2
-      && stripDcss(text).includes('v - describe')
-    if (!isPrompt || !xdescPromptRow(text)) {
-      const line = document.createElement('div')
-      line.className = 'xdesc-line'
-      line.innerHTML = dcssToHtml(text)
-      xdescLines.appendChild(line)
-      while (xdescLines.childElementCount > XDESC_MAX_LINES) xdescLines.firstElementChild!.remove()
-    }
-    xdescStrip.style.display = ''
-  }
+  const msgLog = messageLog.element
+  const xdescStrip = messageLog.xdescStrip
 
   const mapWrap = document.createElement('div')
   mapWrap.id = 'map-wrap'
@@ -850,24 +752,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   hud.appendChild(hudTop)
   hud.appendChild(statusView.element)
 
-  // --more-- shows as a row INSIDE the log plus a frame around the whole log
-  // (.more-active), matching where the reference puts it (webtiles' #more is
-  // an unstyled line directly below #messages; console prints it as the
-  // message window's last line). The floating #more-btn survives only for
-  // X mode, where the log is display:none. All presentation flows through
-  // syncMoreDisplay; state lives in moreActive, never the DOM.
-  let moreActive = false
-  const moreLine = document.createElement('p')
-  moreLine.id = 'msg-more'
-
-  const moreBtn = document.createElement('button')
-  moreBtn.id = 'more-btn'
-  moreBtn.style.display = 'none'
-  moreBtn.addEventListener('click', () => {
-    if (isHarvesting()) return
-    conn.send({ msg: 'key', keycode: 32 })
-    focusView()
-  })
+  const moreBtn = messageLog.moreButton
 
   // The d-pad calls this send directly (it doesn't dispatch a keydown), so
   // the menu-nav redirect has to happen here too — otherwise phone users get
@@ -1593,7 +1478,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         inventoryStore.update(msg.inv)
         statsView.update(msg)
         if (msg.status !== undefined) statusView.update(msg.status)
-        if (msg.time !== undefined) markLastMsg('turn')
+        if (msg.time !== undefined) messageLog.markLast('turn')
         if (!hudRevealed) {
           hudRevealed = true
           // Don't reveal the HUD while an overlay covers the screen: the
@@ -1633,7 +1518,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         } else {
           const text = String(raw['text'] ?? '')
           if (text.includes('\n')) showTxtPage(text)
-          else appendMessage(text)
+          else messageLog.append(text)
         }
         break
       }
@@ -1857,12 +1742,12 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         const prevInputMode = currentInputMode
         currentInputMode = msg.mode
         if (msg.mode === 1) {  // COMMAND: normal play resumed
-          hideMore()
-          disableActivePrompt()
-          removeTextInput()
+          messageLog.hideMore()
+          messageLog.disablePrompt()
+          messageLog.removeTextInput()
           // Reference only marks on the COMMAND transition, not on every
           // COMMAND-while-COMMAND repeat (game.js set_input_mode early-returns).
-          if (prevInputMode !== 1) markLastMsg('cmd')
+          if (prevInputMode !== 1) messageLog.markLast('cmd')
           harvester.maybeAutoHarvest()  // populate the spell rail on first entry to play
           harvester.reharvestIfDirty()  // refresh after a `=` reassign (or a deferred memorise/forget)
         }
@@ -1901,7 +1786,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         if (menuView.filterOpen) break
         if (msg.type === 'messages') {
           if (inXMode) { exitedXModeForInput = true; exitXMode() }
-          showTextInput(msg.prefill ?? '', msg.maxlen ?? 99, msg.tag)
+          messageLog.showTextInput(msg.prefill ?? '', msg.maxlen ?? 99, msg.tag)
         } else if (msg.type === 'generic' && msg.tag === 'skill_target') {
           // `type:"generic"` fires only for prompts inside a CRT menu, and
           // the only such prompt in DCSS 0.34 is the skill target editor.
@@ -1915,122 +1800,17 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         break
       }
 
-      case 'dump': {
-        // Mid-game '#' dump announcement. Offline the mini-server sends the
-        // stem; the engine's own "Char dumped to '<path>'." line follows in
-        // the same flush (verified: the starred dump precedes the msgs
-        // flush), so arm it for the msgs loop to decorate. Online servers
-        // send `url` (morgue URL sans extension, same convention as
-        // game_ended.dump): decorate the log line the same way, but
-        // order-tolerantly — if the line already landed as the newest row,
-        // link it in place; else arm for a coming flush.
-        if (msg.filename && readMorgue) pendingDumpFile = msg.filename
-        else if (msg.url) {
-          // Arm (superseding any stale arm), then attempt an immediate
-          // retro decorate. The retro path deliberately does NOT spend the
-          // arm: the newest row can be a STALE dump line (attach/reconnect
-          // replays message history as plain rows), with the real line
-          // still in flight. Double-decoration is harmless — the morgue
-          // URL is per-character and constant — so let the msgs loop spend
-          // the arm on the real line whenever one arrives.
-          pendingDumpUrl = msg.url + '.txt'
-          const newest = msgLog.querySelector<HTMLElement>('.game-msg')
-          if (newest && !newest.classList.contains('msg-dump-link')
-              && newest.textContent?.includes(DUMP_OK_LINE)) {
-            decorateDumpUrlRow(newest, pendingDumpUrl)
-          }
-        }
+      case 'dump':
+        messageLog.onDump(msg)
         break
-      }
 
-      case 'msgs': {
-        // The inline --more-- row must not be in the DOM while the batch
-        // merges: rollback pops firstChild N times and pushMsgRow prepends,
-        // both assuming the DOM head is the newest message row. Reattached
-        // below (a batch without a `more` key leaves the prior state up).
-        moreLine.remove()
-        if (msg.rollback) {
-          // msgLog is column-reverse: most-recent message is firstChild, so
-          // rollback (remove the last N appended) walks the DOM head.
-          let n = msg.rollback
-          while (n-- > 0 && msgLog.firstChild) msgLog.firstChild.remove()
-          // A rollback while examining is the cursor leaving a cell — the
-          // strip rebuilds from this batch's lines alone.
-          if (inXMode) xdescReset()
-        }
-        let promptBatch = false
-        for (const m of msg.messages ?? []) {
-          if (!m.text) continue
-          // Spell-harvest line hooks (see ../game/spell-harvest onMsgLine):
-          // `true` = the line is the probe's own no-spells terminator
-          // ("You don't know any spells.") — the harvest just ended and the
-          // artifact line is swallowed so the player never sees our probe.
-          // The same hook watches for letter→spell map changes ("Spell
-          // assigned to…" / "Your memory of … unravels") and flags the rail
-          // stale; reharvestIfDirty after this loop resolves it.
-          if (harvester.onMsgLine(m.text)) continue
-          record.onMessageLine(m.text)
-          // Mirror into the X-mode describe strip; the line ALSO takes the
-          // normal path below into the (hidden) real log, which is what
-          // keeps the server's rollback counts consistent on X-mode exit.
-          // In X mode the strip owns the visible/tappable prompt; the real
-          // log is hidden and only needs a placeholder node per message to
-          // keep rollback counts consistent, so skip the (invisible) prompt
-          // row + its buttons/listeners and append a plain line instead.
-          if (inXMode) xdescAdd(m.text, m.channel)
-          // One prompt = the MSGCH_PROMPT (2, mpr.h) lines of one batch. The
-          // engine never merges prompt lines (message.cc add: the merge is
-          // skipped for MSGCH_PROMPT, and each is flushed at once), so a
-          // multi-line prompt arrives as several lines of the batch sent
-          // before its key read — PromptMenu::show_in_msgpane (prompt.cc,
-          // RC prompt_menu = false) prints its option rows, then the title.
-          // Every row of the batch stays live. The first prompt line of a
-          // later batch means the engine has moved on, even when that line
-          // gets no buttons of its own: adjust's "Adjust to which letter?"
-          // writes its `?` hint as <white>?</white>, which PROMPT_TRIGGER_RE
-          // doesn't match, and the prior "(g)ear, (s)pells…" row stayed
-          // tappable under it.
-          if (m.channel === 2 && !promptBatch) {
-            disableActivePrompt()
-            promptBatch = true
-          }
-          // "dumped to" as well as the stem: the stem is the character's
-          // NAME, which many unrelated lines contain (welcome line, prompts
-          // naming the player) — and this branch outranks the prompt one.
-          if (!inXMode && pendingDumpFile !== null
-              && m.text.includes('dumped to') && m.text.includes(pendingDumpFile)) {
-            const row = makeDumpRow(m.text, pendingDumpFile)
-            pendingDumpFile = null
-            pushMsgRow(row)
-          } else if (!inXMode && pendingDumpUrl !== null
-              && m.text.includes(DUMP_OK_LINE)) {
-            const row = makeMsgRow(m.text, true)
-            decorateDumpUrlRow(row, pendingDumpUrl)
-            pendingDumpUrl = null
-            pushMsgRow(row)
-          } else if (!inXMode && m.channel === 2 && PROMPT_TRIGGER_RE.test(m.text)) {
-            const row = makePromptRow(m.text)
-            activePromptEls.push(row)
-            pushMsgRow(row)
-          } else {
-            appendMessage(m.text, true)
-          }
-        }
-        // The dump line lands in the FIRST msgs flush after {msg:'dump'}
-        // (verified: the starred dump precedes the flush in the same engine
-        // chunk, dispatched in order) — an arm that survived this batch has
-        // missed its line, so expire it rather than let a later line
-        // containing the character's name mis-decorate.
-        pendingDumpFile = null
-        if (msg.more) showMore(msg.more_text)
-        else if (msg.more === false) hideMore()
-        else if (moreActive) syncMoreDisplay()  // reattach as the bottom row
+      case 'msgs':
+        messageLog.onMsgs(msg)
         // A memorise/forget this frame leaves us at a command prompt (the delay
         // finished; no input_mode transition fires), so re-harvest now rather
         // than waiting for the next menu round-trip.
         harvester.reharvestIfDirty()
         break
-      }
 
       case 'cursor': {
         const id = msg.id
@@ -2056,7 +1836,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
       case 'close_input':
         if (menuView.filterOpen) break
-        removeTextInput()
+        messageLog.removeTextInput()
         removeNumpadInput()
         if (exitedXModeForInput) { exitedXModeForInput = false; enterXMode() }
         break
@@ -2156,7 +1936,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     inXMode = true
     view.classList.add('x-mode')  // drops the map's log-strip padding (style.css)
     msgLog.style.display = 'none'
-    syncMoreDisplay()  // a pending --more-- swaps to the floating button
+    messageLog.syncMore()  // a pending --more-- swaps to the floating button
     hud.style.display = 'none'
     renderSpellRail()  // drop the rail row (and the log's map overlay) for the examine map
     touchControls.enterXMode()
@@ -2197,10 +1977,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // vgrdc; a real exit's redraw then re-centers on the player.
     if (serverCenter && mapView.setViewCenter(serverCenter)) mapView.fullRender()
     view.classList.remove('x-mode')
-    syncMoreDisplay()  // a pending --more-- returns to the inline log row
-    xdescReset()
+    messageLog.syncMore()  // a pending --more-- returns to the inline log row
+    messageLog.xdescReset()
     xmodeMinimap.element.remove()
-    setXdescPeak(0)
+    messageLog.resetXdescPeak()
     touchControls.exitXMode()
     mapView.setFontScale(1.0)
     scheduleFit()
@@ -2689,10 +2469,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // auto/re-harvest fired during a `--more--` or a channel-2 prompt leaked a
   // stray keystroke into it (eating the pager/answering the prompt, or — for
   // a harvest — getting the `I` swallowed so the probe times out and clears
-  // the rail). `moreActive`/`activePromptEls` are exactly that missing state.
+  // the rail). The log's live prompt and --more-- are exactly that missing
+  // state.
   function uiQuiet(): boolean {
     return popups.empty && !dialogActive && !menus.active
-      && !inXMode && activePromptEls.length === 0 && !moreActive
+      && !inXMode && !messageLog.promptLive && !messageLog.moreActive
   }
 
   // Truly idle at the command prompt — safe to inject a keystroke that must
@@ -2708,7 +2489,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   function idleAtCommandPrompt(): boolean {
     return commandChannelIdle() && currentInputMode === 1
       && !monsterPanelOpen && !minimapOpen
-      && !msgLog.querySelector('.game-text-input-row')
+      && !messageLog.textInputOpen
       && numpadInput.style.display === 'none'
   }
 
@@ -3117,54 +2898,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     })
   }
 
-  function showMore(text?: string): void {
-    moreActive = true
-    const label = text || '--more--'
-    moreLine.textContent = label
-    moreBtn.textContent = label
-    syncMoreDisplay()
-  }
-
-  function hideMore(): void {
-    const wasActive = moreActive
-    moreActive = false
-    syncMoreDisplay()
-    // Re-pin to the newest line (column-reverse: offset 0). The log stays
-    // scrollable during the pause so a long --more-- text can be read, but
-    // with overflow-anchor off any offset left behind — a deliberate
-    // scroll-up or the hasty swipe-tap that dismissed it — would otherwise
-    // hold as a hidden newest row for the rest of the session. Gated on a
-    // real dismissal: input_mode COMMAND calls this every turn, and a
-    // scrollback the player is reading in normal play must survive that.
-    if (wasActive) msgLog.scrollTop = 0
-  }
-
-  // One renderer for both presentations: the inline log row + .more-active
-  // frame in normal play, the floating button in X mode (log hidden there).
-  // Also called by the msgs merge (reattach after detach) and the X-mode
-  // transitions, so a --more-- pending across enter/exit swaps presentation.
-  function syncMoreDisplay(): void {
-    const inline = moreActive && !inXMode
-    view.classList.toggle('more-active', inline)
-    if (inline) msgLog.prepend(moreLine)  // firstChild = visual bottom row
-    else moreLine.remove()
-    moreBtn.style.display = moreActive && inXMode ? '' : 'none'
-  }
-
-  function disableActivePrompt(): void {
-    for (const el of activePromptEls) {
-      el.querySelectorAll('button').forEach(b => { (b as HTMLButtonElement).disabled = true })
-    }
-    activePromptEls = []
-  }
-
-  function removeTextInput(): void {
-    const row = msgLog.querySelector<HTMLElement>('.game-text-input-row')
-    if (!row) return
-    row.remove()
-    autoCloseKbdIfOurs()
-  }
-
   function removeNumpadInput(): void {
     if (numpadInput.style.display === 'none') return
     numpadInput.style.display = 'none'
@@ -3254,132 +2987,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     numpadInput.appendChild(grid)
   }
 
-  function showTextInput(prefill: string, maxlen: number, tag?: string): void {
-    removeTextInput()
-    const row = document.createElement('p')
-    row.className = 'game-msg game-text-input-row'
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.className = 'game-text-input'
-    input.inputMode = 'none'
-    input.autocapitalize = 'off'
-    input.autocomplete = 'off'
-    input.spellcheck = false
-    input.value = prefill
-    input.maxLength = maxlen
-    input.addEventListener('keydown', (e) => {
-      e.stopPropagation()
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        // Submit via "input" (pty), not the 0.34+ "text_input" control message
-        // pre-0.34 engines silently drop. Any prefill (e.g. the old ally name)
-        // is still in the server's line reader with the cursor at its end, so
-        // we prepend Ctrl-U + Ctrl-K (kill-to-start 0x15, kill-to-end 0x0b) to
-        // wipe it. These ride INSIDE the same input message, not as separate
-        // "key" messages: "key" goes over the control socket and "input" over
-        // the pty, and a split submit could apply the text before the clears
-        // and wipe it. "repeat" has no prefill, so it skips the clear.
-        const text = (tag !== 'repeat' ? '\x15\x0b' : '') + input.value + '\r'
-        removeTextInput()
-        conn.send({ msg: 'input', text })
-        focusView()
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        removeTextInput()
-        conn.send({ msg: 'key', keycode: 27 })
-        focusView()
-      }
-    })
-    row.appendChild(input)
-    pushMsgRow(row, false)  // input row isn't pruned by the 50-row cap
-    requestAnimationFrame(() => guardedFocus(input))
-    autoOpenKbd()
-  }
-
-  function makePromptRow(text: string): HTMLElement {
-    const row = document.createElement('p')
-    row.className = 'game-msg game-prompt'
-    // Carry a prefix-glyph slot like other .game-msg rows so markLastMsg
-    // can land turn/cmd markers here too (matches reference, where every
-    // .game_message has a .prefix_glyph).
-    const mark = document.createElement('span')
-    mark.className = 'msg-turn-mark'
-    mark.textContent = ' '
-    row.appendChild(mark)
-    const parsed = parsePromptText(text)
-    if (parsed.color) row.style.color = parsed.color
-    // Trigger gate is wider than the per-token matcher, so a message can
-    // pass the gate without producing any buttons (e.g. the inventory
-    // "<w>?</w> for menu" hint sits mid-token). Fall back to rendering
-    // the body in one shot through dcssToHtml — that preserves any
-    // inline markup the comma/or split would have broken.
-    if (!parsed.hasButton) {
-      const body = document.createElement('span')
-      body.innerHTML = dcssToHtml(parsed.body)
-      row.appendChild(body)
-      return row
-    }
-    for (const seg of parsed.segments) {
-      if (seg.kind === 'text') {
-        const span = document.createElement('span')
-        span.innerHTML = dcssToHtml(seg.value)
-        row.appendChild(span)
-      } else {
-        appendActionBtn(row, seg.label, seg.key)
-      }
-    }
-    return row
-  }
-
-  // The '#' dump log line ("Char dumped to '<path>'." — chardump.cc:1932),
-  // kept verbatim and made tappable as a whole line: underlined once the
-  // dump's bytes are in hand, tap downloads them. Pre-read, then arm — the
-  // download must be synchronous inside its user activation, since an
-  // a.click() reached through a promise chain gets blocked on iOS whenever
-  // the readFile reply waits on a busy engine (records-view's ↓ pre-reads
-  // for the same reason). Deliberately no auto-download: on-device
-  // (2026-08-17) a share sheet opening under the still-down '#' finger
-  // swallowed the touchend and runaway key repeat queued sheets until the
-  // page died — the sheet may only ever follow a deliberate tap.
-  function makeDumpRow(text: string, stem: string): HTMLElement {
-    const row = makeMsgRow(text, true)
-    void readMorgue?.(stem).then((data) => {
-      if (!data) return // engine gone or file unreadable — stays a plain line
-      armDumpTap(row, () => {
-        downloadPackFile(new File([data], `${stem}.txt`, { type: 'text/plain' }))
-      })
-    })
-    return row
-  }
-
-  // Shared tap-the-whole-line arming for both dump kinds.
-  function armDumpTap(row: HTMLElement, onTap: () => void): void {
-    row.classList.add('msg-dump-link')
-    row.addEventListener('click', (e) => {
-      e.stopPropagation() // not also a log tap (--more-- advance)
-      onTap()
-      focusView()
-    })
-  }
-
-  // Online counterpart of makeDumpRow: the tap opens the server's morgue
-  // URL in a new tab. Deliberately a navigation, not a fetch — morgue files
-  // are served without CORS headers, so an in-app download can't work online.
-  function decorateDumpUrlRow(row: HTMLElement, url: string): void {
-    armDumpTap(row, () => { window.open(url, '_blank', 'noopener') })
-  }
-
-  function appendActionBtn(row: HTMLElement, label: string, key: string): void {
-    const btn = document.createElement('button')
-    btn.className = 'action-btn'
-    btn.innerHTML = dcssToHtml(label)
-    btn.addEventListener('click', () => {
-      conn.send({ msg: 'input', text: key })
-      focusView()
-    })
-    row.appendChild(btn)
-  }
-
   function buildActionsBar(actionsText: string): HTMLElement {
     const bar = document.createElement('div')
     bar.className = 'overlay-footer overlay-actions'
@@ -3407,55 +3014,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       }
     }
     return bar
-  }
-
-  // Mirrors the reference's `set_last_prefix_glyph` (messages.js): set the
-  // last message's prefix glyph to `_` and tag it `turn` or `cmd` so CSS
-  // can color it (lightgrey turn, darkgrey cmd). If both classes land on
-  // the same span the `turn` color wins, matching reference rule order.
-  function markLastMsg(kind: 'turn' | 'cmd'): void {
-    // msgLog is column-reverse: visual "last" = first .game-msg in DOM order
-    // (not :first-child — a non-message head node, e.g. the inline --more--
-    // row when a `player` time tick trails the msgs batch, must not eat the
-    // mark; the reference likewise marks its last .game_message, not the
-    // pane's last node).
-    const mark = msgLog.querySelector<HTMLElement>('.game-msg .msg-turn-mark')
-    if (!mark) return
-    mark.textContent = '_'
-    mark.classList.add(kind)
-  }
-
-  // msgLog uses flex column-reverse: the visual bottom (newest) is DOM
-  // firstChild and the visual top (oldest) is DOM lastChild, so prepend places
-  // a row at the visual bottom (the browser pins scroll there for free) and
-  // pruning the oldest means dropping the DOM lastChild. All message insertion
-  // goes through here so that convention — and the 50-row cap — lives in one
-  // place; reach for appendChild or prune firstChild elsewhere and the log
-  // silently inverts. (rollback walks the DOM head to match — the msgs
-  // handler detaches the --more-- row first so the head is a message row —
-  // and markLastMsg matches the first .game-msg, tolerating non-message
-  // head nodes.)
-  function pushMsgRow(node: Node, prune = true): void {
-    msgLog.prepend(node)
-    if (prune) while (msgLog.children.length > 50) msgLog.lastChild?.remove()
-  }
-
-  function makeMsgRow(text: string, html = false): HTMLElement {
-    const p = document.createElement('p')
-    p.className = 'game-msg'
-    const mark = document.createElement('span')
-    mark.className = 'msg-turn-mark'
-    mark.textContent = ' '
-    p.appendChild(mark)
-    const content = document.createElement('span')
-    if (html) content.innerHTML = dcssToHtml(text)
-    else content.textContent = text
-    p.appendChild(content)
-    return p
-  }
-
-  function appendMessage(text: string, html = false): void {
-    pushMsgRow(makeMsgRow(text, html))
   }
 
   // Everything this view installed outside its own subtree. Idempotent: the
