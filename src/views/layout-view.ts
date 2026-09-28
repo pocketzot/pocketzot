@@ -76,10 +76,13 @@ export class LayoutView {
     this.d = deps
   }
 
+  // The connection belongs to the next view after this: no more syncs.
   dispose(): void {
+    this.disposed = true
     if (this.scrollerSyncTimer !== undefined) window.clearTimeout(this.scrollerSyncTimer)
     this.scrollerSyncTimer = undefined
   }
+  private disposed = false
 
   get scrollerActive(): boolean {
     return this.d.topLayout()?.type === 'formatted-scroller'
@@ -378,7 +381,7 @@ export class LayoutView {
   }
 
   private scheduleScrollerSync(): void {
-    if (this.scrollerSyncTimer !== undefined) return
+    if (this.disposed || this.scrollerSyncTimer !== undefined) return
     this.scrollerSyncTimer = window.setTimeout(() => this.flushScrollerSync(), SCROLL_SYNC_DEBOUNCE_MS)
   }
 

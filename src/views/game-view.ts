@@ -1365,6 +1365,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       // blocks on an invisible prompt — a black screen.
       case 'show_dialog': {
         const html = msg.html ?? ''
+        // Like any server overlay, it supersedes the client panel and lens
+        // (see the ui-push case) — a panel flag left set would keep
+        // swallowing keys after hide_dialog.
+        closeClientOverlays()
         dialogActive = true
         renderOverlay('', () => {
           const body = document.createElement('div')
@@ -2463,8 +2467,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     renderOverlay,
     autoOpenKbd,
     focusView,
-    // Getters, not captured values: `loader` is reassigned on game_client
-    // and `spectating` on transition, both after this ctx is built.
+    // A getter, not a captured value: `loader` is reassigned on game_client,
+    // after this ctx is built.
     getLoader: () => loader,
     isSpectating: () => !!spectating,
   }

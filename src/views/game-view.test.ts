@@ -750,6 +750,17 @@ describe('overlay-stack cross-reads', () => {
     expect(isHidden(overlay(h))).toBe(false)
   })
 
+  it('a server dialog over the monster panel closes it; keys work after hide_dialog', () => {
+    const h = setup()
+    h.dispatch({ msg: 'map', cells: [{ x: 5, y: 5, g: 'o', col: 7, mon: { id: 1, name: 'orc', att: 1, type: 1 } }] })
+    h.view.querySelector<HTMLElement>('#monster-list')!.click()
+    h.dispatch({ msg: 'show_dialog', html: '<button data-key="N">No</button>' })
+    h.dispatch({ msg: 'hide_dialog' })
+    h.send.mockClear()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }))
+    expect(sent(h)).toEqual([{ msg: 'key', keycode: -253 }])
+  })
+
   it('an offline empty ui-stack snapshot leaves a server dialog up', () => {
     const h = setupOffline(() => Promise.resolve(null))
     h.dispatch({ msg: 'show_dialog', html: 'Transfer? <button data-key="N">No</button>' })
