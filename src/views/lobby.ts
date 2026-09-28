@@ -9,7 +9,7 @@ import { setLastSpectateServer } from '../prefs'
 import { fitToWidth } from './fit-terminal'
 import { openAboutDoc, openChangelogDoc, unreadDotHtml } from './docs'
 import { openSettings } from './settings-view'
-import { clearGameStart, FORCE_TERMINATE_WARNING, rememberGameStart } from '../reconnect'
+import { activeGameStart, clearGameStart, FORCE_TERMINATE_WARNING, rememberGameStart } from '../reconnect'
 import { classifyTransition } from '../ws/transition'
 import { isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
 import { attachScrollCue } from '../util/scroll-cue'
@@ -309,6 +309,23 @@ export function buildLobbyView(
       case 'go_lobby':
         abortGameStart()
         break
+      // The game we asked for ended before it started: a failed start sends
+      // game_ended then go_lobby with no game_started (trunk ws_handler.py
+      // _on_crawl_end; process_handler.py "Error while starting the Crawl
+      // process!"), so the lobby still owns the handler. Held for replay
+      // instead, it died in the go_lobby flush and Play silently did nothing.
+      case 'game_ended': {
+        const start = activeGameStart()
+        abortGameStart()
+        maybeShowExitDialog(view, {
+          reason: msg.reason,
+          message: msg.message,
+          dump: msg.dump,
+          spectated: start?.kind === 'watch',
+          spectatedName: start?.kind === 'watch' ? start.username : undefined,
+        })
+        break
+      }
       case 'auth_error':
         abortGameStart()
         noticeEl.textContent = msg.reason

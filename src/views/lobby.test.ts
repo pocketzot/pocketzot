@@ -10,6 +10,7 @@ import type { WsConnection } from '../ws/connection'
 import type { ServerMsg } from '../ws/types'
 import { getTileLoader } from '../game/tiles/tile-loader'
 import { getLastSpectateServer } from '../prefs'
+import { activeGameStart, rememberGameStart } from '../reconnect'
 
 // Regression coverage for the tile loader hand-off across the lobby→game
 // boundary. `game_client` (which carries the gamedata version) can arrive while
@@ -104,6 +105,37 @@ describe('lobby tile-loader hand-off', () => {
     const [spectating, loader] = onGameStart.mock.calls[0]
     expect(spectating).toBeUndefined()
     expect(loader).toBeUndefined()
+  })
+})
+
+// A failed start never mounts the game view: the server sends game_ended then
+// go_lobby with no game_started (trunk ws_handler.py _on_crawl_end), so the
+// lobby must show the exit dialog itself.
+describe('lobby game_ended before any game started', () => {
+  it('shows the reason and message of a failed play, and drops the start', () => {
+    const { dispatch, view, conn } = setupLobby()
+    rememberGameStart({ kind: 'play', gameId: 'dcss-test' },
+      { wsUrl: conn.wsUrl, username: 'tester', guest: false })
+
+    dispatch({ msg: 'game_ended', reason: 'error', message: 'Error while starting the Crawl process!' })
+    dispatch({ msg: 'go_lobby' })
+
+    expect(view.querySelector('.lobby-exit-reason')?.textContent)
+      .toBe('Unfortunately your game terminated due to an error.')
+    expect(view.querySelector('.lobby-exit-summary')?.textContent)
+      .toContain('Error while starting the Crawl process!')
+    expect(activeGameStart()).toBeNull()
+  })
+
+  it('names the spectated player when a watch attempt ends', () => {
+    const { dispatch, view, conn } = setupLobby()
+    rememberGameStart({ kind: 'watch', username: 'demo_player' },
+      { wsUrl: conn.wsUrl, username: 'tester', guest: false })
+
+    dispatch({ msg: 'game_ended', reason: 'saved' })
+
+    expect(view.querySelector('.lobby-exit-reason')?.textContent)
+      .toBe('demo_player stopped playing (saved).')
   })
 })
 
