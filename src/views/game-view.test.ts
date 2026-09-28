@@ -793,6 +793,29 @@ describe('overlay-stack cross-reads', () => {
     expect(overlay(h).querySelector('.mp-list')).toBeNull()
   })
 
+  // Single-stack order (tileweb.cc pop_menu pops the top frame of any kind).
+  it('close_menu over [menu, CRT] ends the CRT and returns to the menu', () => {
+    const h = setup()
+    h.dispatch(INV)
+    h.dispatch({ msg: 'menu', type: 'crt', tag: 'skills' })
+    h.dispatch({ msg: 'close_menu' })
+    expect(overlay(h).querySelector('#crt-display')).toBeNull()
+    expect(title(h)).toBe('Inventory')
+    h.dispatch({ msg: 'close_menu' })
+    expect(isHidden(overlay(h))).toBe(true)
+  })
+
+  it('closing a menu stacked on a describe returns to the describe, not the menu under it', () => {
+    const h = setup()
+    h.dispatch(INV)
+    h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'a wand of flame', body: 'A magical device.' })
+    h.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Really evoke?' }, items: [] })
+    h.dispatch({ msg: 'close_menu' })
+    expect(title(h)).toBe('a wand of flame')
+    h.dispatch({ msg: 'ui-pop' })
+    expect(title(h)).toBe('Inventory')
+  })
+
   it('after go_lobby the disposed view sends nothing, keys or debounced scrolls', () => {
     vi.useFakeTimers()
     try {
