@@ -127,6 +127,10 @@ const MF_PAGED_INVENTORY = 0x200000
 // 0.7 for now; tune in one place.
 const X_MODE_SCALE = 0.7
 
+// The engine's character-creation layouts (newgame.cc push_ui_layout); a
+// resumed view seeing one means the game it came back for is gone.
+const CREATION_PUSHES = new Set(['newgame-choice', 'seed-selection', 'newgame-random-combo'])
+
 // Identifies a spectated game when transitioning lobby → game. Carries only the
 // spectated player's name; the per-version tile loader is passed separately (see
 // the `initialLoader` param of buildGameView) because it's orthogonal to whether
@@ -147,6 +151,8 @@ export function buildGameView(
   // the engine's live FS by its wire stem. Presence of this callback is
   // also the gate for decorating the dump log line with a download button.
   readMorgue?: (filename: string) => Promise<Uint8Array<ArrayBuffer> | null>,
+  // Mounted by auto-resume (app.ts startResume) — see abandoningResume.
+  resumed = false,
 ): HTMLElement {
   const store = new MapStore()
   if (import.meta.env.DEV) (window as unknown as { __dcssStore: MapStore }).__dcssStore = store
@@ -402,6 +408,14 @@ export function buildGameView(
   // (offline that gap is the engine's final IDBFS persist, several frames).
   // Never reset: exitToLobby discards the whole view.
   let gameOverSeen = false
+  // Auto-resume only ever reattaches to the game we were in; it must never
+  // start one. The save is deleted before the end screens (end.cc end_game:
+  // delete_files), so a game that ended while we were away (backgrounded on
+  // a death screen, finished on another client) answers the replayed `play`
+  // with character creation. On a resumed view's first creation push, send
+  // go_lobby (the server stops the unstarted process) and drop everything
+  // until its go_lobby hands us to the lobby.
+  let abandoningResume = false
   // Wizard/explore latch for the anonymous outcome counters (src/counter.ts):
   // both modes can fabricate outcomes (wizmode conjures runes/the Orb, explore
   // removes death), so latching either excludes this session's won/dead/rune
@@ -1662,6 +1676,7 @@ export function buildGameView(
   conn.onMessage = handleMsg
 
   function handleMsg(msg: ServerMsg): void {
+    if (abandoningResume && msg.msg !== 'go_lobby' && msg.msg !== 'close') return
     switch (msg.msg) {
       // Both 0.34 and trunk send bare `layer` (client.js: "layer":
       // do_set_layer). `set_layer` is a defensive alias the server never
@@ -1901,6 +1916,11 @@ export function buildGameView(
       case 'ui-push': {
         disarmCreationGuard()  // an overlay rendered — see the 'txt' case
         const pushMsg = msg as unknown as UiPushMsg
+        if (resumed && !spectating && CREATION_PUSHES.has(pushMsg.type)) {
+          abandoningResume = true
+          conn.send({ msg: 'go_lobby' })
+          break
+        }
         if (pushMsg.type === 'game-over') gameOverSeen = true
         // The `%` overview lists every rune the character holds — the only
         // online source for runes picked up on another client (the pickup

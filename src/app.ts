@@ -234,7 +234,9 @@ function gameStartFlags(): CountFlags {
   }
 }
 
-function showGame(spectating?: SpectateTarget, loader?: TileLoader, gameId?: string): void {
+function showGame(
+  spectating?: SpectateTarget, loader?: TileLoader, gameId?: string, resumed = false,
+): void {
   count(spectating ? 'spectate' : 'play', gameStartFlags())
   state = 'game'
   setView(buildGameView(
@@ -245,6 +247,8 @@ function showGame(spectating?: SpectateTarget, loader?: TileLoader, gameId?: str
     currentUsername,
     gameId,
     currentIsGuest,
+    undefined,
+    resumed,
   ))
 }
 
@@ -301,7 +305,7 @@ function startResume(wsUrl: string): void {
         markProactiveClose()
         newConn.close()
       }
-      showGame(spectating, loader, gameId)
+      showGame(spectating, loader, gameId, true)
     },
     onLobby: (newConn, exit) => {
       resumeActive = false

@@ -217,6 +217,17 @@ describe('lifecycle gates', () => {
     expect(h.buildGameView).toHaveBeenCalledTimes(2)
   })
 
+  it('tells only the resumed view it was resumed (it must never start a game)', () => {
+    const conn = inGame()
+    conn.connected = false
+    conn.onClose()
+    const opts = h.attemptResume.mock.calls[0]![0] as { onGame: (c: unknown) => void }
+    opts.onGame(fakeConn())
+    const resumedArg = (call: unknown[]) => call[8]
+    expect(resumedArg(h.buildGameView.mock.calls[0]!)).toBe(false)
+    expect(resumedArg(h.buildGameView.mock.calls[1]!)).toBe(true)
+  })
+
   it('prefills the login form only when the account card is gone', () => {
     const conn = inGame()
     conn.connected = false

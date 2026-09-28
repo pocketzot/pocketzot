@@ -30,7 +30,7 @@ interface Harness {
   dispatch: (msg: unknown) => void
 }
 
-function setup(spectating?: SpectateTarget, gameId = ''): Harness {
+function setup(spectating?: SpectateTarget, gameId = '', resumed = false): Harness {
   const send = vi.fn()
   const conn = {
     wsUrl: 'wss://test.example/socket',
@@ -42,7 +42,7 @@ function setup(spectating?: SpectateTarget, gameId = ''): Harness {
     close: vi.fn(),
   } as unknown as WsConnection
   const onLobby = vi.fn()
-  const view = buildGameView(conn, onLobby, spectating, undefined, '', gameId)
+  const view = buildGameView(conn, onLobby, spectating, undefined, '', gameId, false, undefined, resumed)
   document.body.appendChild(view)
   return { view, send, onLobby, dispatch: (msg) => conn.onMessage(msg as ServerMsg) }
 }
@@ -1058,6 +1058,40 @@ describe('ui-push / ui-pop overlay stack', () => {
     // Another spectator's join: the reference ignores every snapshot after
     // the first (ui_stack_handled).
     h.dispatch({ msg: 'ui-stack', items: [] })
+    expect(isHidden(overlay(h))).toBe(false)
+  })
+})
+
+// The save is deleted before the end screens (end.cc end_game), so a resume's
+// replayed `play` for a game that ended while we were away gets character
+// creation. A resume must never start a game.
+describe('resume that lands in character creation', () => {
+  it.each(['newgame-choice', 'seed-selection', 'newgame-random-combo'])(
+    'a resumed view answers %s with go_lobby and shows nothing', (type) => {
+      const h = setup(undefined, 'dcss-git', true)
+      h.dispatch({ msg: 'ui-push', type, title: 'SPECIES' })
+      expect(h.send).toHaveBeenCalledWith({ msg: 'go_lobby' })
+      expect(isHidden(overlay(h))).toBe(true)
+      // Until the lobby takes over, the rest of creation is dropped.
+      h.dispatch({ msg: 'ui-pop' })
+      h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'JOB' })
+      expect(isHidden(overlay(h))).toBe(true)
+      expect(h.send).toHaveBeenCalledTimes(1)
+      h.dispatch({ msg: 'go_lobby' })
+      expect(h.onLobby).toHaveBeenCalledTimes(1)
+    })
+
+  it('a fresh Play still shows character creation', () => {
+    const h = setup(undefined, 'dcss-git')
+    h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
+    expect(h.send).not.toHaveBeenCalledWith({ msg: 'go_lobby' })
+    expect(isHidden(overlay(h))).toBe(false)
+  })
+
+  it('a resumed spectator still sees the watched player creating a character', () => {
+    const h = setup({ username: 'bob' }, '', true)
+    h.dispatch({ msg: 'ui-push', type: 'newgame-choice', title: 'SPECIES' })
+    expect(h.send).not.toHaveBeenCalledWith({ msg: 'go_lobby' })
     expect(isHidden(overlay(h))).toBe(false)
   })
 })

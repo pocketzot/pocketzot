@@ -10,7 +10,7 @@ import type { WsConnection } from '../ws/connection'
 import type { ServerMsg } from '../ws/types'
 import { getTileLoader } from '../game/tiles/tile-loader'
 import { getLastSpectateServer } from '../prefs'
-import { activeGameStart, rememberGameStart } from '../reconnect'
+import { activeGameStart, clearGameStart, rememberGameStart } from '../reconnect'
 
 // Regression coverage for the tile loader hand-off across the lobby→game
 // boundary. `game_client` (which carries the gamedata version) can arrive while
@@ -136,6 +136,15 @@ describe('lobby game_ended before any game started', () => {
 
     expect(view.querySelector('.lobby-exit-reason')?.textContent)
       .toBe('demo_player stopped playing (saved).')
+  })
+
+  it('ignores the late game_ended of a game already left (no start in flight)', () => {
+    // A client go_lobby lands us here before the stopped process's
+    // game_ended arrives; the lobby's mount cleared the start.
+    const { dispatch, view } = setupLobby()
+    clearGameStart()
+    dispatch({ msg: 'game_ended', reason: 'unknown' })
+    expect(view.querySelector('.lobby-exit-backdrop')).toBeNull()
   })
 })
 

@@ -314,8 +314,14 @@ export function buildLobbyView(
       // _on_crawl_end; process_handler.py "Error while starting the Crawl
       // process!"), so the lobby still owns the handler. Held for replay
       // instead, it died in the go_lobby flush and Play silently did nothing.
+      // Only a start still in flight is answered: entering the lobby clears
+      // it (app.ts showLobby), so with none this is the tail of a game we
+      // already left — a client go_lobby gets its go_lobby before the
+      // stopped process's game_ended (ws_handler.py go_lobby: stop is async;
+      // traced 2026-09-27 on a resume abandoning character creation).
       case 'game_ended': {
         const start = activeGameStart()
+        if (!start) break
         abortGameStart()
         maybeShowExitDialog(view, {
           reason: msg.reason,
