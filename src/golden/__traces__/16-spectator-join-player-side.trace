@@ -1,0 +1,9 @@
+start | overlay:none | shows:map,log,touch
+#8 player
+  = overlay:none | shows:map,log,hud,touch
+#13 ui-push type=describe-item
+  = overlay:full text="a - a +0 robe (worn).A large, loose-fit…" footer="(t)ake off(d)rop(=)adjust(i)nscribe" | shows:touch | touch:overlay-mode
+#14 ui-pop
+  = overlay:none | shows:map,log,hud,touch
+#18 input_mode mode=1
+  → {"msg":"input","text":"I"}

@@ -1,0 +1,11 @@
+start | overlay:none | shows:map,log,touch
+#1 menu tag=travel "Where to? (? - help)" items=1
+  = overlay:float(prompt-menu) text="Where to? (? - help) D - Dungeon" items=1 hover=0 | shows:map,log,touch | touch:overlay-mode
+#2 ui-push type=formatted-scroller tag=help
+  = overlay:full text="Interlevel Travel (choose a branch): Us…" | shows:touch | touch:overlay-mode
+#3 ui-pop
+  = overlay:float(prompt-menu) text="Where to? (? - help) D - Dungeon" items=1 hover=0 | shows:map,log,touch | touch:overlay-mode
+#4 close_menu
+  = overlay:none | shows:map,log,touch
+#6 input_mode mode=1
+  → {"msg":"input","text":"I"}

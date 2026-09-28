@@ -1,0 +1,24 @@
+{
+  "description": "Inventory menu with describe-item pushes over it: describe, Esc, switch category (Tab), describe, Esc, close",
+  "captured_from": "https://crawl.dcss.io (DCSS 0.34) on 2026-09-28",
+  "messages": [
+    {"msg":"input_mode","mode":0},
+    {"msg":"menu","ui-centred":false,"tag":"inventory","flags":2368002,"last_hovered":-1,"title":{"text":"<white>Gear: 1/52 gear slots    (Left/Right/Tab to switch category)"},"more":"<lightgrey>[<white>Up<lightgrey>|<white>Down<lightgrey>] select  [<white>PgDn<lightgrey>|<white>><lightgrey>] page down  [<white>PgUp<lightgrey>|<white><<<lightgrey>] page up  [<white>Esc<lightgrey>] exit<lightgrey>        <lightgrey>[<white>XXX<lightgrey>]<lightgrey>","alt_more":"","total_items":2,"chunk_start":0,"items":[{"text":"Potions        (go to first with <w>!</w><blue>)","colour":1,"level":1},{"text":" g - a potion of magic","q":1,"colour":14,"hotkeys":[103,33],"level":2,"tiles":[{"t":4279,"tex":4},{"t":4317,"tex":4}]},{"text":" d - 2 black potions","q":2,"colour":9,"hotkeys":[100,33],"level":2,"tiles":[{"t":4276,"tex":4}]}]},
+    {"msg":"menu_scroll","first":0,"last_hovered":1,"force":true},
+    {"title":"a - a +0 robe (worn).","body":"<lightgrey>\n\nA large, loose-fitting, wide-sleeved outer garment made of light cloth. It offers little protection against physical harm, but does not hinder evasion or spellcasting. \n\nBase armour rating: 2       Encumbrance rating: 0\n\nIt can be maximally enchanted to +2.\n\nIf you take off this armour:\nYour AC would decrease by 2.0 (2.0 -> 0.0).\nYour EV would remain unchanged.\n\n\nStash search prefixes: {inventory} {body armour} {body armor}\nMenu/colouring prefixes: identified equipped armour\n_________________\n\n<darkgrey>“CLEOPATRA: Give me my robe, put on my crown; I have\n Immortal longings in me”\n    -William Shakespeare, _Anthony & Cleopatra_, V, ii. ca. 1605.\n<lightgrey>SPELLSET_PLACEHOLDER","spellset":[],"actions":"(t)ake off, (d)rop, (=)adjust, or (i)nscribe.","tiles":[{"t":5209,"tex":4},{"t":3883,"tex":4}],"msg":"ui-push","type":"describe-item","ui-centred":false,"generation_id":3},
+    {"msg":"ui-pop"},
+    {"msg":"update_menu","more":"<lightgrey>[<white>Up<lightgrey>|<white>Down<lightgrey>] select  [<white>PgDn<lightgrey>|<white>><lightgrey>] page down  [<white>PgUp<lightgrey>|<white><<<lightgrey>] page up  [<white>Esc<lightgrey>] exit<lightgrey>        <lightgrey>[<white>XXX<lightgrey>]<lightgrey>","alt_more":""},
+    {"msg":"update_menu","total_items":3,"last_hovered":1},
+    {"msg":"update_menu_items","chunk_start":0,"items":[{"text":"Potions        (go to first with <w>!</w><blue>)","colour":1,"level":1},{"text":" g - a potion of magic","q":1,"colour":14,"hotkeys":[103,33],"level":2,"tiles":[{"t":4279,"tex":4},{"t":4317,"tex":4}]},{"text":" d - 2 black potions","q":2,"colour":9,"hotkeys":[100,33],"level":2,"tiles":[{"t":4276,"tex":4}]}]},
+    {"msg":"update_menu","title":{"text":"<white>Potions:     (Left/Right/Tab to switch category)"}},
+    {"msg":"menu_scroll","first":0,"last_hovered":1,"force":true},
+    {"title":"g - a potion of magic.","body":"<lightgrey>\n\nA valuable potion which grants an infusion of magical energy. \n\nIt is a rare potion.\n\nStash search prefixes: {inventory} {potion}\nMenu/colouring prefixes: identified emergency_item good_item potionSPELLSET_PLACEHOLDER","spellset":[],"actions":"(q)uaff, qui(v)er, (d)rop, (=)adjust, or (i)nscribe.","tiles":[{"t":4279,"tex":4},{"t":4317,"tex":4}],"msg":"ui-push","type":"describe-item","ui-centred":false,"generation_id":4},
+    {"msg":"ui-pop"},
+    {"msg":"close_menu"},
+    {"msg":"close_all_menus"},
+    {"msg":"close_all_menus"},
+    {"msg":"input_mode","mode":1},
+    {"msg":"map","cells":[{"x":-6,"y":-8,"mf":26},{"mf":26},{"mf":26},{"x":1,"y":-8,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":1,"y":-7,"mf":26},{"x":5,"y":-7,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":-6,"y":-6,"mf":26},{"x":1,"y":-6,"mf":26},{"x":4,"y":-6,"mf":26},{"mf":26},{"x":8,"y":-6,"mf":26},{"x":-10,"y":-5,"mf":26},{"x":4,"y":-5,"mf":26},{"x":8,"y":-5,"mf":26},{"x":8,"y":-4,"mf":26},{"x":8,"y":-3,"mf":26},{"x":8,"y":-2,"mf":26},{"x":8,"y":-1,"mf":26},{"x":3,"y":0,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":6,"y":1,"mf":26},{"x":4,"y":2,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":7,"y":3,"mf":26},{"x":7,"y":4,"mf":26},{"mf":26},{"x":0,"y":5,"mf":26},{"x":8,"y":5,"mf":26},{"x":-16,"y":6,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":-1,"y":6,"mf":26},{"mf":26},{"x":8,"y":6,"mf":26},{"x":-13,"y":7,"mf":26},{"x":-10,"y":7,"mf":26},{"x":0,"y":7,"mf":26},{"x":8,"y":7,"mf":26},{"x":-13,"y":8,"mf":26},{"x":-11,"y":8,"mf":26},{"mf":26},{"mf":26},{"x":-3,"y":8,"mf":26},{"x":8,"y":8,"mf":26}]}
+  ],
+  "expected": {"uiPushTypes": ["describe-item", "describe-item"]}
+}

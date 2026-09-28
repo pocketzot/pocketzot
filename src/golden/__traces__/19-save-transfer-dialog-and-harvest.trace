@@ -1,0 +1,12 @@
+start | overlay:none | shows:map,log,touch
+#2 show_dialog
+  = overlay:full text="[T]ransfer your save to the latest vers…" dialog | shows:touch | touch:overlay-mode
+#3 hide_dialog
+  = overlay:none | shows:map,log,touch
+#10 player
+  = overlay:none | shows:map,log,hud,touch
+#14 input_mode mode=1
+  → {"msg":"input","text":"I"}
+#18 menu tag=spell "Your spells (describe) Type Fai…" items=1
+  → {"msg":"key","keycode":27}
+  = overlay:none | shows:map,log,hud,touch | view:spell-row

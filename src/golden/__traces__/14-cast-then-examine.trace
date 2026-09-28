@@ -1,0 +1,16 @@
+start | overlay:none | shows:map,log,touch
+#1 msgs
+  = overlay:none | shows:map,log,touch | prompt[1]="Confirm with . or Enter, or press ? or * to lis…"
+#4 input_mode mode=1
+  → {"msg":"input","text":"I"}
+  = overlay:none | shows:map,log,touch
+#5 player
+  = overlay:none | shows:map,log,hud,touch
+#15 cursor id=0
+  = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@16,10
+#18 cursor id=0
+  = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@17,10
+#21 cursor id=0
+  = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@18,10
+#25 cursor id=0
+  = overlay:none | shows:map,log,hud,touch

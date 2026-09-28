@@ -1,0 +1,17 @@
+start | overlay:none | shows:map,log,touch
+#1 menu tag=inventory "Gear: 1/52 gear slots (Left/Rig…" items=3
+  = overlay:full text="Gear: 1/52 gear slots (Left/Right/Tab t…" items=2 | shows:touch | touch:overlay-mode
+#3 ui-push type=describe-item
+  = overlay:full text="a - a +0 robe (worn).A large, loose-fit…" footer="(t)ake off(d)rop(=)adjust(i)nscribe" | shows:touch | touch:overlay-mode
+#4 ui-pop
+  = overlay:full text="Gear: 1/52 gear slots (Left/Right/Tab t…" items=2 | shows:touch | touch:overlay-mode
+#8 update_menu "Potions: (Left/Right/Tab to swi…"
+  = overlay:full text="Potions: (Left/Right/Tab to switch cate…" items=2 | shows:touch | touch:overlay-mode
+#10 ui-push type=describe-item
+  = overlay:full text="g - a potion of magic.A valuable potion…" footer="(q)uaffqui(v)er(d)rop(=)adjust(i)nscribe" | shows:touch | touch:overlay-mode
+#11 ui-pop
+  = overlay:full text="Potions: (Left/Right/Tab to switch cate…" items=2 | shows:touch | touch:overlay-mode
+#12 close_menu
+  = overlay:none | shows:map,log,touch
+#15 input_mode mode=1
+  → {"msg":"input","text":"I"}

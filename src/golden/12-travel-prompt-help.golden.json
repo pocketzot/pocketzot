@@ -1,0 +1,16 @@
+{
+  "description": "Travel prompt (G) floats over the map; ? pushes the help scroller over it, Esc pops back to the floating prompt, Esc closes",
+  "captured_from": "https://crawl.dcss.io (DCSS 0.34) on 2026-09-28",
+  "messages": [
+    {"msg":"input_mode","mode":0},
+    {"msg":"menu","ui-centred":false,"tag":"travel","flags":1310786,"last_hovered":0,"title":{"text":"<white>Where to? (? - help) "},"more":"<lightgrey>[<white>Up<lightgrey>|<white>Down<lightgrey>] select  [<white>PgDn<lightgrey>|<white>><lightgrey>] page down  [<white>PgUp<lightgrey>|<white><<<lightgrey>] page up  [<white>Esc<lightgrey>] exit<lightgrey>        <lightgrey>[<white>XXX<lightgrey>]<lightgrey>","alt_more":"","total_items":1,"chunk_start":0,"items":[{"text":" D - Dungeon","q":1,"hotkeys":[68,100],"level":2}]},
+    {"tag":"help","text":"<yellow>Interlevel Travel (choose a branch):<lightgrey>\n Use the shortcut letter for a branch to select the branch for travel.\n\n Once you select a branch, you will be prompted for a depth in that\n branch (more help is available there).\n\n <white>Tab<lightgrey>    : Repeat last interlevel travel.\n <white>.<lightgrey>      : Travel to a level in the current branch.\n <white><<<lightgrey>      : Go up the nearest stairs.\n <white>><lightgrey>      : Go down the nearest stairs.\n <white>Ctrl-P<lightgrey> : Travel to a level in the branch above this one.\n <white>*<lightgrey>      : Show available waypoints (if any are set).\n <white>0<lightgrey>-<white>9<lightgrey>    : Go to the numbered waypoint.\n <white>_<lightgrey>      : Show available altars (if any are discovered).","highlight":"","more":"","title":"","easy_exit":true,"start_at_end":false,"msg":"ui-push","type":"formatted-scroller","ui-centred":false,"generation_id":3},
+    {"msg":"ui-pop"},
+    {"msg":"close_menu"},
+    {"msg":"close_all_menus"},
+    {"msg":"input_mode","mode":1},
+    {"msg":"msgs","messages":[{"text":"<cyan>Okay, then.<lightgrey>","turn":768,"channel":2}]},
+    {"msg":"map","cells":[{"x":-6,"y":-8,"mf":26},{"mf":26},{"mf":26},{"x":1,"y":-8,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":1,"y":-7,"mf":26},{"x":5,"y":-7,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":-6,"y":-6,"mf":26},{"x":1,"y":-6,"mf":26},{"x":4,"y":-6,"mf":26},{"mf":26},{"x":8,"y":-6,"mf":26},{"x":-10,"y":-5,"mf":26},{"x":4,"y":-5,"mf":26},{"x":8,"y":-5,"mf":26},{"x":8,"y":-4,"mf":26},{"x":8,"y":-3,"mf":26},{"x":8,"y":-2,"mf":26},{"x":8,"y":-1,"mf":26},{"x":3,"y":0,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":6,"y":1,"mf":26},{"x":4,"y":2,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":7,"y":3,"mf":26},{"x":7,"y":4,"mf":26},{"mf":26},{"x":0,"y":5,"mf":26},{"x":8,"y":5,"mf":26},{"x":-16,"y":6,"mf":26},{"mf":26},{"mf":26},{"mf":26},{"x":-1,"y":6,"mf":26},{"mf":26},{"x":8,"y":6,"mf":26},{"x":-13,"y":7,"mf":26},{"x":-10,"y":7,"mf":26},{"x":0,"y":7,"mf":26},{"x":8,"y":7,"mf":26},{"x":-13,"y":8,"mf":26},{"x":-11,"y":8,"mf":26},{"mf":26},{"mf":26},{"x":-3,"y":8,"mf":26},{"x":8,"y":8,"mf":26}]}
+  ],
+  "expected": {"uiPushTypes": ["formatted-scroller"]}
+}

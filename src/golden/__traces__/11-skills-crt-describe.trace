@@ -1,0 +1,17 @@
+start | overlay:none | shows:map,log,touch
+#1 menu type=crt tag=skills
+  = overlay:full crt rows=0 first="" | shows:bar[⎋ ! ⇧ * - _ = / ?] | view:menu-bar | touch:overlay-mode
+#2 txt id=menu_txt
+  = overlay:full text="Skill Level Cost Apt a - Fighting 0.0 1…" crt rows=24 first="Skill Level Cost Apt" | shows:bar[a b c d e f g h ⎋ ! ⇧ * - _ = / ?] | view:menu-bar | touch:overlay-mode
+#3 txt id=menu_txt
+  = overlay:full text="Skill Level Cost Apt a - Fighting 0.0 1…" crt rows=23 first="Skill Level Cost Apt" | shows:bar[a b c d e f g h ⎋ ! ⇧ * - _ = / ?] | view:menu-bar | touch:overlay-mode
+#4 ui-push type=describe-generic
+  = overlay:full text="Fire MagicFire Magic focuses mainly on …" | shows:bar[⎋ ! ⇧ * - _ = / ?] | view:menu-bar | touch:overlay-mode
+#5 ui-pop
+  = overlay:full text="Skill Level Cost Apt a - Fighting 0.0 1…" crt rows=23 first="Skill Level Cost Apt" | shows:bar[a b c d e f g h ⎋ ! ⇧ * - _ = / ?] | view:menu-bar | touch:overlay-mode
+#6 txt id=menu_txt
+  = overlay:full text="Skill Level Cost Apt a - Fighting 0.0 1…" crt rows=24 first="Skill Level Cost Apt" | shows:bar[a b c d e f g h ⎋ ! ⇧ * - _ = / ?] | view:menu-bar | touch:overlay-mode
+#7 close_menu
+  = overlay:none | shows:map,log,touch
+#10 input_mode mode=1
+  → {"msg":"input","text":"I"}

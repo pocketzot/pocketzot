@@ -1,0 +1,7 @@
+start | overlay:none | shows:map,log,touch
+#2 menu tag=prompt "Save game and exit?" items=2
+  = overlay:float(prompt-menu) text="Save game and exit? Y - Yes N - No" items=2 hover=1 | shows:map,log,touch | touch:overlay-mode
+#5 close_menu
+  = overlay:none | shows:map,log,touch
+#9 game_ended
+  ⇢ lobby {"reason":"saved","message":null,"dump":"https://crawl.dcss.io/crawl/morgue/Synthplayer/Synthplayer","spectated":false}

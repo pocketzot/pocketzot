@@ -1,0 +1,19 @@
+start | overlay:none | shows:map,log,touch
+#2 cursor id=2
+  = overlay:none | shows:map,touch | view:x-mode | cursor@16,10
+#5 cursor id=2
+  = overlay:none | shows:map,touch | view:x-mode | cursor@15,10
+#6 map
+  = overlay:none | shows:map,touch | view:x-mode | cursor@16,10
+#7 cursor id=2
+  = overlay:none | shows:map,touch | view:x-mode | cursor@15,10
+#8 map
+  = overlay:none | shows:map,touch | view:x-mode | cursor@16,10
+#9 cursor id=2
+  = overlay:none | shows:map,touch | view:x-mode | cursor@16,9
+#10 map
+  = overlay:none | shows:map,touch | view:x-mode | cursor@16,10
+#12 cursor id=2
+  = overlay:none | shows:map,log,touch
+#14 input_mode mode=1
+  → {"msg":"input","text":"I"}

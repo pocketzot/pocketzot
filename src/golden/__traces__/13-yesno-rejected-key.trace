@@ -1,0 +1,11 @@
+start | overlay:none | shows:map,log,touch
+#2 menu tag=prompt "Save game and exit?" items=2
+  = overlay:float(prompt-menu) text="Save game and exit? Y - Yes N - No" items=2 hover=1 | shows:map,log,touch | touch:overlay-mode
+#3 close_menu
+  = overlay:none | shows:map,log,touch
+#5 menu tag=prompt "Save game and exit?" items=2
+  = overlay:float(prompt-menu,prompt-menu-alert) text="Save game and exit? Y - Yes N - No[Y]es…" items=2 hover=1 footer="[Y]es or [N]o only, please." | shows:map,log,touch | touch:overlay-mode
+#7 close_menu
+  = overlay:none | shows:map,log,touch
+#11 input_mode mode=1
+  → {"msg":"input","text":"I"}

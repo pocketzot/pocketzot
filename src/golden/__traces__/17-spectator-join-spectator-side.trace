@@ -1,0 +1,11 @@
+start | overlay:none | shows:map,log | view:spectating
+#9 player
+  = overlay:none | shows:map,log,hud | view:spectating
+#12 ui-stack items=1
+  = overlay:full text="Gear: 1/52 gear slots (Left/Right/Tab t…" items=1 | shows:- | view:spectating
+#15 ui-push type=describe-item
+  = overlay:full text="a - a +0 robe (worn).A large, loose-fit…" footer="(t)ake off(d)rop(=)adjust(i)nscribe" | shows:- | view:spectating
+#16 ui-pop
+  = overlay:full text="Gear: 1/52 gear slots (Left/Right/Tab t…" items=1 | shows:- | view:spectating
+#17 close_menu
+  = overlay:none | shows:map,log,hud | view:spectating
