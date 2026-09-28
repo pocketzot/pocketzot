@@ -28,7 +28,6 @@ function glyphHtml(label: string): string {
 export interface MenuBarDeps {
   send(msg: ClientMsg): void
   focusView(): void
-  // Getter: the toggle's onChange repaints this bar, so it is built first.
   shift(): ShiftToggle
   // A (y/N) prompt is reading inside the open menu (input_mode YESNO).
   yesno(): boolean
@@ -159,7 +158,7 @@ export class MenuBar {
   // synthesized click, so phones respond instantly without double-firing)
   // with click as the mouse path — the only one that re-focuses the view.
   // Every bar button goes through here so the tap feel can't drift.
-  button(label: string, fire: () => void): HTMLButtonElement {
+  private button(label: string, fire: () => void): HTMLButtonElement {
     const btn = document.createElement('button')
     btn.className = 'menu-ctrl-btn'
     btn.innerHTML = glyphHtml(label)
@@ -202,24 +201,14 @@ export class MenuBar {
     row.innerHTML = ''
     const shiftOn = this.deps.shift().isOn
     for (const letter of letters) {
-      const btn = document.createElement('button')
-      btn.className = 'menu-ctrl-btn skill-letter-btn'
-      btn.textContent = shiftOn && /[a-z]/.test(letter) ? letter.toUpperCase() : letter
-      const fire = () => {
+      const shown = shiftOn && /[a-z]/.test(letter) ? letter.toUpperCase() : letter
+      const btn = this.button(shown, () => {
         const shift = this.deps.shift()
         const out = shift.isOn && /[a-z]/.test(letter) ? letter.toUpperCase() : letter
         this.deps.send({ msg: 'input', text: out })
         shift.consume()
-      }
-      btn.addEventListener('click', () => {
-        fire()
-        this.deps.focusView()
       })
-      btn.addEventListener('touchstart', (e) => {
-        e.preventDefault()
-        fire()
-      }, { passive: false })
-      bindPressedClass(btn)
+      btn.classList.add('skill-letter-btn')
       row.appendChild(btn)
     }
   }

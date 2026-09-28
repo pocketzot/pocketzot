@@ -100,6 +100,14 @@ describe('parsePromptText — in-pane option columns', () => {
       { label: '(L) Lair', key: 'L' },
     ])
   })
+
+  // The real wire shape: textcolour() per column, and to_colour_string
+  // (format.cc) emits an opening tag per change and no closing tags.
+  it('keeps each column’s own colour tag on its button', () => {
+    const r = parsePromptText('<cyan><lightgrey>(D) Dungeon          <lightgrey>(T) Temple           <lightgrey>')
+    expect(buttons(r.segments).map(b => b.key)).toEqual(['D', 'T'])
+    expect(buttons(r.segments)[1].label).toBe('<lightgrey>(T) Temple')
+  })
 })
 
 describe('parsePromptText — Adjust prompt (in-word parens)', () => {
@@ -139,5 +147,15 @@ describe('parsePromptText — known gap behavior', () => {
   it('"(* - delete all, Esc - exit)" mid-token: no buttons extracted (gap)', () => {
     const r = parsePromptText('<cyan>Delete which waypoint? (* - delete all, Esc - exit) ')
     expect(r.hasButton).toBe(false)
+  })
+
+  // prompt_invent_item (invent.cc) appends " (? for menu, Esc to quit)" to
+  // prompts that already end in a space, so the hint follows two spaces and
+  // the column split starts a token at it: the hint becomes a button that
+  // sends ?. Accepted widening; trunk and 0.34 mark it <white>?<cyan>,
+  // which the trigger doesn't match, so it can't reach the parser today.
+  it('a double-spaced "(? for menu" hint becomes a ? button', () => {
+    const r = parsePromptText('<cyan>Wield which item?  (? for menu, Esc to quit)')
+    expect(buttons(r.segments)).toEqual([{ label: '? for menu', key: '?' }])
   })
 })
