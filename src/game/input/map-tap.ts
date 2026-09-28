@@ -98,6 +98,9 @@ export interface MapGestures {
   // makes the rescale a zoom-out about the finger: the grabbed cell stays
   // put and the rest shrinks toward it. No-op once the finger has lifted.
   regrab(): void
+  // Removes the window listeners (the element's own die with it). Their
+  // closure pins `opts`, and through it the whole game view.
+  destroy(): void
 }
 
 // Binds to a stable ancestor of #map-grid (mapWrap in game-view, like the
@@ -229,6 +232,11 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): MapGes
       if (activePointer === null) return
       hit = opts.hitTester()
       grab(lastX, lastY)
+    },
+    destroy(): void {
+      cancel()
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
     },
   }
 }

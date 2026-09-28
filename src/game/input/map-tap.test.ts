@@ -182,6 +182,21 @@ describe('attachMapGestures', () => {
     expect(root.classList.contains('map-hold')).toBe(false)
   })
 
+  it('destroy removes every window listener it added and drops a pending hold', () => {
+    const add = vi.spyOn(window, 'addEventListener')
+    const remove = vi.spyOn(window, 'removeEventListener')
+    const { grid, presses, gestures } = setup()
+    const added = add.mock.calls.map(([type, fn]) => [type, fn])
+    expect(added.length).toBeGreaterThan(0)
+    fire(grid, 'pointerdown', 25, 35)
+    gestures.destroy()
+    vi.advanceTimersByTime(LONG_PRESS_MS + 50)
+    expect(presses).toEqual([])
+    expect(remove.mock.calls.map(([type, fn]) => [type, fn])).toEqual(added)
+    add.mockRestore()
+    remove.mockRestore()
+  })
+
   it('lifting before the hold threshold cancels the long-press', () => {
     const { grid, presses } = setup()
     fire(grid, 'pointerdown', 25, 35)

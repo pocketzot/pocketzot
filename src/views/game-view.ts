@@ -4709,8 +4709,15 @@ export function buildGameView(
     closeWatcher?.destroy()
     closeWatcher = null
     touchControls.destroy()
+    mapGestures.destroy()
     document.removeEventListener('keydown', docKeyHandler)
     compactMql.removeEventListener('change', syncMonsterCompact)
+    // The debounced senders would otherwise write to a connection the lobby
+    // (or the next view) now owns.
+    if (menuScrollSendTimer !== null) window.clearTimeout(menuScrollSendTimer)
+    if (scrollerSyncTimer !== undefined) window.clearTimeout(scrollerSyncTimer)
+    cancelTileGesture()
+    disarmCreationGuard()
   }
   registerViewDispose(view, dispose)
   return view
