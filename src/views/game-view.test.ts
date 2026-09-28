@@ -641,6 +641,176 @@ describe('ui_cutoff (engine runs the map under the popup stack)', () => {
   })
 })
 
+// Behaviours that read several overlay structures at once (menus, pushes,
+// CRT, cutoff, dialog, game-over): each one pinned before those structures
+// merge into one popup stack.
+describe('overlay-stack cross-reads', () => {
+  const INV = { msg: 'menu', tag: 'inventory', title: { text: 'Inventory' },
+    items: [{ level: 2, text: 'a - a wand of flame (15)', hotkeys: [97] }] }
+  const bar = (h: Harness) => h.view.querySelector<HTMLElement>('#menu-controls')!
+  const labels = (h: Harness) => [...bar(h).querySelectorAll<HTMLElement>('.menu-ctrl-btn')].map(b => b.textContent)
+  const title = (h: Harness) => overlay(h).querySelector('.overlay-title span')?.textContent
+  const shown = (h: Harness, sel: string) => !isHidden(h.view.querySelector<HTMLElement>(sel)!)
+  const sentI = (h: Harness) => sent(h).filter(m => m.msg === 'input' && (m as { text?: string }).text === 'I')
+  const back = () => (window as unknown as { __dcssBack: () => void }).__dcssBack()
+
+  it('the auto spell harvest waits while anything is open, a cutoff-hidden menu included', () => {
+    const states: Array<(h: Harness) => void> = [
+      (h) => h.dispatch(INV),
+      (h) => h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'x', body: 'y' }),
+      (h) => h.dispatch({ msg: 'menu', type: 'crt', tag: 'skills' }),
+      (h) => h.dispatch({ msg: 'show_dialog', html: '<button data-key="N">No</button>' }),
+      (h) => { h.dispatch(INV); h.dispatch({ msg: 'ui_cutoff', cutoff: 1 }) },
+    ]
+    for (const open of states) {
+      const h = setup()
+      open(h)
+      h.dispatch({ msg: 'input_mode', mode: 1 })
+      expect(sentI(h)).toEqual([])
+    }
+    const idle = setup()
+    idle.dispatch({ msg: 'input_mode', mode: 1 })
+    expect(sentI(idle)).toHaveLength(1)
+  })
+
+  it('back offers the save prompt only when idle; over a menu it is Esc', () => {
+    const h = setup()
+    h.dispatch({ msg: 'input_mode', mode: 1 })                  // auto harvest: I
+    h.dispatch({ msg: 'menu', tag: 'spell', items: [] })        // captured, Esc sent
+    h.dispatch({ msg: 'close_menu' })                           // swallowed
+    h.send.mockClear()
+    back()
+    expect(sent(h)).toEqual([{ msg: 'input', text: 'S' }])
+    h.send.mockClear()
+    h.dispatch(INV)
+    back()
+    expect(sent(h)).toEqual([{ msg: 'key', keycode: 27 }])
+  })
+
+  it('stash preview without a cutoff: the map replaces the results, Esc brings them back', () => {
+    const h = setup()
+    h.dispatch({ msg: 'menu', tag: 'stash', title: { text: 'Search results' }, flags: 0x40000,
+      items: [{ level: 2, text: 'a - a stone', hotkeys: [97] }] })
+    h.dispatch({ msg: 'cursor', id: 2, loc: { x: 5, y: 5 } })
+    expect(isHidden(overlay(h))).toBe(true)
+    expect(shown(h, '#map-grid') && shown(h, '#touch-controls')).toBe(true)
+    // Arrows reach the server (the cursor), not the hidden menu's hover.
+    h.send.mockClear()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }))
+    expect(sent(h)).toEqual([{ msg: 'key', keycode: -253 }])
+    h.dispatch({ msg: 'cursor', id: 2 })
+    expect(title(h)).toBe('Search results')
+    expect(shown(h, '#map-grid')).toBe(false)
+    expect(shown(h, '#menu-controls')).toBe(true)
+  })
+
+  it('an offline empty ui-stack snapshot leaves a server dialog up', () => {
+    const h = setupOffline(() => Promise.resolve(null))
+    h.dispatch({ msg: 'show_dialog', html: 'Transfer? <button data-key="N">No</button>' })
+    h.dispatch({ msg: 'ui-stack', items: [] })
+    expect(overlay(h).querySelector('.dialog-body')).not.toBeNull()
+    expect(isHidden(overlay(h))).toBe(false)
+  })
+
+  it('the game-over screen outlives every teardown the engine sends after it', () => {
+    const h = setup()
+    h.dispatch({ msg: 'ui-push', type: 'game-over', title: 'Goodbye', body: 'You die...' })
+    for (const m of [{ msg: 'ui-pop' }, { msg: 'close_menu' }, { msg: 'close_all_menus' }]) {
+      h.dispatch(m)
+      expect(title(h)).toBe('Goodbye')
+      expect(shown(h, '#map-grid') || shown(h, '#game-messages')).toBe(false)
+    }
+  })
+
+  it('a ui-state body swap keeps the title and the promoted (!)details action', () => {
+    const h = setup()
+    h.dispatch({ msg: 'ui-push', type: 'describe-monster', title: 'a rat',
+      body: 'A rat. (press \'!\' for details)', actions: '(v)iew.' })
+    const actionsText = () => overlay(h).querySelector('.overlay-actions')?.textContent ?? ''
+    expect(actionsText()).toContain('details')
+    h.dispatch({ msg: 'ui-state', type: 'describe-monster', body: 'Rat stats.' })
+    expect(title(h)).toBe('a rat')
+    expect(overlay(h).querySelector('.overlay-body')?.textContent).toContain('Rat stats.')
+    expect(actionsText()).toContain('details')
+  })
+
+  it('a txt page (no id) shows until close_all_menus', () => {
+    const h = setup()
+    h.dispatch({ msg: 'txt', text: 'line one\nline two' })
+    expect(isHidden(overlay(h))).toBe(false)
+    h.dispatch({ msg: 'close_all_menus' })
+    expect(isHidden(overlay(h))).toBe(true)
+  })
+
+  it('a server dialog is exempt from ui_cutoff, and a prompt over it does not float', () => {
+    const h = setup()
+    h.dispatch({ msg: 'show_dialog', html: '<button data-key="N">No</button>' })
+    h.dispatch({ msg: 'ui_cutoff', cutoff: 0 })
+    expect(overlay(h).querySelector('.dialog-body')).not.toBeNull()
+    h.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Sure?' }, items: [] })
+    expect(overlay(h).classList.contains('overlay-float')).toBe(false)
+  })
+
+  it('a prompt floats over the map mid-cutoff, but is full-screen over a visible menu', () => {
+    const cut = setup()
+    cut.dispatch(INV)
+    cut.dispatch({ msg: 'ui_cutoff', cutoff: 1 })
+    cut.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Really zap?' }, items: [] })
+    expect(overlay(cut).classList.contains('overlay-float')).toBe(true)
+    expect(shown(cut, '#map-grid')).toBe(true)
+    const over = setup()
+    over.dispatch(INV)
+    over.dispatch({ msg: 'menu', tag: 'prompt', title: { text: 'Really drop?' }, items: [] })
+    expect(overlay(over).classList.contains('overlay-float')).toBe(false)
+  })
+
+  it('YESNO inside a menu swaps its bar to ⎋ Y N and back', () => {
+    const shop = setup()
+    shop.dispatch({ msg: 'menu', tag: 'shop', title: { text: 'Shop' }, items: [] })
+    const shopBar = labels(shop)
+    shop.dispatch({ msg: 'input_mode', mode: 8 })
+    expect(labels(shop)).toEqual(['⎋', 'Y', 'N'])
+    shop.dispatch({ msg: 'input_mode', mode: 0 })
+    expect(labels(shop)).toEqual(shopBar)
+    const inv = setup()
+    inv.dispatch(INV)
+    expect(shown(inv, '#menu-controls')).toBe(false)
+    inv.dispatch({ msg: 'input_mode', mode: 8 })
+    expect(shown(inv, '#menu-controls')).toBe(true)
+    inv.dispatch({ msg: 'input_mode', mode: 0 })
+    expect(shown(inv, '#menu-controls')).toBe(false)
+  })
+
+  it('a monster-panel row tap under a cutoff-hidden menu closes the panel, no describe', () => {
+    const h = setup()
+    h.dispatch(INV)
+    h.dispatch({ msg: 'ui_cutoff', cutoff: 1 })
+    h.dispatch({ msg: 'map', cells: [{ x: 5, y: 5, g: 'o', col: 7, mon: { id: 1, name: 'orc', att: 1, type: 1 } }] })
+    h.view.querySelector<HTMLElement>('#monster-list')!.click()
+    h.send.mockClear()
+    overlay(h).querySelector<HTMLElement>('.mp-row')!.click()
+    expect(sent(h).filter(m => m.msg === 'click_cell')).toEqual([])
+    expect(overlay(h).querySelector('.mp-list')).toBeNull()
+  })
+
+  it('after go_lobby the disposed view sends nothing, keys or debounced scrolls', () => {
+    vi.useFakeTimers()
+    try {
+      const h = setup()
+      const items = Array.from({ length: 30 }, (_, i) => ({ level: 2, text: `${i}`, hotkeys: [97] }))
+      h.dispatch({ ...INV, flags: 0x40000, items })
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }))
+      h.dispatch({ msg: 'go_lobby' })
+      h.send.mockClear()
+      vi.advanceTimersByTime(500)
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', keyCode: 65, bubbles: true }))
+      expect(sent(h)).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('ui-push / ui-pop overlay stack', () => {
   it('renders a pushed overlay with title + body and shows the overlay', () => {
     const h = setup()
