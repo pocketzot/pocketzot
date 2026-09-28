@@ -1907,7 +1907,7 @@ export function buildGameView(
         const raw = msg as unknown as Record<string, unknown>
         const lines = raw['lines']
         if (raw['id'] && lines && typeof lines === 'object' && !Array.isArray(lines)) {
-          updateCrtLines(lines as Record<string, string>)
+          updateCrtLines(lines as Record<string, string>, raw['clear'] === true)
         } else {
           const text = String(raw['text'] ?? '')
           if (text.includes('\n')) showTxtPage(text)
@@ -3004,7 +3004,13 @@ export function buildGameView(
     }
   }
 
-  function updateCrtLines(lines: Record<string, string>): void {
+  function updateCrtLines(lines: Record<string, string>, clear: boolean): void {
+    // A forced redraw (WebTextArea::send, tileweb-text.cc:177) sends only its
+    // non-empty rows plus clear:true, so rows it omits are blank now — the
+    // reference empties them (text.js handle_text_update).
+    if (clear) {
+      for (const k of crtLines.keys()) if (!(k in lines)) crtLines.set(k, '')
+    }
     for (const [k, v] of Object.entries(lines)) {
       crtLines.set(Number(k), v)
     }

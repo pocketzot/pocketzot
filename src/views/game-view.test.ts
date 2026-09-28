@@ -1144,6 +1144,17 @@ describe('menu handler', () => {
     expect(overlay(h).querySelector('.crt-line')?.textContent).toBe('Skill screen')
   })
 
+  it('a clear:true txt blanks the rows it omits; a plain delta keeps them', () => {
+    const h = setup()
+    h.dispatch({ msg: 'menu', type: 'crt' })
+    h.dispatch({ msg: 'txt', id: 'crt', lines: { '0': 'one', '1': 'two', '2': 'three' } })
+    h.dispatch({ msg: 'txt', id: 'crt', lines: { '1': 'TWO' } })
+    const rows = () => [...overlay(h).querySelectorAll('.crt-line')].map(el => el.textContent)
+    expect(rows()).toEqual(['one', 'TWO', 'three'])
+    h.dispatch({ msg: 'txt', id: 'crt', clear: true, lines: { '1': 'redrawn' } })
+    expect(rows()).toEqual(['', 'redrawn', ''])
+  })
+
   it('close_menu pops the menu stack and hides the overlay when empty', () => {
     const h = setup()
     h.dispatch({ msg: 'menu', tag: 'inventory', title: { text: 'Inventory' }, items: [] })
