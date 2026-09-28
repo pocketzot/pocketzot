@@ -741,14 +741,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   hud.id = 'game-hud'
   // Hidden until the first `player` message — between layer:"game" and the
   // first stats payload the HUD would otherwise show empty HP/MP bars and
-  // floating AC/EV/SH/… captions with no values. One display-based mechanism:
-  // showHud() is the sole un-hide and no-ops until hudRevealed flips on that
-  // first message, so the overlay/X-mode restore paths can call it
-  // unconditionally without revealing the HUD early. Hide paths set
-  // display:none directly.
+  // floating AC/EV/SH/… captions with no values. applyLayout shows it only
+  // once hudRevealed flips on that first message.
   hud.style.display = 'none'
   let hudRevealed = false
-  const showHud = (): void => { if (hudRevealed) hud.style.display = '' }
   hud.appendChild(hudTop)
   hud.appendChild(statusView.element)
 
@@ -822,20 +818,56 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     yesno: () => currentInputMode === MOUSE_MODE_YESNO,
   })
   const menuControls = menuBar.element
-  // The bar REPLACES the touch panel. Portrait gets that from the inline
-  // hide on #touch-controls, but landscape forces the controls back to
-  // `display: contents` (see the style.css landscape block) so the d-pad
-  // can float beside a map-confined overlay — which also keeps .tc-panel in
-  // the sidebar's panel row, where it sizes the row to its 155px and this
-  // bar (same grid area) stretches to fill it: a lone ⎋ came out 160×147.
-  // The `menu-bar` view class is what lets landscape drop the panel while
-  // the bar is up; route every show/hide through here so the two can't
-  // drift.
-  function setMenuBar(on: boolean): void {
-    menuControls.style.display = on ? '' : 'none'
-    view.classList.toggle('menu-bar', on)
+
+  // Screen layout: which of the overlay, map, log, HUD, touch strip and menu
+  // bar show is one function of this state, applied in one place
+  // (applyLayout). Paths change the state and re-apply; none write those
+  // displays themselves.
+  //   overlayMode: the server overlay's presentation (enterOverlayLayout /
+  //     hideOverlay) — full-screen, or a float card over the live game.
+  //   touchHidden: the overlay has no use for the d-pad (newgame, CRT), or
+  //     the menu bar stands in for it.
+  //   menuBarOn: the menu-controls bar is up.
+  // Derived: X mode hides the log and HUD (the map goes full-bleed), and the
+  // stash-search preview — X mode with the stash results menu on top of the
+  // stack — shows the map and d-pad in place of that menu and its bar.
+  let overlayMode: 'none' | 'full' | 'float' = 'none'
+  let touchHidden = false
+  let menuBarOn = false
+  function applyLayout(): void {
+    const top = popups.top()
+    const stashPreview = inXMode && top?.kind === 'menu' && top.menu.tag === 'stash'
+    const overlayShown = overlayMode !== 'none' && !stashPreview
+    const playfield = overlayMode !== 'full' && !inXMode
+    uiOverlay.style.display = overlayShown ? '' : 'none'
+    mapView.element.style.display = overlayMode === 'full' && !stashPreview ? 'none' : ''
+    msgLog.style.display = playfield ? '' : 'none'
+    // Hidden until the first `player` message (hudRevealed).
+    hud.style.display = playfield && hudRevealed ? '' : 'none'
+    touchControls.element.style.display = touchHidden && !stashPreview ? 'none' : ''
+    // The bar REPLACES the touch panel. Portrait gets that from the inline
+    // hide on #touch-controls, but landscape forces the controls back to
+    // `display: contents` (see the style.css landscape block) so the d-pad
+    // can float beside a map-confined overlay — which also keeps .tc-panel
+    // in the sidebar's panel row, where it sizes the row to its 155px and
+    // this bar (same grid area) stretches to fill it: a lone ⎋ came out
+    // 160×147. The `menu-bar` view class is what lets landscape drop the
+    // panel while the bar is up, so the two are set together here.
+    const barShown = menuBarOn && !stashPreview
+    menuControls.style.display = barShown ? '' : 'none'
+    view.classList.toggle('menu-bar', barShown)
   }
-  setMenuBar(false)
+  function setMenuBar(on: boolean): void {
+    menuBarOn = on
+    applyLayout()
+  }
+  // The menu bar standing in for the touch strip.
+  function showMenuBarForStrip(): void {
+    menuBarOn = true
+    touchHidden = true
+    applyLayout()
+  }
+  applyLayout()
 
   const menuView = new MenuView({
     model: menus,
@@ -861,10 +893,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         // the from-normal-play case, so it floats too.
         || popups.covers(popups.depth - 1)),
     navBlocked: () => popups.has('crt') || inXMode,
-    showBar: () => {
-      setMenuBar(true)
-      touchControls.element.style.display = 'none'
-    },
+    showBar: showMenuBarForStrip,
     send: (msg) => conn.send(msg),
     focusView,
     guardedFocus,
@@ -1034,11 +1063,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     const shown = shownCursor()
     if (shown) next.setCursor(shown)
     next.setPlayerStats(playerStats)
-    // Carry the overlay layouts' hide: "map element displayed" is the
-    // sidebar minimap's map-on-screen test (repaintSidebarMinimap).
-    next.element.style.display = oldEl.style.display
     oldEl.replaceWith(next.element)
     mapView = next
+    // Carry the overlay layouts' hide: "map element displayed" is the
+    // sidebar minimap's map-on-screen test (repaintSidebarMinimap).
+    applyLayout()
     fontScaleObserver.observe(mapView.element)
     // Only preload once we hold this game's loader. If we're switching to tiles
     // before that — e.g. the persisted-pref application at build, or a gesture
@@ -1485,11 +1514,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
           // newgame-choice character-creation screens send `player` messages
           // carrying placeholder stats ("the Conjurer — Yak", 0/0 HP, …)
           // before any character exists. uiOverlay being shown is the signal
-          // a full overlay is up; when it closes, hideOverlay()/exitXMode()
-          // call showHud() (hudRevealed is now true) and reveal it then.
+          // a full overlay is up; when it closes, the next applyLayout
+          // (hudRevealed is now true) reveals it.
           if (uiOverlay.style.display === 'none') {
-            showHud()
-            // First fit, now that the HUD occupies its row (showHud above) and
+            applyLayout()
+            // First fit, now that the HUD occupies its row (applyLayout above) and
             // statsView/statusView have populated it this same message — so the
             // container is at its settled height. Synchronous (forces one
             // layout) so a `map` message later in this same WS batch renders
@@ -1935,9 +1964,16 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (!spectating) closeMinimap()
     inXMode = true
     view.classList.add('x-mode')  // drops the map's log-strip padding (style.css)
-    msgLog.style.display = 'none'
+    // Log and HUD hide. Stash-search activation opens an X-mode preview
+    // with the destination cursor: the results menu swaps out for the full
+    // map + d-pad so the player can see where they'd travel and confirm
+    // with Enter (see applyLayout); exitXMode brings the menu back, and
+    // close_menu / hideOverlay clean up if they Enter to travel instead.
+    applyLayout()
+    // The chip's overlay veto keys off uiOverlay's display — every toggle
+    // of it needs a resync or the chip lags until the next chat event.
+    chatView.syncChip()
     messageLog.syncMore()  // a pending --more-- swaps to the floating button
-    hud.style.display = 'none'
     renderSpellRail()  // drop the rail row (and the log's map overlay) for the examine map
     touchControls.enterXMode()
     // Hidden until its first paint (scheduleFit below schedules it) — a
@@ -1954,20 +1990,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // registration order, so this lands right after scheduleFit's, in the
     // same frame, before paint (a no-op when no finger is down).
     requestAnimationFrame(() => mapGestures.regrab())
-    // Stash-search activation opens an X-mode preview with the destination
-    // cursor: swap the results menu out for the full map + d-pad so the
-    // player can see where they'd travel and confirm with Enter. Restored
-    // by exitXMode when they Esc back to the menu; close_menu / hideOverlay
-    // takes care of cleanup if they Enter to travel and the menu closes.
-    if (menus.active?.tag === 'stash') {
-      uiOverlay.style.display = 'none'
-      setMenuBar(false)
-      mapView.element.style.display = ''
-      touchControls.element.style.display = ''
-      // The chip's overlay veto keys off uiOverlay's display — every toggle
-      // of it needs a resync or the chip lags until the next chat event.
-      chatView.syncChip()
-    }
   }
 
   function exitXMode(): void {
@@ -1985,20 +2007,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     mapView.setFontScale(1.0)
     scheduleFit()
     renderSpellRail()  // restore the quick-cast rail hidden by enterXMode
-    if (menus.active?.tag === 'stash') {
-      // Returning to the stash results menu: keep HUD/msglog hidden (they were
-      // hidden before the preview by renderOverlay, and the overlay layout
-      // expects them gone), swap map back for overlay + custom controls,
-      // re-hide the d-pad.
-      uiOverlay.style.display = ''
-      setMenuBar(true)
-      mapView.element.style.display = 'none'
-      touchControls.element.style.display = 'none'
-      chatView.syncChip()  // overlay back → chip veto re-engages
-    } else {
-      showHud()
-      msgLog.style.display = ''
-    }
+    // Log and HUD return — or, leaving a stash preview, the results menu
+    // and its bar replace the map and d-pad again.
+    applyLayout()
+    chatView.syncChip()
   }
 
   // --- ui-push handler ---
@@ -2234,12 +2246,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // letter row is derived from the CRT lines and isn't rebuilt here.
     if (menus.active && menuTagHasBar(menus.active.tag)) {
       menuBar.build(menus.active.tag, menus.active.flags)
-      setMenuBar(true)
-      touchControls.element.style.display = 'none'
+      showMenuBarForStrip()
     } else if (popups.topCrt()?.tag === 'skills') {
       menuBar.build('skills')
-      setMenuBar(true)
-      touchControls.element.style.display = 'none'
+      showMenuBarForStrip()
     }
   }
 
@@ -2677,35 +2687,25 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Set per render, not latched: the creation screens re-enter here for
     // every step, and the first in-game overlay (or hideOverlay) drops it.
     view.classList.toggle('newgame', opts?.screen === 'newgame')
-    uiOverlay.style.display = ''
+    // Float mode (prompt modal): the game shows through the dim backdrop —
+    // map, and outside X mode the log and HUD (applyLayout), which a
+    // covering full-screen overlay may have hidden (G → ? opens the travel
+    // help as a ui-push; its ui-pop re-floats this prompt): leaving them
+    // hidden would float the card over a black screen.
+    overlayMode = opts?.float ? 'float' : 'full'
+    touchHidden = opts?.touch === false
+    menuBarOn = false
+    applyLayout()
     touchControls.setOverlayMode(true)
     chatView.syncChip()
     if (opts?.float) {
-      // Float mode (prompt modal): the game shows through the dim backdrop.
-      // Restore playfield visibility the same way hideOverlay does — a
-      // covering full-screen overlay may have hidden it (G → ? opens the
-      // travel help as a ui-push; its ui-pop re-floats this prompt), and
-      // leaving the displays alone would float the card over a black
-      // screen. The inXMode guard keeps X-mode's own hidden log/HUD
-      // hidden (its map is visible regardless), and showHud respects the
-      // hudRevealed latch. Content goes into a reference-style bordered
-      // card instead.
+      // Content goes into a reference-style bordered card.
       overlayContent = document.createElement('div')
       overlayContent.className = 'overlay-card'
       uiOverlay.appendChild(overlayContent)
-      mapView.element.style.display = ''
-      if (!inXMode) {
-        msgLog.style.display = ''
-        showHud()
-      }
     } else {
       overlayContent = uiOverlay
-      mapView.element.style.display = 'none'
-      msgLog.style.display = 'none'
-      hud.style.display = 'none'
     }
-    touchControls.element.style.display = opts?.touch === false ? 'none' : ''
-    setMenuBar(false)
     menuBar.clear()
     scheduleMinimapRepaint()  // the sidebar minimap follows the map's display
   }
@@ -2863,21 +2863,17 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     autoCloseKbdIfOurs()
     setExportSource(null)
     newgameFocus = null
-    uiOverlay.style.display = 'none'
+    overlayMode = 'none'
+    touchHidden = false
+    menuBarOn = false
+    applyLayout()
     uiOverlay.innerHTML = ''
     uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert', 'overlay-float')
     backdropPress = false
     view.classList.remove('newgame')
     overlayContent = uiOverlay
     chatView.syncChip()  // chip retracts while an overlay is up; map's back
-    mapView.element.style.display = ''
-    setMenuBar(false)
     menuBar.clear()
-    if (!inXMode) {
-      msgLog.style.display = ''
-      showHud()
-    }
-    touchControls.element.style.display = ''
     touchControls.setOverlayMode(false)
     // Spectator lens restore. Cleared only on a successful reopen: overlay
     // teardown can interleave (hide_dialog fires under a still-stacked

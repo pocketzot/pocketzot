@@ -723,6 +723,21 @@ describe('overlay-stack cross-reads', () => {
     expect(shown(h, '#menu-controls')).toBe(true)
   })
 
+  it('leaving a cutoff-covered stash preview keeps the map until the cutoff lifts', () => {
+    const h = setup()
+    h.dispatch({ msg: 'menu', tag: 'stash', title: { text: 'Search results' }, flags: 0x40000,
+      items: [{ level: 2, text: 'a - a stone', hotkeys: [97] }] })
+    h.dispatch({ msg: 'ui_cutoff', cutoff: 1 })
+    h.dispatch({ msg: 'cursor', id: 2, loc: { x: 5, y: 5 } })
+    h.dispatch({ msg: 'cursor', id: 2 })
+    // The results menu is still cutoff-hidden: no empty overlay over the map.
+    expect(isHidden(overlay(h))).toBe(true)
+    expect(shown(h, '#map-grid')).toBe(true)
+    h.dispatch({ msg: 'ui_cutoff', cutoff: -1 })
+    expect(title(h)).toBe('Search results')
+    expect(shown(h, '#menu-controls')).toBe(true)
+  })
+
   it('an offline empty ui-stack snapshot leaves a server dialog up', () => {
     const h = setupOffline(() => Promise.resolve(null))
     h.dispatch({ msg: 'show_dialog', html: 'Transfer? <button data-key="N">No</button>' })

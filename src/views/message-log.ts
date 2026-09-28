@@ -63,13 +63,13 @@ export class MessageLog {
   // an unstyled line directly below #messages; console prints it as the
   // message window's last line). The floating button survives only for X
   // mode, where the log is display:none. All presentation flows through
-  // syncMore; state lives in moreActive, never the DOM.
+  // syncMore; state lives in `more`, never the DOM.
   private more = false
   private readonly moreLine = document.createElement('p')
   // The live prompt: the prompt rows of one msgs batch (see onMsgs).
   private livePrompt: HTMLElement[] = []
   // Armed by {msg:'dump'} (offline '#'); onMsgs spends it on the engine's
-  // "Char dumped to …" line, which renders with a download button.
+  // "Char dumped to …" line, which becomes a tap-to-download line.
   private pendingDumpFile: string | null = null
   // Online twin: {msg:'dump', url} (process_handler.py:1180 broadcasts to
   // player AND spectators, morgue_url servers only). Spent on the
@@ -361,9 +361,8 @@ export class MessageLog {
     this.setXdescPeak(0)
   }
 
-  // A tappable key button, as in prompt rows (and the game view's overlay
-  // action bars).
-  keyButton(label: string, key: string): HTMLButtonElement {
+  // A tappable key button, for prompt rows and the X-describe strip.
+  private keyButton(label: string, key: string): HTMLButtonElement {
     const btn = document.createElement('button')
     btn.className = 'action-btn'
     btn.innerHTML = dcssToHtml(label)
