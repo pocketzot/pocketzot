@@ -5,10 +5,11 @@ start | overlay:none | shows:map,log,touch
   = overlay:full text="Adjust which item?Potions (go to first …" items=2 | shows:touch | touch:overlay-mode
 #9 close_menu
   = overlay:none | shows:map,log,touch | prompt[6]="Adjust (g)ear, (s)pells, (a)bilities, (p)otions…"
+#11 msgs
+  = overlay:none | shows:map,log,touch
 #16 menu tag=inventory "Adjust to which letter?" items=3
   = overlay:full text="Adjust to which letter? Potions (go to …" items=2 | shows:touch | touch:overlay-mode
 #17 close_menu
-  = overlay:none | shows:map,log,touch | prompt[6]="Adjust (g)ear, (s)pells, (a)bilities, (p)otions…"
+  = overlay:none | shows:map,log,touch
 #24 input_mode mode=1
   → {"msg":"input","text":"I"}
-  = overlay:none | shows:map,log,touch

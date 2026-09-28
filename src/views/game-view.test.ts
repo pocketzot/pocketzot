@@ -110,6 +110,21 @@ describe('message log (msgs)', () => {
     expect(sent(h)).toContainEqual({ msg: 'input', text: 'S' })
   })
 
+  // Wire text from 10-adjust-under-cutoff: the follow-up prompt's hint is
+  // <white>-marked, so it renders plain — the earlier row must still retire.
+  it('a later prompt-channel line retires live buttons, even with none of its own', () => {
+    const h = setup()
+    h.dispatch({ msg: 'msgs', messages: [{ text: '<cyan>Adjust (g)ear, (s)pells or (p)otions?', channel: 2 }] })
+    const buttons = () => [...msgLog(h).querySelectorAll<HTMLButtonElement>('.game-prompt button')]
+    expect(buttons().length).toBeGreaterThan(0)
+    h.dispatch({ msg: 'msgs', messages: [{ text: '<lightgrey>g - a potion of magic', channel: 0 }] })
+    expect(buttons().every(b => !b.disabled)).toBe(true)
+    h.dispatch({ msg: 'msgs', messages: [{
+      text: '<cyan>Adjust to which letter?  (<white>?<cyan> for menu, <white>Esc<cyan> to quit)', channel: 2,
+    }] })
+    expect(buttons().every(b => b.disabled)).toBe(true)
+  })
+
   // The offline '#' dump line: {msg:'dump'} (mini-server synthesis) arms the
   // stem, and the engine's "Char dumped to '<path>'." line renders verbatim
   // as a whole-line tap target. The row PRE-READS through the readMorgue

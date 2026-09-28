@@ -2379,6 +2379,14 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
           // keep rollback counts consistent, so skip the (invisible) prompt
           // row + its buttons/listeners and append a plain line instead.
           if (inXMode) xdescAdd(m.text, m.channel)
+          // Any new MSGCH_PROMPT line (2, mpr.h) means the engine has moved
+          // past the prompt whose buttons are live, even when the new line
+          // gets no buttons of its own: adjust's "Adjust to which letter?"
+          // writes its `?` hint as <white>?</white>, which PROMPT_TRIGGER_RE
+          // doesn't match, and the prior "(g)ear, (s)pells…" row stayed
+          // tappable under it. Same-turn prompt mprs arrive joined on one
+          // line, so a separate line is never a continuation.
+          if (m.channel === 2) disableActivePrompt()
           // "dumped to" as well as the stem: the stem is the character's
           // NAME, which many unrelated lines contain (welcome line, prompts
           // naming the player) — and this branch outranks the prompt one.
@@ -2394,7 +2402,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
             pendingDumpUrl = null
             pushMsgRow(row)
           } else if (!inXMode && m.channel === 2 && PROMPT_TRIGGER_RE.test(m.text)) {
-            disableActivePrompt()
             const row = makePromptRow(m.text)
             activePromptEl = row
             pushMsgRow(row)
