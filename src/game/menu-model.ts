@@ -24,7 +24,7 @@ export interface MenuMsg {
   // unscrollable one is "" for singleselect), while a set_more() menu
   // writes the same string to both. That signature is how a prompt
   // reopened with yesno()'s error text is told apart from nav noise
-  // (see the game view's showMenu, promptMoreIsInfo).
+  // (see MenuView.show, promptMoreIsInfo).
   alt_more?: string
   // Authoritative item count. Inventory paging shrinks/grows this via
   // update_menu; we truncate the items list to match (otherwise stale

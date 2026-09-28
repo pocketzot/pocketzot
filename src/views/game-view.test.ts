@@ -1426,7 +1426,7 @@ describe('menu handler', () => {
 
   // The reference client keeps a covered menu's DOM (and thus its scroll)
   // alive in its popup stack; our single overlay frame rebuilds the list, so
-  // showMenu saves/restores the offset explicitly (menuScrollTops).
+  // MenuView saves/restores the offset explicitly (scrollTops).
   it('restores the inventory scroll position after a describe ui-push/ui-pop round trip', () => {
     const h = setup()
     h.dispatch({ msg: 'menu', tag: 'inventory', title: { text: 'Inventory' }, items: [
@@ -2509,7 +2509,7 @@ describe('monster panel → server selection menu hand-off', () => {
   const escKeydown = () => document.dispatchEvent(
     new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true } as KeyboardEventInit))
   // Multi-occupant examine menu: no arrow-select flags, so it routes through
-  // showMenu and the Esc guard rather than menu-nav.
+  // the plain menu path and the Esc guard rather than menu-nav.
   const examineMenu = {
     msg: 'menu', title: { text: 'Examine which?' },
     items: [{ text: 'an orc', hotkeys: [97] }, { text: 'a stone wall', hotkeys: [98] }],

@@ -40,16 +40,13 @@ import { OFFLINE_WS_URL } from '../offline/offline-state'
 import { CharacterRecord } from '../game/character-record'
 import { PopupStack, type PopupFrame } from '../game/popup-stack'
 import { MenuBar, menuTagHasBar } from './menu-bar'
-import {
-  MenuModel, MF_ARROWS_SELECT, MF_MULTISELECT, coalesceMenuItems, isPromptFamily,
-  type MenuItem, type MenuMsg,
-} from '../game/menu-model'
+import { MenuView, SCROLL_SYNC_DEBOUNCE_MS } from './menu-view'
+import { MenuModel, isPromptFamily, type MenuMsg } from '../game/menu-model'
 import { compactPlace } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
 import {
   renderBodyLines, propagateDarkgreyColor, unwrapHangingIndents, joinIndentedRuns,
-  splitGodPowerCosts, unpadMutationCategory, renderSpellbook, stripDcss, formatMore,
-  formatMoreHtml, computeScrollPos,
+  splitGodPowerCosts, unpadMutationCategory, renderSpellbook, stripDcss,
 } from './overlay-body'
 import { SpellHarvester, type SpellEntry } from '../game/spell-harvest'
 import { ChatView } from './chat-view'
@@ -343,7 +340,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const paintFrame = (f: PopupFrame<MenuMsg, UiPushMsg>): void => {
     if (f.kind === 'ui') showUiPush(f.push)
     else if (f.kind === 'crt') restoreCrt()
-    else showMenu(f.menu)
+    else menuView.show(f.menu)
   }
   // What belongs on screen right now, as one function of overlay state: the
   // stack's visible top, shared by every restore/repaint path (ui-pop,
@@ -420,14 +417,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // The server's last vgrdc. In X mode the view center may deliberately
   // differ from it (local drag-pan, map-pan.ts); exitXMode restores it.
   let serverCenter: { x: number; y: number } | null = null
-  // Menu filter input (Ctrl-F → "Search for what? (regex)"). Server sends a
-  // title_prompt to start one — and an init_input/close_input pair right
-  // alongside, because the resumable_line_reader inherits line_reader's
-  // start/abort hooks. Those are artifacts; the actual UI lives in the title
-  // and the typed text only goes to the server when the user presses Enter
-  // (see menu.js:730 in the reference client). titlePromptInput non-null =
-  // both that suppression and the local-only typing state.
-  let titlePromptInput: HTMLInputElement | null = null
   // One loc per server cursor id (cursor-type.h: 0 the direction chooser's
   // target, 1 tutorial, 2 the X level map), as the reference keeps
   // view_data.cursor_locs. Never collapse them into one slot: a spectator
@@ -917,7 +906,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     closeMonsterPanel: () => closeMonsterPanel(),
     minimapOpen: () => minimapOpen,
     closeMinimap: () => closeMinimap(),
-    menuNav: (nav) => menuNav(nav),
+    menuNav: (nav) => menuView.nav(nav),
     scrollerNav: (nav, page) => scrollerNav(nav, page),
     send: (msg) => { conn.send(msg); afterUserSend(msg) },
   }
@@ -962,6 +951,42 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     view.classList.toggle('menu-bar', on)
   }
   setMenuBar(false)
+
+  const menuView = new MenuView({
+    model: menus,
+    bar: menuBar,
+    shift: menuShift,
+    overlay: uiOverlay,
+    content: () => overlayContent,
+    renderOverlay,
+    // The PromptMenu family (isPromptFamily) floats as a modal over the
+    // still-visible game when arriving from normal play, like the reference
+    // .ui-popup: these questions are about the map you're standing on. A
+    // prompt fired while another menu/overlay owns the screen (shop purchase
+    // confirm, prompts over a CRT) keeps the full-screen treatment — the map
+    // isn't the context there, and un-hiding it would flash the wrong
+    // background. Asked before the menu is adopted; a re-render of the same
+    // prompt (ui-pop restore) stays floating.
+    floats: (msg) => isPromptFamily(msg) && !popups.has('ui')
+      && !popups.has('crt') && !dialogActive
+      && (menus.active === null || menus.active === msg
+        // Everything beneath this menu is cutoff-hidden (msg is already on
+        // the stack when it shows, so beneath = depth - 1): a prompt
+        // arriving mid-targeting is a question about the live map, exactly
+        // the from-normal-play case, so it floats too.
+        || popups.covers(popups.depth - 1)),
+    navBlocked: () => popups.has('crt') || inXMode,
+    showBar: () => {
+      setMenuBar(true)
+      touchControls.element.style.display = 'none'
+    },
+    send: (msg) => conn.send(msg),
+    focusView,
+    guardedFocus,
+    autoOpenKbd,
+    loader: () => loader,
+    spectating: !!spectating,
+  })
 
   // Share chip for exportable fixed-width screens (screen-export.ts): the `%`
   // overview and the end screen (the allowlist in showUiPush). A sibling of
@@ -1662,7 +1687,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         // cutoff must not hide the re-sent stack.
         popups.clear()
         menus.active = null
-        titlePromptInput = null  // its DOM goes with the menu being rebuilt
+        menuView.dropFilter()  // its DOM goes with the menu being rebuilt
         for (const item of items) handleMsg(item)
         // A snapshot with no layouts repaints its top frame; an empty one
         // must also clear a stale overlay (dialogs live outside the engine
@@ -1694,7 +1719,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         // the user was. Safe here, unlike inside restoreTopLayer: any list
         // in the DOM belongs to menus.active (the close_menu divergence can't
         // be in flight), and on pops the overlay is hidden so this no-ops.
-        captureMenuScroll()
+        menuView.captureScroll()
         popups.cutoff = msg.cutoff
         if (!gameOverSeen && !dialogActive) restoreTopLayer()
         break
@@ -1811,95 +1836,22 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         if (m.type === 'crt') showCrt(m.tag)
         else {
           popups.pushMenu(m, !!m.replace)
-          showMenu(m)
+          menuView.show(m)
         }
         break
       }
 
-      case 'update_menu': {
-        const m = msg as unknown as { more?: string; alt_more?: string; last_hovered?: number; total_items?: number; title?: { text: string } }
-        if (!menus.active) break
-        if (m.more !== undefined) {
-          menus.active.more = m.more
-          // Menu::update_more's webtiles send carries both template variants
-          // (webtiles_write_more writes more AND alt_more every time); keep
-          // ours current so updateMenuFooter derives from the right pair.
-          if (m.alt_more !== undefined) menus.active.alt_more = m.alt_more
-          // On a prompt popup a changed `more` is yesno()'s error channel
-          // (see menus.promptInitialMore) — un-hide the footer so the rejection
-          // ("Uppercase [Y]es or [N]o only, please.") is actually visible.
-          if (uiOverlay.classList.contains('prompt-menu') && m.more !== menus.promptInitialMore)
-            uiOverlay.classList.add('prompt-menu-alert')
-        }
-        // Deliberately no hover revalidation after a truncation: the list is
-        // transient scaffolding (the flip's real items land in the next
-        // update_menu_items, where revalidation runs — mirroring the
-        // reference, whose handle_size_change fires only from
-        // update_menu_items), and revalidating against it could send the
-        // server a menu_hover computed from half-updated rows.
-        if (m.total_items !== undefined && menus.setTotalItems(m.total_items)) {
-          updateMenuItems(menus.active)
-        }
-        if (m.title) {
-          menus.active.title = m.title
-          // Don't blow away the active filter input — the title slot is
-          // currently the prompt label. We'll re-render the title when the
-          // filter closes.
-          if (!titlePromptInput) {
-            const titleSpan = uiOverlay.querySelector<HTMLElement>('.overlay-title span')
-            if (titleSpan) titleSpan.textContent = stripDcss(m.title.text)
-          }
-        }
-        if (m.last_hovered !== undefined) applyServerHover(m.last_hovered)
-        // Derived unconditionally (the reference runs update_more on every
-        // update_menu): a total_items truncation changes scrollability and
-        // scroll position even when `more` itself didn't change.
-        updateMenuFooter()
+      case 'update_menu':
+        menuView.onUpdateMenu(msg as unknown as Parameters<MenuView['onUpdateMenu']>[0])
         break
-      }
 
-      case 'menu_scroll': {
-        const m = msg as unknown as { first?: number; last_hovered?: number; force?: boolean }
-        // Reference server_menu_scroll (menu.js:848): ignored entirely unless
-        // forced, or we're spectating and following the player's own pager.
-        // The engine force-sends its scroll position where it moved the cursor
-        // itself and the client can't infer it: a secondary-hotkey snap (an
-        // item-class glyph like ! or ? in an MF_SECONDARY_SCROLL menu, jumping
-        // to that class's block), examine-by-key onto an off-screen item,
-        // select-by-key, and cycle_headers (`,`). Note the paged inventory
-        // (MF_PAGED_INVENTORY) is not one of these — it flips categories on
-        // Left/Right/Tab, and its per-page item lists mean class glyphs find
-        // nothing to snap to.
-        // (The reference lets a spectator opt out by scrolling manually,
-        // following_player_scroll; we don't track that yet, so a spectator
-        // reading a long menu gets re-yanked when the player scrolls.)
-        if (!m.force && !spectating) break
-        if (m.first !== undefined) {
-          const el = menuListEl()
-          if (el) scrollMenuToItem(el, m.first)
-        }
-        if (m.last_hovered !== undefined) applyServerHover(m.last_hovered)
-        updateMenuFooter()
+      case 'menu_scroll':
+        menuView.onMenuScroll(msg as unknown as Parameters<MenuView['onMenuScroll']>[0])
         break
-      }
 
-      case 'update_menu_items': {
-        const m = msg as unknown as { chunk_start?: number; items?: MenuItem[] }
-        if (menus.active && m.items) {
-          const flip = menus.patchItems(m.chunk_start ?? 0, m.items)
-          // A flip starts the new category at its top — the engine's own
-          // set_page → reset() state — instead of inheriting the old
-          // category's scroll offset; in-place patches keep it.
-          updateMenuItems(menus.active, flip)
-          // Post-update hover sanity check (reference handle_size_change,
-          // which likewise fires only on update_menu_items); on a flip, then
-          // pull a carried-over visible hover into view (block:'nearest'),
-          // like the reference's set_hovered snap whenever its hover moves.
-          revalidateMenuHover()
-          if (flip && menus.hovered >= 0) highlightHoveredRow(true)
-        }
+      case 'update_menu_items':
+        menuView.onUpdateItems(msg as unknown as Parameters<MenuView['onUpdateItems']>[0])
         break
-      }
 
       case 'input_mode': {
         const prevInputMode = currentInputMode
@@ -1938,15 +1890,15 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         // `raw` is used for keycode capture in the macro editor — we don't
         // implement that, so treat it like close (do nothing / dismiss any
         // existing input).
-        if (msg.close || msg.raw) closeTitlePrompt()
-        else showTitlePrompt(msg.prompt ?? '')
+        if (msg.close || msg.raw) menuView.closeFilter()
+        else menuView.openFilter(msg.prompt ?? '')
         break
       }
 
       case 'init_input': {
         // Suppress the init/close pair that piggybacks on title_prompt — see
-        // titlePromptInput's declaration.
-        if (titlePromptInput) break
+        // MenuView's filterInput.
+        if (menuView.filterOpen) break
         if (msg.type === 'messages') {
           if (inXMode) { exitedXModeForInput = true; exitXMode() }
           showTextInput(msg.prefill ?? '', msg.maxlen ?? 99, msg.tag)
@@ -2103,7 +2055,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       }
 
       case 'close_input':
-        if (titlePromptInput) break
+        if (menuView.filterOpen) break
         removeTextInput()
         removeNumpadInput()
         if (exitedXModeForInput) { exitedXModeForInput = false; enterXMode() }
@@ -2125,8 +2077,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         popups.pop()
         const prev = popups.topMenu() ?? null
         menuShift.reset()
-        titlePromptInput = null
-        // Don't pre-assign menus.active = prev: showMenu must see the closing
+        menuView.dropFilter()
+        // Don't pre-assign menus.active = prev: menuView.show must see the closing
         // menu as `menus.active !== msg` so its fresh-look reset runs —
         // otherwise the closing menu's hover state (a stacked prompt's
         // seeded default, or user-driven hover) leaks into the restored
@@ -2140,9 +2092,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
             // not repaint it over the targeting map, and a CRT or layout
             // above it paints instead. Take the bookkeeping without the DOM
             // build, then let restoreTopLayer paint (or hide).
-            adoptMenu(prev)
+            menuView.adopt(prev)
             restoreTopLayer()
-          } else showMenu(prev)
+          } else menuView.show(prev)
         } else {
           menus.active = null
           restoreTopLayer()
@@ -2156,7 +2108,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         menus.active = null
         menuShift.reset()
         closeClientOverlays()
-        titlePromptInput = null
+        menuView.dropFilter()
         harvester.reset()
         if (!gameOverSeen) hideOverlay()
         break
@@ -2295,7 +2247,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   function showUiPush(msg: UiPushMsg): void {
-    captureMenuScroll()
+    menuView.captureScroll()
     // Standalone screens (game-overlays.ts) own their ui-push type wholesale;
     // everything after this block shares the title/body/actions frame below.
     if (msg.type === 'newgame-choice') {
@@ -2517,65 +2469,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     showUiPush(synthetic)
   }
 
-  // Menu filter (Ctrl-F → "Search for what? (regex)"). Reference webtiles
-  // client (menu.js:668-740) inlines an input field into the menu title and
-  // — unlike msgwin-get-line — does NOT echo characters to the server while
-  // typing; the whole string is sent as a single `input` message on Enter.
-  // Matching that here means we don't have to ferry per-key updates back to
-  // the server's resumable_line_reader (whose init_input/close_input pair we
-  // also suppress in the dispatcher above).
-  function showTitlePrompt(prompt: string): void {
-    const titleEl = uiOverlay.querySelector<HTMLElement>('.overlay-title')
-    if (!titleEl) return
-    titleEl.innerHTML = ''
-    const promptEl = document.createElement('span')
-    promptEl.className = 'menu-filter-prompt'
-    promptEl.innerHTML = dcssToHtml(prompt)
-    titleEl.appendChild(promptEl)
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.className = 'input-dialog-field menu-filter-input'
-    input.autocomplete = 'off'
-    input.autocapitalize = 'off'
-    input.spellcheck = false
-    input.inputMode = 'none'
-    input.addEventListener('keydown', (e) => {
-      e.stopPropagation()
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        // Submit via "input" (pty), not the 0.34+ "text_input" control message
-        // pre-0.34 engines drop — see showTextInput. No prefill on a menu
-        // filter, so no Ctrl-U/Ctrl-K clear is needed.
-        conn.send({ msg: 'input', text: input.value + '\r' })
-        closeTitlePrompt()
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        conn.send({ msg: 'key', keycode: 27 })
-        closeTitlePrompt()
-      }
-    })
-    titleEl.appendChild(input)
-    titlePromptInput = input
-    autoOpenKbd()
-    requestAnimationFrame(() => guardedFocus(input))
-  }
-
-  function closeTitlePrompt(): void {
-    if (!titlePromptInput) return
-    titlePromptInput = null
-    const titleEl = uiOverlay.querySelector<HTMLElement>('.overlay-title')
-    if (titleEl && menus.active) {
-      titleEl.innerHTML = ''
-      const span = document.createElement('span')
-      span.textContent = stripDcss(menus.active.title?.text ?? '')
-      titleEl.appendChild(span)
-    }
-  }
-
   // --- CRT handler ---
 
   function showCrt(tag?: string): void {
-    captureMenuScroll()
+    menuView.captureScroll()
     popups.pushCrt(tag)
     menuShift.reset()
     mountCrtEl()
@@ -2650,172 +2547,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       crtLines.set(Number(k), v)
     }
     renderCrtEl()
-  }
-
-  // --- menu handler ---
-
-  // scroll=false when the caller already positioned the list (paging) and
-  // scrollIntoView would fight the manual scroll.
-  function highlightHoveredRow(scroll = true): void {
-    uiOverlay.querySelectorAll<HTMLElement>('.item-hovered').forEach(el => el.classList.remove('item-hovered'))
-    const el = uiOverlay.querySelector<HTMLElement>(`[data-menu-idx="${menus.hovered}"]`)
-    if (el) {
-      el.classList.add('item-hovered')
-      if (scroll) el.scrollIntoView({ block: 'nearest' })
-    }
-  }
-
-  function applyServerHover(raw: number): void {
-    const scroll = menus.serverHoverReport(raw)
-    if (scroll !== null) highlightHoveredRow(scroll)
-  }
-
-  // After an item update (menus.revalidate): a hover moved to the next
-  // selectable row is sent like any user move; a cleared one just unpaints.
-  function revalidateMenuHover(): void {
-    const next = menus.revalidate()
-    if (next === null) return
-    if (next >= 0) setMenuHover(next)
-    else highlightHoveredRow(false)
-  }
-
-  function setMenuHover(idx: number, scroll = true): void {
-    const send = menus.moveHover(idx)
-    if (send === null) return
-    highlightHoveredRow(scroll)
-    // Drive the server's cursor directly instead of letting it cycle_hover
-    // off a forwarded arrow key (which is hotkey-blind). Do not also forward
-    // the raw key — that would double-move.
-    if (send) conn.send({ msg: 'menu_hover', hover: idx, mouse: false })
-  }
-
-  function cycleMenuHover(reverse: boolean): void {
-    setMenuHover(menus.cycleTarget(reverse))
-  }
-
-  function menuListEl(): HTMLElement | null {
-    return uiOverlay.querySelector<HTMLElement>('.overlay-list')
-  }
-
-  // The rendered rows whose box intersects the list viewport, in DOM order
-  // (= server-index order; continuations/headers carry no data-menu-idx).
-  function visibleMenuRows(el: HTMLElement): HTMLElement[] {
-    const lr = el.getBoundingClientRect()
-    const rows: HTMLElement[] = []
-    for (const r of el.querySelectorAll<HTMLElement>('[data-menu-idx]')) {
-      const rr = r.getBoundingClientRect()
-      if (rr.top >= lr.bottom - 1) break  // DOM order: the rest are below the fold
-      if (rr.bottom > lr.top + 1) rows.push(r)
-    }
-    return rows
-  }
-
-  function firstSelectableVisibleIdx(el: HTMLElement): number {
-    for (const r of visibleMenuRows(el)) {
-      const i = Number(r.dataset.menuIdx)
-      if (menus.selectable(menus.active?.items?.[i])) return i
-    }
-    return -1
-  }
-
-  // Webtiles menu paging is client-side; the server only needs the resulting
-  // visible range + hover so it can stream item chunks for large/lazy menus
-  // (reference update_server_scroll). Harmless no-op for fully-loaded menus.
-  function sendMenuScroll(el: HTMLElement): void {
-    const vis = visibleMenuRows(el)
-    if (vis.length === 0) return
-    conn.send({
-      msg: 'menu_scroll',
-      first: Number(vis[0].dataset.menuIdx),
-      last: Number(vis[vis.length - 1].dataset.menuIdx),
-      hover: menus.serverHover,
-    })
-  }
-
-  // Scroll offsets of menus covered by another overlay (describe ui-push,
-  // stacked menu, CRT), keyed by the covered MenuMsg so re-showing the same
-  // menu restores where the user was. The reference client gets this for
-  // free — its popup stack keeps the covered menu's DOM alive — but our
-  // single overlay frame rebuilds the list, so save/restore explicitly.
-  const menuScrollTops = new WeakMap<MenuMsg, number>()
-
-  // Callers must only capture while the DOM list belongs to menus.active. The
-  // one path where they diverge is close_menu — menus.active is reassigned to
-  // the outer menu while the popped inner one is still in the DOM — which
-  // showMenu sidesteps by skipping capture when re-showing menus.active itself
-  // (the covering overlay there is never a menu list anyway).
-  function captureMenuScroll(): void {
-    const el = menuListEl()
-    if (el && menus.active) menuScrollTops.set(menus.active, el.scrollTop)
-  }
-
-  // Align the first indexed row at-or-after `index` with the top of the
-  // list (reference scroll_to_item; headers/continuations carry no index).
-  function scrollMenuToItem(el: HTMLElement, index: number): void {
-    const listTop = el.getBoundingClientRect().top
-    for (const row of el.querySelectorAll<HTMLElement>('[data-menu-idx]')) {
-      if (Number(row.dataset.menuIdx) < index) continue
-      el.scrollTop += row.getBoundingClientRect().top - listTop
-      return
-    }
-  }
-
-  // Debounced scroll reporter (reference schedule_server_scroll): keeps the
-  // engine's first-visible current so a re-sent menu's jump_to points where
-  // the user actually was, and lets spectators follow our menu scrolling.
-  let menuScrollSendTimer: number | null = null
-  function scheduleMenuScrollSend(): void {
-    if (menuScrollSendTimer !== null) return
-    menuScrollSendTimer = window.setTimeout(() => {
-      menuScrollSendTimer = null
-      const el = menuListEl()
-      if (el && menus.active) sendMenuScroll(el)
-    }, SCROLLER_SYNC_DEBOUNCE_MS)
-  }
-
-  function pageMenu(up: boolean): void {
-    const el = menuListEl()
-    if (!el) return
-    const max = Math.max(0, el.scrollHeight - el.clientHeight)
-    const delta = Math.max(40, el.clientHeight - 24)  // slight overlap
-    el.scrollTop = Math.min(max, Math.max(0, el.scrollTop + (up ? -delta : delta)))
-    const target = up && el.scrollTop <= 0 ? menus.firstSelectable()
-      : !up && el.scrollTop >= max - 1 ? menus.lastSelectable()
-      : firstSelectableVisibleIdx(el)
-    if (target >= 0) setMenuHover(target, false)
-    scheduleMenuScrollSend()
-  }
-
-  function jumpMenu(toEnd: boolean): void {
-    const el = menuListEl()
-    if (!el) return
-    el.scrollTop = toEnd ? el.scrollHeight : 0
-    setMenuHover(toEnd ? menus.lastSelectable() : menus.firstSelectable(), false)
-    scheduleMenuScrollSend()
-  }
-
-  // A rendered, arrow-selectable menu overlay is up: arrow input should drive
-  // hover client-side (send menu_hover) rather than be forwarded as a raw
-  // key. Skipped during the stash X-mode preview — the menu is hidden behind
-  // the map and arrows must reach the server to move the cursor.
-  function menuNavActive(): boolean {
-    return !!menus.active && !popups.has('crt') && !inXMode
-      && (((menus.active.flags ?? 0) & MF_ARROWS_SELECT) !== 0)
-      && !!uiOverlay.querySelector('.overlay-list')
-  }
-
-  // The router's menu-nav layer: true when it drove the hover client-side.
-  function menuNav(nav: NavKey): boolean {
-    if (!menuNavActive()) return false
-    switch (nav) {
-      case 'down': cycleMenuHover(false); break
-      case 'up': cycleMenuHover(true); break
-      case 'pageDown': pageMenu(false); break
-      case 'pageUp': pageMenu(true); break
-      case 'home': jumpMenu(false); break
-      case 'end': jumpMenu(true); break
-    }
-    return true
   }
 
   // Keep the dev inspection hook pointing at the current cache array, and
@@ -2979,250 +2710,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       && !monsterPanelOpen && !minimapOpen
       && !msgLog.querySelector('.game-text-input-row')
       && numpadInput.style.display === 'none'
-  }
-
-  // Fill the menu's `--more--` footer, hiding it entirely when the text is
-  // empty: the bare element would still paint its hairline border, which
-  // reads as a stray mini-bar at the overlay's bottom edge (starkest while
-  // spectating, where only black separates it from the spectator bar). The
-  // element stays in the DOM — update_menu and the XXX scroll handler
-  // re-fill it and visibility must come back with the text.
-  function setMenuFooter(footerEl: HTMLElement, more: string, pos: string): void {
-    footerEl.innerHTML = formatMoreHtml(more, pos)
-    footerEl.style.display = formatMore(more, pos) ? '' : 'none'
-  }
-
-  // Derive the footer from current state, mirroring the reference client's
-  // update_more (menu.js:781): measure whether the list actually overflows to
-  // pick the scrollable `more` vs unscrollable `alt_more` keyhelp variant,
-  // substitute the XXX scroll-position token, and sync the ⏎ button whose
-  // label is parsed from the same text. Idempotent, so it runs on every event
-  // that can move it: menu open, list scroll, update_menu, item updates. (The
-  // old push model wrote the footer from scattered call sites, and its one
-  // scroll listener died with the list element updateMenuItems replaces —
-  // freezing the position indicator after the first paged-inventory category
-  // flip or chunk update.)
-  function updateMenuFooter(): void {
-    if (!menus.active) return
-    // .menu-footer, not .overlay-footer: a ui-push stacked over the menu
-    // (describe-item from the inventory) keeps menus.active set while its
-    // actions bar — [d - drop] etc., styled via the same .overlay-footer
-    // class — is the only footer in the DOM, and the list-detach
-    // ResizeObserver notification lands right after that overlay renders.
-    // Matching the bare class here overwrote the actions bar with the
-    // menu's keyhelp (or display:none'd it).
-    const footerEl = uiOverlay.querySelector<HTMLElement>('.menu-footer')
-    if (!footerEl) return
-    const listEl = menuListEl()
-    const scrollable = !!listEl && listEl.scrollHeight > listEl.clientHeight
-    // Defensive ??-chain: a server that omits alt_more falls back to more.
-    const raw = (scrollable ? menus.active.more : menus.active.alt_more ?? menus.active.more) ?? ''
-    const pos = listEl ? computeScrollPos(listEl) : 'top'
-    setMenuFooter(footerEl, raw, pos)
-    menuBar.syncAccept(formatMore(raw, pos))
-  }
-
-  // The list's available height changes without any menu message or scroll —
-  // rotation, the virtual keyboard claiming layout rows, X-mode exit — and
-  // can flip the overflow measurement updateMenuFooter keys the more/alt_more
-  // choice on. The reference re-runs update_more from handle_size_change on
-  // popup resize; observing the live list is our equivalent. One persistent
-  // observer, re-targeted at each rebuilt list in renderMenuItems (guarded:
-  // test envs may lack ResizeObserver).
-  const menuListResize = typeof ResizeObserver === 'function'
-    ? new ResizeObserver(() => updateMenuFooter())
-    : null
-
-  // The state half of showMenu — everything menu adoption mutates except the
-  // paint. Split out so a cutoff-covered restore (close_menu while the engine
-  // targets on the map underneath) takes the bookkeeping without building DOM
-  // that hideOverlay would immediately discard — and without
-  // enterOverlayLayout's side effects (minimap suspend, chat-pill
-  // retraction) for an overlay that never becomes visible.
-  function adoptMenu(msg: MenuMsg): void {
-    if (menus.active === msg) return
-    captureMenuScroll()  // before reassignment: keyed to the covered menu
-    menuShift.reset()
-    menus.adopt(msg)
-  }
-
-  function showMenu(msg: MenuMsg): void {
-    // The PromptMenu family (isPromptFamily) floats as a modal over the
-    // still-visible game when arriving from normal play, like the reference
-    // .ui-popup: these questions are about the map you're standing on. A
-    // prompt fired while another menu/overlay owns the screen (shop purchase
-    // confirm, prompts over a CRT) keeps the full-screen treatment — the map
-    // isn't the context there, and un-hiding it would flash the wrong
-    // background. Checked before menus.active is reassigned; a re-render of
-    // the same prompt (ui-pop restore) stays floating.
-    const promptFamily = isPromptFamily(msg)
-    const floatPrompt = promptFamily && !popups.has('ui')
-      && !popups.has('crt') && !dialogActive
-      && (menus.active === null || menus.active === msg
-        // Everything beneath this menu is cutoff-hidden (msg is already on
-        // the stack when showMenu runs, so beneath = depth - 1): a prompt
-        // arriving mid-targeting is a question about the live map, exactly
-        // the from-normal-play case, so it floats too.
-        || popups.covers(popups.depth - 1))
-    adoptMenu(msg)
-    const title = stripDcss(msg.title?.text ?? '')
-    // Prompt menus centre their question + 2-3 answer rows vertically
-    // instead of pinning them under the status bar. enterOverlayLayout
-    // (inside renderOverlay) clears the class, so re-add it every render.
-    renderOverlay(title, () => {
-      renderMenuItems(msg.items ?? [])
-      // Created empty; updateMenuFooter fills it at the end of showMenu, once
-      // the list is in the DOM and its scroll position restored (both feed
-      // the derivation: overflow picks the more variant, scrollTop the XXX).
-      // menu-footer distinguishes this element from ui-push actions bars,
-      // which share .overlay-footer for styling — the menu-footer queries
-      // (updateMenuFooter, renderMenuItems) must never match those.
-      const footerEl = document.createElement('div')
-      footerEl.className = 'overlay-footer menu-footer'
-      overlayContent.appendChild(footerEl)
-    }, { float: floatPrompt })
-    uiOverlay.classList.toggle('prompt-menu', promptFamily)
-    // yesno()'s rejected-key error never arrives as update_menu: set_more
-    // runs after pop.show() returned, so Menu::update_more's webtiles send
-    // is skipped (`if (!alive) return`) and the loop *reopens* the popup as
-    // a fresh menu message with the error already in `more`. Detect it by
-    // webtiles_write_more's signature — the default keyhelp template sends
-    // different more/alt_more variants, a set_more() menu sends identical
-    // strings — and show the footer for the latter: a non-template more is
-    // real information, whoever set it. The menus.promptInitialMore comparison
-    // additionally survives a re-render of the same menu (ui-pop restore)
-    // after an alive-path update_menu raised the alert.
-    const promptMoreIsInfo = (msg.more ?? '') !== '' && msg.more === msg.alt_more
-    uiOverlay.classList.toggle('prompt-menu-alert',
-      promptFamily && (promptMoreIsInfo || (msg.more ?? '') !== menus.promptInitialMore))
-    if (menuTagHasBar(msg.tag)) {
-      menuBar.build(msg.tag, msg.flags)
-      setMenuBar(true)
-      touchControls.element.style.display = 'none'
-    }
-    const listEl = menuListEl()
-    if (listEl) {
-      const saved = menuScrollTops.get(msg)
-      if (saved !== undefined) listEl.scrollTop = saved
-      else if (msg.jump_to) scrollMenuToItem(listEl, msg.jump_to)
-    }
-    updateMenuFooter()
-  }
-
-  // resetScroll: leave the rebuilt list at its natural top (category flip)
-  // instead of restoring the old element's offset (in-place patch). Hover
-  // revalidation is deliberately NOT here — it belongs to the
-  // update_menu_items handler (the only trigger of the reference's
-  // handle_size_change); the other caller, update_menu's truncation, rebuilds
-  // transient scaffolding it must not compute hover against.
-  function updateMenuItems(msg: MenuMsg, resetScroll = false): void {
-    if (!msg.items) return
-    const old = menuListEl()
-    const saved = old?.scrollTop
-    old?.remove()
-    renderMenuItems(msg.items)
-    if (!resetScroll && saved !== undefined) menuListEl()!.scrollTop = saved
-    updateMenuFooter()
-  }
-
-  function renderMenuItems(items: MenuItem[]): void {
-    const listEl = document.createElement('div')
-    listEl.className = 'overlay-list'
-    fillMenuItems(listEl, items)
-    // The footer updater lives here, not in showMenu: every rebuild gets a
-    // fresh listener on the fresh element, so item updates can't strand the
-    // position indicator on a dead node.
-    listEl.addEventListener('scroll', () => {
-      updateMenuFooter()
-      scheduleMenuScrollSend()
-    }, { passive: true })
-    menuListResize?.disconnect()
-    menuListResize?.observe(listEl)
-    const footer = uiOverlay.querySelector('.menu-footer')
-    overlayContent.insertBefore(listEl, footer)
-    menuBar.syncShiftLabels()
-  }
-
-  function fillMenuItems(listEl: HTMLElement, rawItems: MenuItem[]): void {
-    const coalesced = coalesceMenuItems(rawItems)
-    for (let c = 0; c < coalesced.length; c++) {
-      const { item, idx: i } = coalesced[c]
-      if (item.level === 0) continue  // separator
-      if (item.level === 1) {         // section header
-        const hdr = document.createElement('div')
-        hdr.className = 'overlay-header'
-        if (item.colour != null) hdr.style.color = uiColor(item.colour)
-        hdr.innerHTML = dcssToHtml(String(item.text ?? ''))
-        listEl.appendChild(hdr)
-      } else {                        // level 2: item row
-        const keycode = item.hotkeys?.[0]
-        // Render the row text verbatim (markup → HTML), mirroring the
-        // reference client (menu.js set_item_contents): the hotkey letter and
-        // the " - "/" + " selection marker are part of item.text — DCSS bakes
-        // them in for letter-selectable rows — so we don't destructure them
-        // into separate key/separator chips. The base colour is the
-        // reference's own mechanism: an `fg<col>` class on the row (menu.js
-        // set_item_contents), never an inline style — the cursor rule
-        // `.overlay-item.item-hovered` must outrank it to turn the row white,
-        // and an inline colour would beat any stylesheet rule. Inline markup
-        // in the text still overrides per span. The label wraps at our
-        // display width. The hotkey still drives clicks below.
-        const itemColor = item.colour != null ? (item.colour & 0xf) : undefined
-        // Detect the DCSS "<key> - " prefix without stripping it (rendering
-        // stays verbatim). Two shapes: a plain hotkey ("a - ...", shop
-        // "<col>a - </col>...") and the gods-style colour-wrapped hotkey
-        // ("<yellow>A</yellow> - ..."). A prefix means wrapped continuation
-        // lines should hang-indent 4ch (the fixed "<key> - " width) so they
-        // sit under the item title. The " + " multiselect marker gets no
-        // styling of its own — the text carries it, as in the reference.
-        // Prefixless rows (the unrecognised-items list — bare " staff of air"
-        // / " scroll of fog (uncommon)") start at column 0 and must NOT indent.
-        const prefix = String(item.text ?? '')
-          .match(/^\s*(?:<[a-zA-Z]+>.<\/[a-zA-Z]+>|(?:<[^>]+>)*.)\s([-+# $])\s/)
-        const el = makeItemButton(dcssToHtml(String(item.text ?? '')), () => {
-          // Shop shift-tap: shopping list uses the uppercase letter as a direct
-          // keybind (shopping.cc), separate from the arrows-select activate-on-
-          // hover path — so route it before the MF_ARROWS_SELECT branch below,
-          // which would otherwise preempt it with Space and just mark for
-          // purchase.
-          if (
-            menus.active?.tag === 'shop'
-            && menuShift.isOn
-            && keycode != null
-            && keycode >= 97 && keycode <= 122
-          ) {
-            conn.send({ msg: 'key', keycode: keycode - 32 })
-            menuShift.consume()
-            return
-          }
-          // ARROWS_SELECT menus expect activation against the current hover,
-          // not via row hotkeys: Enter for singleselect, Space for multiselect
-          // (upstream menu.js:1066). Move server hover to the tapped row and
-          // then send the activation key — leaves server state matching the
-          // user's tap target. (For stash search, sending the row's letter
-          // would happen to produce the same visible X-mode preview, but the
-          // upstream protocol path is more robust.)
-          const flags = menus.active?.flags ?? 0
-          if (flags & MF_ARROWS_SELECT) {
-            setMenuHover(i, false)
-            const activateKey = (flags & MF_MULTISELECT) ? 32 : 13
-            conn.send({ msg: 'key', keycode: activateKey })
-            menuShift.consume()
-            return
-          }
-          if (keycode == null) return
-          conn.send({ msg: 'key', keycode })
-          menuShift.consume()
-        }, itemColor)
-        if (item.tiles && item.tiles.length > 0) {
-          el.insertBefore(renderTiles(loader, item.tiles), el.firstChild)
-        }
-        el.dataset.menuIdx = String(i)
-        if (prefix) el.classList.add('item-hang')
-        if (i === menus.hovered) el.classList.add('item-hovered')
-        listEl.appendChild(el)
-      }
-    }
   }
 
   // --- Monster panel (client-side overlay) ---
@@ -3500,8 +2987,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // the server, so the server-clamped scroll value lands above our real
   // bottom and the user sees a visible jump-back-up.
 
-  const SCROLLER_SYNC_DEBOUNCE_MS = 100
-
   function formattedScrollerActive(): boolean {
     return popups.topUi()?.type === 'formatted-scroller'
       && !!uiOverlay.querySelector('.overlay-body')
@@ -3510,7 +2995,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   let scrollerSyncTimer: number | undefined
   function scheduleScrollerSync(): void {
     if (scrollerSyncTimer !== undefined) return
-    scrollerSyncTimer = window.setTimeout(flushScrollerSync, SCROLLER_SYNC_DEBOUNCE_MS)
+    scrollerSyncTimer = window.setTimeout(flushScrollerSync, SCROLL_SYNC_DEBOUNCE_MS)
   }
   function flushScrollerSync(): void {
     scrollerSyncTimer = undefined
@@ -3630,18 +3115,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       fitNow()
       focusView()
     })
-  }
-
-  function makeItemButton(labelHtml: string, onClick: () => void, colour?: number): HTMLButtonElement {
-    const el = document.createElement('button')
-    el.className = 'overlay-item'
-    if (colour != null) el.classList.add(`fg${colour}`)
-    el.innerHTML = `<span class="overlay-label">${labelHtml}</span>`
-    el.addEventListener('click', () => {
-      onClick()
-      focusView()
-    })
-    return el
   }
 
   function showMore(text?: string): void {
@@ -4004,7 +3477,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     compactMql.removeEventListener('change', syncMonsterCompact)
     // The debounced senders would otherwise write to a connection the lobby
     // (or the next view) now owns.
-    if (menuScrollSendTimer !== null) window.clearTimeout(menuScrollSendTimer)
+    menuView.dispose()
     if (scrollerSyncTimer !== undefined) window.clearTimeout(scrollerSyncTimer)
     cancelTileGesture()
     disarmCreationGuard()
