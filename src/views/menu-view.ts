@@ -16,6 +16,7 @@ import {
   type MenuItem, type MenuModel, type MenuMsg,
 } from '../game/menu-model'
 import { menuTagHasBar, type MenuBar } from './menu-bar'
+import { systemKeyboardField } from './text-field'
 
 // Debounce for reporting a client-side scroll back to the server — menus
 // here, the formatted scroller in the game view.
@@ -46,7 +47,6 @@ export interface MenuViewDeps {
   send(msg: ClientMsg): void
   focusView(): void
   guardedFocus(el: HTMLElement): void
-  autoOpenKbd(): void
   loader(): TileLoader | null
   spectating: boolean
 }
@@ -286,13 +286,7 @@ export class MenuView {
     promptEl.className = 'menu-filter-prompt'
     promptEl.innerHTML = dcssToHtml(prompt)
     titleEl.appendChild(promptEl)
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.className = 'input-dialog-field menu-filter-input'
-    input.autocomplete = 'off'
-    input.autocapitalize = 'off'
-    input.spellcheck = false
-    input.inputMode = 'none'
+    const input = systemKeyboardField('input-dialog-field menu-filter-input')
     input.addEventListener('keydown', (e) => {
       e.stopPropagation()
       if (e.key === 'Enter') {
@@ -310,7 +304,6 @@ export class MenuView {
     })
     titleEl.appendChild(input)
     this.filterInput = input
-    this.d.autoOpenKbd()
     requestAnimationFrame(() => this.d.guardedFocus(input))
   }
 

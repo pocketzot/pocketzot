@@ -132,6 +132,17 @@ export const DPAD_LAYOUT: DpadDef[][] = [
 // the built-in Standard set reproduces the original hard-coded grids, and
 // custom sets swap in user-defined keys, grid widths, and tab labels.
 
+// The text field on screen, if any. Not a field in the inert copy of a
+// covered frame (game-view frameDom).
+function activeTextInput(): HTMLInputElement | null {
+  return [...document.querySelectorAll<HTMLInputElement>('.game-text-input, .input-dialog-field')]
+    .find(el => !el.closest('.overlay-covered')) ?? null
+}
+
+function dispatchSpecialToInput(input: HTMLInputElement, key: 'Enter' | 'Escape'): void {
+  input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+}
+
 // Virtual QWERTY keyboard overlay. Letter and symbol layers, sticky Shift
 // (tap = once, double-tap = locked, tap from lock = off) and one-shot Ctrl,
 // [123]/[ABC] toggle. Replaces the touch-controls strip while open.
@@ -201,10 +212,12 @@ function buildKeyboardOverlay(
     refreshMods()
   }
 
-  function activeTextInput(): HTMLInputElement | null {
-    // Not a field in the inert copy of a covered frame (game-view frameDom).
-    return [...document.querySelectorAll<HTMLInputElement>('.game-text-input, .input-dialog-field')]
-      .find(el => !el.closest('.overlay-covered')) ?? null
+  // These focus() calls run inside a key's tap, which lets iOS raise the
+  // system keyboard over ours: the field keeps inputmode none while ours
+  // types into it, until close() hands it back (text-field.ts).
+  function focusForOurKbd(input: HTMLInputElement): void {
+    input.inputMode = 'none'
+    input.focus({ preventScroll: true })
   }
 
   // Programmatic value changes don't fire native `input` events, so dispatch
@@ -216,7 +229,7 @@ function buildKeyboardOverlay(
     input.value = value.slice(0, start) + ch + value.slice(end)
     const caret = start + ch.length
     input.setSelectionRange(caret, caret)
-    input.focus({ preventScroll: true })
+    focusForOurKbd(input)
     input.dispatchEvent(new Event('input', { bubbles: true }))
   }
 
@@ -231,12 +244,8 @@ function buildKeyboardOverlay(
       input.value = value.slice(0, start - 1) + value.slice(end)
       input.setSelectionRange(start - 1, start - 1)
     }
-    input.focus({ preventScroll: true })
+    focusForOurKbd(input)
     input.dispatchEvent(new Event('input', { bubbles: true }))
-  }
-
-  function dispatchSpecialToInput(input: HTMLInputElement, key: 'Enter' | 'Escape'): void {
-    input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
   }
 
   function dispatchChar(ch: string, shifted?: string): void {
@@ -286,6 +295,13 @@ function buildKeyboardOverlay(
   function close(): void {
     overlay.style.display = 'none'
     clearAllMods()
+    // Blurred, so the next tap on the field is a fresh focus that raises
+    // the system keyboard.
+    const field = activeTextInput()
+    if (field?.inputMode === 'none') {
+      field.inputMode = ''
+      field.blur()
+    }
   }
 
   function makeBtn(
@@ -423,7 +439,23 @@ export interface TouchControlsOpts {
   onShiftChange?: (on: boolean) => void
 }
 
-export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): TouchControls {
+export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {}): TouchControls {
+  // The in-log line input and the menu filter hold their text locally
+  // until Enter, so a strip key sent while one shows would land in the
+  // server's line buffer out of sight: game keys stay off the wire then.
+  // (The msgwin-get-line field is server-synced; the server's editor takes
+  // its keys.) The header's ⎋/⏎ go to the field instead (stripSpecial).
+  const send: SendFn = (msg) => {
+    const field = activeTextInput()
+    if (field && field.matches('.game-text-input, .menu-filter-input')) return
+    wireSend(msg)
+  }
+  function stripSpecial(keycode: 13 | 27): void {
+    const field = activeTextInput()
+    if (field) dispatchSpecialToInput(field, keycode === 13 ? 'Enter' : 'Escape')
+    else send({ msg: 'key', keycode })
+    clearOneshot()
+  }
   let ctrlActive = false
   let activeTab: TabKey = 'micro'
   let controlSet!: ControlSet  // assigned by applyControlSet() before first read
@@ -646,7 +678,7 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
   escBtn.className = 'tc-esc'
   escBtn.textContent = '⎋'
   escBtn.title = 'Escape'
-  bindTap(escBtn, () => { send({ msg: 'key', keycode: 27 }); clearOneshot() })
+  bindTap(escBtn, () => stripSpecial(27))
   headerEl.appendChild(escBtn)
 
   tabsEl = document.createElement('div')
@@ -694,7 +726,7 @@ export function buildTouchControls(send: SendFn, opts: TouchControlsOpts = {}): 
   enterBtn.className = 'tc-enter'
   enterBtn.textContent = '⏎'
   enterBtn.title = 'Enter'
-  bindTap(enterBtn, () => { send({ msg: 'key', keycode: 13 }); clearOneshot() })
+  bindTap(enterBtn, () => stripSpecial(13))
   headerEl.appendChild(enterBtn)
 
   // Content area — replaced on tab switch or mode change

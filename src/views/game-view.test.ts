@@ -1013,6 +1013,22 @@ describe('prompt layered over the frame it covers', () => {
     expect(overlay(h).querySelector<HTMLElement>('.overlay-list')?.scrollTop).toBe(300)
   })
 
+  // Inscribing from the open inventory (message.cc msgwin_get_line: a popup
+  // while a layout is up).
+  it('a line box over the inventory layers over it, and state sync fills the live field', () => {
+    const h = setup()
+    h.dispatch(longInv())
+    h.dispatch({ msg: 'ui-push', type: 'msgwin-get-line', prompt: 'Inscribe with what? ', generation_id: 3 })
+    expect(covered(h)?.textContent).toContain('Inventory')
+    const field = card(h)?.querySelector<HTMLInputElement>('.input-dialog-field')
+    expect(field).toBeTruthy()
+    h.dispatch({ msg: 'ui-state-sync', widget_id: 'input', text: '!d', generation_id: 3 })
+    expect(field!.value).toBe('!d')
+    h.dispatch({ msg: 'ui-pop' })
+    expect(covered(h)).toBeNull()
+    expect(overlay(h).querySelector('.overlay-title span')?.textContent).toBe('Inventory')
+  })
+
   it('under a server dialog the prompt stays full-screen', () => {
     const h = setup()
     h.dispatch(longInv())

@@ -18,7 +18,7 @@ function makeCtx() {
   document.body.appendChild(overlay)
   const sent: ClientMsg[] = []
   const calls = {
-    enterLayout: [] as Array<{ touch?: boolean } | undefined>,
+    enterLayout: [] as Array<{ touch?: boolean; popup?: boolean } | undefined>,
     renderOverlay: [] as string[],
     autoOpenKbd: 0,
     focusView: 0,
@@ -29,6 +29,11 @@ function makeCtx() {
     enterLayout: (opts) => {
       calls.enterLayout.push(opts)
       overlay.innerHTML = ''
+    },
+    enterPopup: () => {
+      calls.enterLayout.push({ popup: true })
+      overlay.innerHTML = ''
+      return overlay
     },
     renderOverlay: (title, buildBody) => {
       calls.renderOverlay.push(title)
@@ -59,15 +64,25 @@ function key(el: HTMLElement, k: string): void {
 describe('showInputDialog (msgwin-get-line)', () => {
   const MSG: UiPushMsg = { type: 'msgwin-get-line', prompt: '<cyan>Describe what?</cyan>', generation_id: 7 }
 
-  it('renders the prompt and a focused-style input, opens the kbd', () => {
+  it('renders the prompt as a popup with a system-keyboard field, leaving our kbd shut', () => {
     const { ctx, overlay, calls } = makeCtx()
     showInputDialog(ctx, MSG)
-    expect(calls.enterLayout).toEqual([undefined])  // touch controls stay visible
+    expect(calls.enterLayout).toEqual([{ popup: true }])
     expect(overlay.querySelector('.input-dialog-prompt')?.textContent).toBe('Describe what?')
     const input = overlay.querySelector<HTMLInputElement>('.input-dialog-field')
     expect(input).toBeTruthy()
-    expect(input!.inputMode).toBe('none')  // virtual kbd owns typing, not the OS one
-    expect(calls.autoOpenKbd).toBe(1)
+    expect(input!.inputMode).toBe('')
+    expect(input!.getAttribute('autocorrect')).toBe('off')
+    expect(calls.autoOpenKbd).toBe(0)
+  })
+
+  it('echoes iOS smart punctuation as the ASCII typed', () => {
+    const { ctx, overlay, sent } = makeCtx()
+    showInputDialog(ctx, MSG)
+    type(overlay.querySelector<HTMLInputElement>('.input-dialog-field')!, '‘orc’ — x')
+    expect(sent).toEqual([
+      { msg: 'ui_state_sync', widget_id: 'input', text: "'orc' -- x", cursor: 10, generation_id: 7 },
+    ])
   })
 
   it('echoes each edit as ui_state_sync with the push generation_id', () => {

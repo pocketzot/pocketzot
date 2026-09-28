@@ -68,6 +68,7 @@ function overlayHarness(): { ctx: OverlayScreenCtx; overlay: HTMLElement; sent: 
     overlay,
     send: (m) => { sent.push(m) },
     enterLayout: () => { overlay.innerHTML = '' },
+    enterPopup: () => { overlay.innerHTML = ''; return overlay },
     renderOverlay: (_title, buildBody) => { overlay.innerHTML = ''; buildBody() },
     autoOpenKbd: () => {},
     focusView: () => {},

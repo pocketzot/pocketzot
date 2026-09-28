@@ -501,3 +501,50 @@ describe('consumeShift — spell-rail force-cast hook', () => {
     expect(states).toEqual([true, false])
   })
 })
+
+describe('strip with a text field showing', () => {
+  const dpadUp = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLElement>('.tc-dpad-btn')].find(b => b.textContent === '↑')!
+  function field(className: string): { input: HTMLInputElement; keys: string[] } {
+    const input = document.createElement('input')
+    input.className = className
+    const keys: string[] = []
+    input.addEventListener('keydown', e => keys.push(e.key))
+    document.body.appendChild(input)
+    return { input, keys }
+  }
+
+  it('⎋ and ⏎ go to the field, not the wire', () => {
+    const { tc, sent } = setup()
+    const { keys } = field('game-text-input')
+    tc.element.querySelector<HTMLElement>('.tc-enter')!.click()
+    tc.element.querySelector<HTMLElement>('.tc-esc')!.click()
+    expect(keys).toEqual(['Enter', 'Escape'])
+    expect(sent).toEqual([])
+  })
+
+  it('game keys stay off the wire under a local line field, not a server-synced one', () => {
+    const { tc, sent } = setup()
+    dpadUp(tc.element).click()
+    expect(sent).toHaveLength(1)
+    const local = field('input-dialog-field menu-filter-input')
+    dpadUp(tc.element).click()
+    tabButtons(tc.element)[0].click()
+    expect(sent).toHaveLength(1)
+    local.input.remove()
+    field('input-dialog-field')
+    dpadUp(tc.element).click()
+    expect(sent).toHaveLength(2)
+  })
+
+  it('our keyboard types with inputmode none, and closing it hands the field back', () => {
+    const { tc } = setup()
+    const { input } = field('game-text-input')
+    tc.openKbd()
+    ;[...tc.element.querySelectorAll<HTMLElement>('.kbd-key.letter')].find(b => b.textContent === 'q')!.click()
+    expect(input.value).toBe('q')
+    expect(input.inputMode).toBe('none')
+    tc.closeKbd()
+    expect(input.inputMode).toBe('')
+  })
+})

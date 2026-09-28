@@ -9,6 +9,7 @@ import type { ClientMsg } from '../ws/types'
 import { dcssToHtml } from '../game/dcss-colors'
 import { stripDcss } from './overlay-body'
 import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
+import { systemKeyboardField } from './text-field'
 import { downloadPackFile } from '../offline/save-transfer'
 
 export interface MsgsMessage {
@@ -25,7 +26,6 @@ export interface MessageLogDeps {
   send(msg: ClientMsg): void
   focusView(): void
   guardedFocus(el: HTMLElement): void
-  autoOpenKbd(): void
   autoCloseKbdIfOurs(): void
   // The silent spell harvest owns the command channel (log taps drop).
   harvesting(): boolean
@@ -306,13 +306,7 @@ export class MessageLog {
     this.removeTextInput()
     const row = document.createElement('p')
     row.className = 'game-msg game-text-input-row'
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.className = 'game-text-input'
-    input.inputMode = 'none'
-    input.autocapitalize = 'off'
-    input.autocomplete = 'off'
-    input.spellcheck = false
+    const input = systemKeyboardField('game-text-input')
     input.value = prefill
     input.maxLength = maxlen
     input.addEventListener('keydown', (e) => {
@@ -341,7 +335,6 @@ export class MessageLog {
     row.appendChild(input)
     this.pushRow(row, false)  // input row isn't pruned by the 50-row cap
     requestAnimationFrame(() => this.d.guardedFocus(input))
-    this.d.autoOpenKbd()
   }
 
   removeTextInput(): void {

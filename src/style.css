@@ -2272,6 +2272,17 @@ html.map-hold, html.map-hold * {
   width: 12ch;
 }
 
+/* text-field.ts's "tap to type", dim: the fields' text-fill-color would
+   paint it as typed text. */
+.game-text-input::placeholder, .input-dialog-field::placeholder {
+  color: var(--text-dim);
+  -webkit-text-fill-color: var(--text-dim);
+  opacity: 0.6;
+}
+/* At the log's size: the field's 16px only exists to stop iOS zooming on
+   focus. */
+.game-text-input::placeholder { font-size: var(--msglog-font); }
+
 #numpad-input {
   position: fixed;
   left: 0;
@@ -2364,6 +2375,12 @@ html.map-hold, html.map-hold * {
   padding: 1rem;
   max-width: 32rem;
   margin: 1.5rem auto 0;
+}
+
+/* Layered over a covered frame, the card supplies the box. */
+.overlay-card .input-dialog {
+  margin: 0;
+  padding: 0;
 }
 
 .input-dialog-prompt {
@@ -3346,7 +3363,11 @@ html.map-hold, html.map-hold * {
   gap: 0.4rem;
   min-width: min(20rem, 85%);
   max-width: 100%;
-  max-height: 100%;
+  /* The outline paints outside the box: a card flush with the overlay's
+     padding edge lost its top line under #status-strip (installed iOS,
+     on-device 2026-09-28). */
+  margin-block: 0.25rem;
+  max-height: calc(100% - 0.5rem);
   padding: 0.8rem 1rem;
   background: var(--bg);
   border: 1px solid #000;

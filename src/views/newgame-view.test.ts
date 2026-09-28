@@ -23,6 +23,7 @@ function makeCtx(opts?: { spectating?: boolean }) {
       calls.enterLayout.push(o)
       overlay.innerHTML = ''
     },
+    enterPopup: () => { overlay.innerHTML = ''; return overlay },
     renderOverlay: (title, buildBody) => {
       calls.renderOverlay.push(title)
       overlay.innerHTML = ''

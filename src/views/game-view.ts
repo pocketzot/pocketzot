@@ -262,6 +262,13 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     }
     shownFrame = null
   }
+  // The frame under the top one, when a popup can layer over it: on screen,
+  // not under a server dialog, and its DOM kept or still showing.
+  function layerTarget(): object | undefined {
+    const below = popups.below()
+    if (!below || dialogActive || popups.covers(popups.depth - 1)) return undefined
+    return frameDom.has(below) || shownFrame === below ? below : undefined
+  }
 
   // WebTiles chat. The view handles history/pill/chip; we supply transport.
   // Spectators always get the chip — chat is half the point of watching;
@@ -455,8 +462,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // machine as the virtual kbd (see shift-state.ts). Resets when the
   // menu closes.
   const menuShift = createShiftToggle({ onChange: () => menuBar.refreshShift() })
-  // Tracks whether the virtual keyboard was opened by us (paired with an
-  // input prompt). Auto-close sites only fire `closeKbd` when this flag is
+  // Tracks whether the virtual keyboard was opened by us (paired with the
+  // custom-seed input). Auto-close sites only fire `closeKbd` when this flag is
   // set, so a kbd the user manually toggled open via the kbd button stays
   // open across overlay transitions.
   let kbdAutoOpened = false
@@ -559,7 +566,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     send: (msg) => conn.send(msg),
     focusView,
     guardedFocus,
-    autoOpenKbd,
     autoCloseKbdIfOurs,
     harvesting: () => isHarvesting(),
     overlayShown: () => uiOverlay.style.display !== 'none',
@@ -919,16 +925,14 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // A server dialog keeps the full-screen treatment.
     placement: (msg) => {
       if (!isPromptFamily(msg) || dialogActive) return 'full'
-      const below = popups.below()
-      if (!below || popups.covers(popups.depth - 1)) return 'float'
-      return frameDom.has(below) || shownFrame === below ? 'layered' : 'full'
+      if (!popups.below() || popups.covers(popups.depth - 1)) return 'float'
+      return layerTarget() ? 'layered' : 'full'
     },
     navBlocked: () => popups.has('crt') || inXMode,
     showBar: showMenuBarForStrip,
     send: (msg) => conn.send(msg),
     focusView,
     guardedFocus,
-    autoOpenKbd,
     loader: () => loader,
     spectating: !!spectating,
   })
@@ -2527,6 +2531,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     overlay: uiOverlay,
     send: (msg) => conn.send(msg),
     enterLayout: enterOverlayLayout,
+    enterPopup: () => {
+      enterOverlayLayout({ over: layerTarget() })
+      return overlayContent
+    },
     renderOverlay,
     autoOpenKbd,
     focusView,
