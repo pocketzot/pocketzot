@@ -14,6 +14,7 @@
 // years-old enums.js forever), so a bundled table is safe across versions;
 // unknown future values simply paint nothing.
 import type { MapStore } from './map-store'
+import { DCSS_COLOR_MAP } from '../dcss-colors'
 
 export const MF_UNSEEN = 0
 export const MF_PLAYER = 21
@@ -83,7 +84,7 @@ const MAX_CELL_PX = 10
 
 // X-mode cursor ring (CRT yellow): hollow, so it reads apart from the
 // filled white player cell by shape as well as hue.
-const CURSOR_COLOR = '#fce94f'
+const CURSOR_COLOR = DCSS_COLOR_MAP.yellow
 
 export interface MinimapOpts {
   className?: string

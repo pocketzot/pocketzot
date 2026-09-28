@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { dcssToHtml, escHtml, uiColor, DCSS_UI_COLOR } from './dcss-colors'
+
+describe('palette', () => {
+  it('style.css --color-0..15 equal the JS table', () => {
+    const css = readFileSync(resolve(__dirname, '../style.css'), 'utf8')
+    const vars = [...css.matchAll(/--color-(\d+):\s*(#[0-9a-f]{6})/gi)]
+      .map(([, n, hex]) => [Number(n), hex.toLowerCase()] as const)
+    expect(vars).toHaveLength(16)
+    for (const [n, hex] of vars) expect(hex, `--color-${n}`).toBe(DCSS_UI_COLOR[n])
+  })
+})
 
 describe('escHtml', () => {
   it('escapes &, <, > in that order so & is not double-encoded', () => {

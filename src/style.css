@@ -33,12 +33,32 @@
   --text:      #e7e5e4;
   --text-dim:  #a8a29e;
   --danger:    #ef4444;
+  /* The DCSS 16-colour term palette (Tango), same names and values as the
+     reference's --color-0..15. Anything that means "DCSS colour N" uses
+     var(--color-N), never the hex. The JS twin for canvas and inline
+     styles is DCSS_COLOR_MAP (dcss-colors.ts); a test keeps them equal. */
+  --color-0:  #000000; /* black */
+  --color-1:  #005afa; /* blue */
+  --color-2:  #4e9a06; /* green */
+  --color-3:  #06989a; /* cyan */
+  --color-4:  #b30009; /* red */
+  --color-5:  #cd21cb; /* magenta */
+  --color-6:  #8f5902; /* brown */
+  --color-7:  #babdb6; /* lightgrey */
+  --color-8:  #555753; /* darkgrey */
+  --color-9:  #5e78ff; /* lightblue */
+  --color-10: #8ae234; /* lightgreen */
+  --color-11: #34e2e2; /* lightcyan */
+  --color-12: #ef2929; /* lightred */
+  --color-13: #fd59fa; /* lightmagenta */
+  --color-14: #fce94f; /* yellow */
+  --color-15: #eeeeec; /* white */
   --warn:      #facc15;
   --ok:        #84cc16;
   /* The examine/targeting map cursor (DCSS `yellow`), used by the ASCII
      cursor square. The tiles-mode canvas fallback stroke (tile-map-view.ts
-     paintCursorIfHere) hardcodes the same value. */
-  --map-cursor: #fce94f;
+     paintCursorIfHere) uses the JS twin. */
+  --map-cursor: var(--color-14);
   --border:    rgba(245, 158, 11, 0.12);
   /* The accent's jobs, per the HIG Color/Buttons pages ("avoid using the
      same color to mean different things"; "to emphasize primary actions,
@@ -1810,7 +1830,7 @@ button.lobby-account-chip:active { background: var(--press); }
      --more-- surface — the inline row, the log frame, the X-mode fallback
      button — carries this one colour so both presentations read as the
      same prompt. */
-  --more-cyan: #06989a;
+  --more-cyan: var(--color-3);
   position: relative;
   flex: 1;
   display: grid;
@@ -2232,8 +2252,8 @@ html.map-hold, html.map-hold * {
 /* Reference colors (style.css:276-281): command_marker darkgrey (fg8),
    turn_marker lightgrey (fg7). Rule order matters: when both classes
    land on the same glyph, `turn` wins (later rule, equal specificity). */
-.msg-turn-mark.cmd  { color: #555753; }
-.msg-turn-mark.turn { color: #babdb6; }
+.msg-turn-mark.cmd  { color: var(--color-8); }
+.msg-turn-mark.turn { color: var(--color-7); }
 
 .game-prompt .action-btn {
   vertical-align: middle;
@@ -2526,8 +2546,8 @@ html.map-hold, html.map-hold * {
   flex: 1 1 auto;
   font-size: 0.72rem;
   font-family: var(--font-mono);
-  /* DCSS lightgrey (.fg7) — default value text, matches reference #stats. */
-  color: #babdb6;
+  /* DCSS lightgrey — default value text, matches reference #stats. */
+  color: var(--color-7);
 }
 
 #monster-list {
@@ -2917,7 +2937,7 @@ html.map-hold, html.map-hold * {
 .hg-piety { margin-left: 0.4em; flex-shrink: 0; }
 /* Under god's wrath the whole piety row reads red (reference
    #stats_piety.penance, colour 4). */
-.hg-piety.penance { color: #b30009; }
+.hg-piety.penance { color: var(--color-4); }
 
 .hg-bar-pair {
   display: flex;
@@ -2940,7 +2960,7 @@ html.map-hold, html.map-hold * {
 
 .hg-bar-cell {
   height: 0.55rem;
-  background: #555753; /* DCSS darkgrey (.fg8) — bar trough, matches reference */
+  background: var(--color-8); /* DCSS darkgrey — bar trough, matches reference */
   overflow: hidden;
 }
 
@@ -2954,13 +2974,13 @@ html.map-hold, html.map-hold * {
 
 /* Segment colors mirror #stats_hp_bar_* / #stats_mp_bar_* in the reference
    WebTiles client (webserver/game_data/static/style.css:111-148). */
-.hud-bar-seg.hp-full     { background-color: #8ae234; } /* DCSS lightgreen (--color-10) */
-.hud-bar-seg.hp-poison   { background-color: #fce94f; } /* DCSS yellow      (--color-14) */
-.hud-bar-seg.hp-decrease { background-color: #b30009; } /* DCSS red        (--color-4)  */
-.hud-bar-seg.hp-increase { background-color: #4e9a06; } /* DCSS green      (--color-2)  */
-.hud-bar-seg.mp-full     { background-color: #5e78ff; } /* DCSS lightblue  (--color-9)  */
-.hud-bar-seg.mp-decrease { background-color: #cd21cb; } /* DCSS magenta    (--color-5)  */
-.hud-bar-seg.mp-increase { background-color: #005afa; } /* DCSS blue       (--color-1)  */
+.hud-bar-seg.hp-full     { background-color: var(--color-10); } /* lightgreen */
+.hud-bar-seg.hp-poison   { background-color: var(--color-14); } /* yellow */
+.hud-bar-seg.hp-decrease { background-color: var(--color-4); }  /* red */
+.hud-bar-seg.hp-increase { background-color: var(--color-2); }  /* green */
+.hud-bar-seg.mp-full     { background-color: var(--color-9); }  /* lightblue */
+.hud-bar-seg.mp-decrease { background-color: var(--color-5); }  /* magenta */
+.hud-bar-seg.mp-increase { background-color: var(--color-1); }  /* blue */
 
 .hg-inline-stats {
   display: flex;
@@ -3006,18 +3026,18 @@ html.map-hold, html.map-hold * {
   background: #2f2f2f; /* reference #stats_noise_bar bg (dark slate) */
   overflow: hidden;
 }
-.hud-bar-seg.noise-decrease { background-color: #555753; } /* DCSS darkgrey (--color-8) */
-.hg-noise-cell[data-level="quiet"]     .noise-full { background-color: #babdb6; } /* lightgrey */
-.hg-noise-cell[data-level="loud"]      .noise-full { background-color: #fce94f; } /* yellow */
-.hg-noise-cell[data-level="veryloud"]  .noise-full { background-color: #b30009; } /* red */
-.hg-noise-cell[data-level="superloud"] .noise-full { background-color: #fd59fa; } /* lightmagenta */
+.hud-bar-seg.noise-decrease { background-color: var(--color-8); } /* darkgrey */
+.hg-noise-cell[data-level="quiet"]     .noise-full { background-color: var(--color-7); }  /* lightgrey */
+.hg-noise-cell[data-level="loud"]      .noise-full { background-color: var(--color-14); } /* yellow */
+.hg-noise-cell[data-level="veryloud"]  .noise-full { background-color: var(--color-4); }  /* red */
+.hg-noise-cell[data-level="superloud"] .noise-full { background-color: var(--color-13); } /* lightmagenta */
 /* When silenced the bar carries no info (noise is 0), so we hide it and let the
    "Silenced" label stand in its place at the normal HUD size, spaced like any
    other caption value. The reference overlays the label on its bar because that
    bar gets its own wide row; ours shares a row with Time, so we reserve the
    label's width instead of overlapping (which would collide with N and T). */
 .hg-noise-cell[data-level="blank"] { display: none; }
-.hg-noise-status { margin-left: 0.15em; color: #fd59fa; /* DCSS lightmagenta — reference #stats_noise_status */ }
+.hg-noise-status { margin-left: 0.15em; color: var(--color-13); /* DCSS lightmagenta — reference #stats_noise_status */ }
 .hg-noise-status:empty { display: none; }
 /* word-spacing matches the inter-stat gap (5.3px) for the space between the
    time value and its (delta), keeping it consistent with AC↔EV / Noise↔Time. */
@@ -3055,8 +3075,8 @@ html.map-hold, html.map-hold * {
   text-overflow: ellipsis;
 }
 /* Caption text — labels like AC/EV/SH, weapon-letter prefix, XL/Time/$.
-   DCSS brown (.fg6 / --color-6), matches reference .stats_caption. */
-.hg-caption { color: #8f5902; }
+   DCSS brown, matches reference .stats_caption. */
+.hg-caption { color: var(--color-6); }
 .hg-caption + span { margin-left: 0.15em; }
 
 /* Stat / defense state colors (matches reference player.js classes).
@@ -3064,12 +3084,12 @@ html.map-hold, html.map-hold * {
    color class on the same element (matches ≤0.34's #game #stats_weapon
    .corroded_weapon override; trunk dropped that rule with b51359a412, so
    stats-view.ts only adds the class on servers without weapon_colour). */
-.stat-boosted, .def-boosted { color: #5e78ff; /* DCSS lightblue (.fg9) */ }
-.stat-zero { color: #ef2929; /* DCSS lightred (.fg12) */ }
-.stat-degenerated { color: #fce94f; /* DCSS yellow (.fg14) — reference degenerated_stat (drained) */ }
+.stat-boosted, .def-boosted { color: var(--color-9); /* lightblue */ }
+.stat-zero { color: var(--color-12); /* lightred */ }
+.stat-degenerated { color: var(--color-14); /* yellow — reference degenerated_stat (drained) */ }
 .stat-max { margin-left: 0.15em; /* tight gap from the drained value to its "(max)" */ }
-.def-degenerated { color: #b30009; /* DCSS red (.fg4) */ }
-.hg-wq .weapon-corroded { color: #b30009; /* DCSS red (.fg4) */ }
+.def-degenerated { color: var(--color-4); /* red */ }
+.hg-wq .weapon-corroded { color: var(--color-4); /* red */ }
 
 /* Contamination / Doom readouts, right-aligned on the stats row (margin-left:
    auto). Only rendered when nonzero, so :empty collapses them out entirely —
@@ -3197,7 +3217,7 @@ html.map-hold, html.map-hold * {
   background: rgba(10, 9, 8, 0.72);
   border: 1px solid var(--border);
   border-radius: 0.6rem;
-  color: #babdb6; /* DCSS lightgrey (.fg7) — reads as chrome, not content */
+  color: var(--color-7); /* DCSS lightgrey — reads as chrome, not content */
 }
 .screen-export-btn[hidden] { display: none; }
 
@@ -3628,7 +3648,7 @@ html.map-hold, html.map-hold * {
    notched line across the screen. */
 .ngv-sec-h,
 .ngv-col-h {
-  color: #5e78ff;  /* lightblue */
+  color: var(--color-9);  /* lightblue */
   font-family: var(--font-mono);
 }
 
@@ -4611,16 +4631,20 @@ html.map-hold, html.map-hold * {
 .kbd-key { color: #c9c4be; }
 
 /* CRT terminal color classes (fg0–fg15, bg0–bg15) */
-.fg0{color:#000000}.fg1{color:#005afa}.fg2{color:#4e9a06}.fg3{color:#06989a}
-.fg4{color:#b30009}.fg5{color:#cd21cb}.fg6{color:#8f5902}.fg7{color:#babdb6}
-.fg8{color:#555753}.fg9{color:#5e78ff}.fg10{color:#8ae234}.fg11{color:#34e2e2}
-.fg12{color:#ef2929}.fg13{color:#fd59fa}.fg14{color:#fce94f}.fg15{color:#eeeeec}
-.bg0{background-color:#000000}.bg1{background-color:#005afa}.bg2{background-color:#4e9a06}
-.bg3{background-color:#06989a}.bg4{background-color:#b30009}.bg5{background-color:#cd21cb}
-.bg6{background-color:#8f5902}.bg7{background-color:#babdb6}.bg8{background-color:#555753}
-.bg9{background-color:#5e78ff}.bg10{background-color:#8ae234}.bg11{background-color:#34e2e2}
-.bg12{background-color:#ef2929}.bg13{background-color:#fd59fa}.bg14{background-color:#fce94f}
-.bg15{background-color:#eeeeec}
+.fg0{color:var(--color-0)}.fg1{color:var(--color-1)}.fg2{color:var(--color-2)}
+.fg3{color:var(--color-3)}.fg4{color:var(--color-4)}.fg5{color:var(--color-5)}
+.fg6{color:var(--color-6)}.fg7{color:var(--color-7)}.fg8{color:var(--color-8)}
+.fg9{color:var(--color-9)}.fg10{color:var(--color-10)}.fg11{color:var(--color-11)}
+.fg12{color:var(--color-12)}.fg13{color:var(--color-13)}.fg14{color:var(--color-14)}
+.fg15{color:var(--color-15)}
+.bg0{background-color:var(--color-0)}.bg1{background-color:var(--color-1)}
+.bg2{background-color:var(--color-2)}.bg3{background-color:var(--color-3)}
+.bg4{background-color:var(--color-4)}.bg5{background-color:var(--color-5)}
+.bg6{background-color:var(--color-6)}.bg7{background-color:var(--color-7)}
+.bg8{background-color:var(--color-8)}.bg9{background-color:var(--color-9)}
+.bg10{background-color:var(--color-10)}.bg11{background-color:var(--color-11)}
+.bg12{background-color:var(--color-12)}.bg13{background-color:var(--color-13)}
+.bg14{background-color:var(--color-14)}.bg15{background-color:var(--color-15)}
 
 /* CRT full-screen display (skills menu `m`, plus the unreachable-in-mobile
    startup/arena popups). Shares --fs-overlay with .overlay-body so the skills
@@ -5957,7 +5981,7 @@ html.map-hold, html.map-hold * {
 .char-card-kind-quit, .char-card-kind-left, .char-card-kind-saved, .char-card-kind-other { color: var(--text-dim); }
 .char-card-god { color: var(--text-dim); font-size: 0.78rem; font-style: italic; }
 /* Values in the HUD's lightgrey (.fg7, #hud-stats' default). */
-.char-card-stats { color: #babdb6; font-size: 0.75rem; font-family: var(--font-mono); }
+.char-card-stats { color: var(--color-7); font-size: 0.75rem; font-family: var(--font-mono); }
 /* Per-stat label tints, muted to sit inside the amber theme. */
 .char-card-st-str { color: #e07070; }
 .char-card-st-int { color: #7d93f0; }

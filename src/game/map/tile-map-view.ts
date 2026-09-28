@@ -9,6 +9,7 @@ import type { Cell, MapStore } from './map-store'
 import type { CellHitTester } from '../input/map-tap'
 import { parseCellKey } from './map-store'
 import { decodeColor, DEFAULT_FG, flashColor } from './colors'
+import { DCSS_COLOR_MAP } from '../dcss-colors'
 import { TEX, type TileLoader, type TileSprite } from '../tiles/tile-loader'
 import { WATER_LINE } from '../tiles/tile-view'
 import { fgFlags, bgFlags } from './flag-decode'
@@ -542,15 +543,15 @@ export class TileMapView {
       const pct = Math.max(0, Math.min(1, this.mp / this.mpMax))
       ctx.fillStyle = '#000000'        // magic_spend
       ctx.fillRect(px, py + ATLAS_CELL - barH, ATLAS_CELL, barH)
-      ctx.fillStyle = '#5e78ff'        // magic (DCSS lightblue)
+      ctx.fillStyle = DCSS_COLOR_MAP.lightblue   // magic
       ctx.fillRect(px, py + ATLAS_CELL - barH, ATLAS_CELL * pct, barH)
       hpOffset += barH
     }
     if (showHp) {
       const pct = Math.max(0, Math.min(1, this.hp / this.hpMax))
-      ctx.fillStyle = '#b30009'        // hp_spend (DCSS red)
+      ctx.fillStyle = DCSS_COLOR_MAP.red         // hp_spend
       ctx.fillRect(px, py + ATLAS_CELL - hpOffset, ATLAS_CELL, barH)
-      ctx.fillStyle = '#8ae234'        // healthy (DCSS lightgreen)
+      ctx.fillStyle = DCSS_COLOR_MAP.lightgreen  // healthy
       ctx.fillRect(px, py + ATLAS_CELL - hpOffset, ATLAS_CELL * pct, barH)
     }
   }
@@ -1233,7 +1234,7 @@ export class TileMapView {
     }
     this.ctx.save()
     try {
-      this.ctx.strokeStyle = '#fce94f' // --map-cursor in style.css (canvas can't read CSS vars cheaply)
+      this.ctx.strokeStyle = DCSS_COLOR_MAP.yellow // --map-cursor in style.css (canvas can't read CSS vars cheaply)
       this.ctx.lineWidth = 2
       this.ctx.strokeRect(px + 1, py + 1, ATLAS_CELL - 2, ATLAS_CELL - 2)
     } finally {
