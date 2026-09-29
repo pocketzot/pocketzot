@@ -56,6 +56,18 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// At a command-key read (input_mode 1), the only state where the harvest may
+// inject its `I` (game-view's uiQuiet). The once-per-game auto-harvest that
+// entry fires is settled with a no-spells reply and the send log cleared, so
+// a test starts idle with an empty rail and drives harvests itself.
+function setupAtCommand(spectating?: SpectateTarget): Harness {
+  const h = setup(spectating)
+  h.dispatch({ msg: 'input_mode', mode: 1 })
+  h.dispatch({ msg: 'msgs', messages: [{ text: "You don't know any spells." }] })
+  h.send.mockClear()
+  return h
+}
+
 // Offline variant: wires the readMorgue seam the way app.ts does from
 // boot.readMorgue.
 function setupOffline(readMorgue: (f: string) => Promise<Uint8Array<ArrayBuffer> | null>): Harness {
@@ -2178,6 +2190,7 @@ describe('lobby transitions', () => {
 //   2. the close-swallow latch must not leak past the harvest and eat a later
 //      real menu's close_menu, and a teardown mid-harvest must reset cleanly.
 describe('spell harvest (silent I → Esc) + preface parsing', () => {
+  const setup = setupAtCommand
   type CachedSpell = {
     letter: string; title: string; schools?: string; fail?: string; level?: number
   }
@@ -2474,8 +2487,9 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
       // The REAL wire form: DCSS joins the two same-turn mprs ("You finish
       // memorising." + "Spell assigned to 'b'.") onto one line, so the match
       // must be a substring — an anchored `$` (the original bug) misses this.
-      // Memorise completes inside command mode (no input_mode transition fires),
-      // so the msgs handler itself must fire the refresh.
+      // The line lands after that turn's input_mode 1 (game-view's msgs
+      // handler has the ordering), so the msgs handler itself must fire the
+      // refresh.
       h.dispatch({ msg: 'msgs', messages: [{ text: "You finish memorising. Spell assigned to 'b'." }] })
       expect(sentInputI(h)).toHaveLength(2)
       feedBase(h)
@@ -2509,20 +2523,29 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
       expect(sentInputI(h)).toHaveLength(1)
     })
 
-    it('re-harvests after a `=` letter reassign, once back at the command prompt', () => {
+    // The `=` spells flow (adjust.cc _adjust_spell), in wire order: the key
+    // read leaves COMMAND, the "(adjust)" list picks the spell and closes,
+    // then a bare get_ch() asks "Adjust to which letter?". That prompt
+    // carries no hotkey hint, so the log gives it no buttons and no live
+    // prompt — only input_mode says the engine isn't at a command read.
+    it('re-harvests after a `=` letter reassign, never into its letter prompt', () => {
       const h = setup()
-      // Spend the once-per-game auto-harvest first, so the resolving input_mode→1
-      // can't be mistaken for it.
-      h.dispatch({ msg: 'input_mode', mode: 1 })
-      feedBase(h)
+      fullHarvest(h)
       expect(sentInputI(h)).toHaveLength(1)
-      // `=` opens the spell list titled "(adjust)" — all spell lists share
-      // tag:"spell", so the title is the discriminator. Flags dirty but does not
-      // harvest while the menu is up (the guard bails on the active menu).
+      h.dispatch({ msg: 'input_mode', mode: 0 })
+      h.dispatch({ msg: 'msgs', messages: [{ text: '<cyan>Adjust (g)ear, (s)pells, (a)bilities, (p)otions, sc(r)olls or e(v)ocables? <lightgrey>', channel: 2 }] })
+      h.dispatch({ msg: 'msgs', messages: [{ text: '<cyan>Adjust which spell? <lightgrey>', channel: 2 }] })
+      // All spell lists share tag:"spell", so the "(adjust)" title is the
+      // discriminator. It flags dirty; the open menu blocks the harvest.
       h.dispatch({ msg: 'menu', tag: 'spell', title: { text: 'Your spells (adjust)' }, items: BASE })
-      expect(sentInputI(h)).toHaveLength(1)
-      // Reassign done → menu closes → command mode resumes → re-harvest fires.
       h.dispatch({ msg: 'close_menu' })
+      h.dispatch({ msg: 'msgs', messages: [
+        { text: '<lightgrey>a - Freeze', channel: 0 },
+        { text: '<cyan>Adjust to which letter? <lightgrey>', channel: 2 },
+      ] })
+      // An `I` here would be read as the target letter.
+      expect(sentInputI(h)).toHaveLength(1)
+      // Reassign done → command mode resumes → re-harvest fires.
       h.dispatch({ msg: 'input_mode', mode: 1 })
       expect(sentInputI(h)).toHaveLength(2)
       feedBase(h)
@@ -2530,8 +2553,7 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
 
     it('does NOT re-harvest when the player merely views the spell list (I/describe)', () => {
       const h = setup()
-      h.dispatch({ msg: 'input_mode', mode: 1 })
-      feedBase(h)
+      fullHarvest(h)
       expect(sentInputI(h)).toHaveLength(1)
       // Same tag, but a "(describe)" title — viewing changes no letters.
       h.dispatch({ msg: 'menu', tag: 'spell', title: { text: 'Your spells (describe)' }, items: BASE })
@@ -2561,8 +2583,7 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
 
     it('casts the tapped spell (z + letter, one atomic input message) from the grid', () => {
       const h = setup()
-      h.dispatch({ msg: 'input_mode', mode: 1 }) // command mode (+ the once-per-game auto-harvest)
-      feedBase(h)                                 // complete that harvest → cache populated, idle
+      fullHarvest(h)
       spellTab(h)!.click()
       gridBtn(h, 'a').click()
       // Single message: the server pty-writes a message's text in one write,
@@ -2621,9 +2642,8 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
         .find(b => b.querySelector('.spell-letter')?.textContent === `z${letter}`)!
     const castsSent = (h: Harness) =>
       sent(h).filter(m => m.msg === 'input' && (m as { text?: string }).text === 'za').length
-    // Enter command mode and settle the auto-harvest it kicks off, so the
-    // rail is populated and the command channel is idle.
-    const ready = (h: Harness) => { h.dispatch({ msg: 'input_mode', mode: 1 }); feedBase(h) }
+    // Populate the rail and leave the command channel idle.
+    const ready = fullHarvest
     // Synthetic touch with a contact point (happy-dom has no TouchEvent ctor;
     // the handlers only read touches[0].clientX/Y).
     const touch = (el: HTMLElement, type: string, x = 0, y = 0) => {

@@ -1408,9 +1408,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       menu: onMenu,
       input_mode: onInputMode,
       init_input: onInitInput,
-      // A memorise/forget this frame leaves us at a command prompt (the
-      // delay finished; no input_mode transition fires), so re-harvest now
-      // rather than waiting for the next menu round-trip.
+      // A memorise/forget's "Spell assigned…" line arrives after that turn's
+      // input_mode 1 (update_input_mode skips the redraw on NORMAL→COMMAND,
+      // so the mode frame precedes the msgs flush; fixtures 10, 14), so
+      // re-harvest here. One flushed earlier, in mode 0, waits for the next
+      // input_mode 1 (uiQuiet requires COMMAND).
       msgs: (msg) => { messageLog.onMsgs(msg); harvester.reharvestIfDirty() },
       cursor: onCursor,
       close_input: onCloseInput,
@@ -2155,14 +2157,13 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // A tap blocked by the guard below is simply dropped. Git holds the fuller
   // versions (click gate at 88c8379, pending-cast queue at b23b85b) if needed.
   function castSpellLetter(letter: string): void {
-    // `currentInputMode === 1` additionally rejects active targeting (a prior
-    // targeted spell left the server in a target loop with a map cursor but no
-    // menu/overlay) — `z<letter>` there would land mid-targeting, not cast.
-    // The monster panel is a client-only overlay that doesn't change input
-    // mode, so it needs its own gate: in landscape the rail stays visible in
+    // commandChannelIdle includes input_mode COMMAND (see uiQuiet), so an
+    // active target loop rejects the tap — `z<letter>` there would land
+    // mid-targeting, not cast. The monster panel is a client-only overlay
+    // that doesn't change input mode, so it needs its own gate: in landscape the rail stays visible in
     // the sidebar beside the panel, and a tap here bypasses the touch-input
     // swallow (the rail sends via conn.send, not that callback).
-    if (monsterPanelOpen || currentInputMode !== 1 || !commandChannelIdle()) return
+    if (monsterPanelOpen || !commandChannelIdle()) return
     // With the d-pad Shift toggle engaged, force-cast (`Z`, CMD_FORCE_CAST_SPELL:
     // casts even with no target in view) instead of plain `z`.
     const cmd = touchControls.consumeShift() ? 'Z' : 'z'
@@ -2206,7 +2207,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   // The view's half of the harvester's keystroke-injection guard (see
-  // SpellHarvester.channelIdle, which ANDs this with its own phase): nothing
+  // SpellHarvester.channelIdle, which ANDs this with its own phase): the
+  // engine is reading a command key (input_mode COMMAND) and nothing
   // transient is up — no menu/overlay/CRT/dialog, no examine cursor
   // (X-mode), no `--more--` pager, no in-log y/n prompt.
   // Earlier guards listed only the menu/overlay subset, so a rail tap or an
@@ -2214,24 +2216,30 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // stray keystroke into it (eating the pager/answering the prompt, or — for
   // a harvest — getting the `I` swallowed so the probe times out and clears
   // the rail). The log's live prompt and --more-- are exactly that missing
-  // state.
+  // state. The mode check is what covers a bare get_ch() key read: those
+  // print a prompt line the log may give no buttons, so promptLive stays
+  // false. `=` spells is one — its "(adjust)" menu flags a re-harvest, the
+  // menu closes, and "Adjust to which letter?" (adjust.cc _adjust_spell)
+  // would read the harvest's `I` as the target letter. COMMAND is only entered in
+  // _get_next_keycode (main.cc); the whole `=` flow runs in 0/7
+  // (10-adjust-under-cutoff). It also rejects active targeting, where a
+  // prior targeted spell left the engine in a target loop with a map
+  // cursor but no menu/overlay.
   function uiQuiet(): boolean {
-    return popups.empty && !dialogActive && !menus.active
+    return currentInputMode === 1 && popups.empty && !dialogActive && !menus.active
       && !inXMode && !messageLog.promptLive && !messageLog.moreActive
   }
 
   // Truly idle at the command prompt — safe to inject a keystroke that must
   // be read as a command (the Android back handler's 'S'). On top of
-  // commandChannelIdle (uiQuiet + harvest phase), input_mode must be COMMAND
-  // (1) — targeting and yesno reads are modes of their own that uiQuiet
-  // can't see (same guard as castSpellLetter's), where Esc is the cancel —
-  // and the client-only panels and the two inline input rows (text/numpad)
-  // must route Esc too: during a server line-read, an injected letter would
-  // be typed INTO the read (or pick an item slot at a slot prompt). The
-  // engine answers that Esc by returning input_mode to COMMAND, which is
-  // what removes the input rows client-side.
+  // commandChannelIdle (uiQuiet, which requires input_mode COMMAND, + harvest
+  // phase), the client-only panels and the two inline input rows
+  // (text/numpad) must route Esc too: during a server line-read, an injected
+  // letter would be typed INTO the read (or pick an item slot at a slot
+  // prompt). The engine answers that Esc by returning input_mode to COMMAND,
+  // which is what removes the input rows client-side.
   function idleAtCommandPrompt(): boolean {
-    return commandChannelIdle() && currentInputMode === 1
+    return commandChannelIdle()
       && !monsterPanelOpen && !minimapOpen
       && !messageLog.textInputOpen
       && numpadInput.style.display === 'none'

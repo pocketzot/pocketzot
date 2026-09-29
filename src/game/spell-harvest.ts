@@ -61,8 +61,10 @@ export interface SpellHarvestHooks {
   // Outbound WS send (the probe's `I` and the menu-closing Escape).
   send(msg: ClientMsg): void
   // The view's half of the "safe to inject a command-level keystroke" check:
-  // nothing transient is up — no menu/overlay/CRT/dialog, no examine cursor
-  // (X-mode), no `--more--` pager, no in-log y/n prompt. The harvester ANDs
+  // the engine is reading a command key (input_mode COMMAND — the view's
+  // uiQuiet has why) and nothing transient is up — no menu/overlay/CRT/
+  // dialog, no examine cursor (X-mode), no `--more--` pager, no in-log y/n
+  // prompt. The harvester ANDs
   // this with its own phase (see channelIdle) to gate every injection.
   uiQuiet(): boolean
   // The spell list changed (menu capture, no-spells terminator, timeout
