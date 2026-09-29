@@ -1600,12 +1600,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         // (0.23 char creation arrives as a CRT text screen, driveable from
         // the virtual keyboard).
         disarmCreationGuard()
-        const raw = msg as unknown as Record<string, unknown>
-        const lines = raw['lines']
-        if (raw['id'] && lines && typeof lines === 'object' && !Array.isArray(lines)) {
-          updateCrtLines(lines as Record<string, string>, raw['clear'] === true)
+        const lines = msg.lines
+        if (msg.id && lines && typeof lines === 'object' && !Array.isArray(lines)) {
+          updateCrtLines(lines, msg.clear === true)
         } else {
-          const text = String(raw['text'] ?? '')
+          const text = String(msg.text ?? '')
           if (text.includes('\n')) showTxtPage(text)
           else messageLog.append(text)
         }
@@ -1614,7 +1613,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
       case 'ui-push': {
         disarmCreationGuard()  // an overlay rendered — see the 'txt' case
-        const pushMsg = msg as unknown as UiPushMsg
+        const pushMsg: UiPushMsg = msg
         if (resumed && !spectating && CREATION_PUSHES.has(pushMsg.type)) {
           abandoningResume = true
           conn.send({ msg: 'go_lobby' })
@@ -1650,7 +1649,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         // boot watchdog's rescue resend (mini-server.ts) may carry the only
         // good copy, so it takes every one.
         if (!localEngine && (!spectating || uiStackTaken)) break
-        const items = (msg as unknown as { items?: ServerMsg[] }).items
+        const items = msg.items
         if (!Array.isArray(items)) break
         uiStackTaken = true
         // Each item carries its own `msg` (ui-push, menu, crt menu), so it
@@ -1700,31 +1699,29 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       }
 
       case 'ui-state': {
-        const raw = msg as unknown as Record<string, unknown>
-        // Newgame focus sync arrives as a flat ui-state (outer-menu.cc
-        // scroll_button_into_view): {type:"newgame-choice", button_focus,
-        // from_client, menu_id}. The server emits an initial focus right
-        // after the push and re-emits on server-side arrow navigation.
-        if (raw['type'] === 'newgame-choice') {
-          const focus = raw['button_focus']
-          if (typeof focus === 'number') newgameFocus?.(focus, raw['from_client'] === true)
+        // Newgame focus (types.ts UiStateMsg): the server emits an initial
+        // focus right after the push and re-emits on server-side arrow
+        // navigation.
+        if (msg.type === 'newgame-choice') {
+          const focus = msg.button_focus
+          if (typeof focus === 'number') newgameFocus?.(focus, msg.from_client === true)
           break
         }
-        layoutView.onUiState(raw)
+        layoutView.onUiState(msg)
         break
       }
 
       case 'ui-scroller-scroll':
-        layoutView.onScrollerScroll(msg as unknown as Record<string, unknown>)
+        layoutView.onScrollerScroll(msg)
         break
 
       case 'ui-state-sync':
-        layoutView.onStateSync(msg as unknown as Parameters<LayoutView['onStateSync']>[0])
+        layoutView.onStateSync(msg)
         break
 
       case 'menu': {
         disarmCreationGuard()  // a menu rendered — see the 'txt' case
-        const m = msg as unknown as MenuMsg
+        const m: MenuMsg = msg
         const titlePlain = stripDcss(m.title?.text ?? '')
         // Silent spell harvest (see ../game/spell-harvest onMenu): the
         // probe's own spell menu is captured + Escaped and must be swallowed
@@ -1748,15 +1745,15 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       }
 
       case 'update_menu':
-        menuView.onUpdateMenu(msg as unknown as Parameters<MenuView['onUpdateMenu']>[0])
+        menuView.onUpdateMenu(msg)
         break
 
       case 'menu_scroll':
-        menuView.onMenuScroll(msg as unknown as Parameters<MenuView['onMenuScroll']>[0])
+        menuView.onMenuScroll(msg)
         break
 
       case 'update_menu_items':
-        menuView.onUpdateItems(msg as unknown as Parameters<MenuView['onUpdateItems']>[0])
+        menuView.onUpdateItems(msg)
         break
 
       case 'input_mode': {

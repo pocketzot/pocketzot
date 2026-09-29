@@ -6,7 +6,7 @@
 // game-overlays.ts, newgame-view.ts) and the layering policy stay in the
 // game view, which supplies the overlay host through LayoutViewDeps.
 
-import type { ClientMsg } from '../ws/types'
+import type { ClientMsg, ScrollerScrollMsg, UiStateMsg, UiStateSyncMsg } from '../ws/types'
 import type { NavKey } from '../game/input/input-router'
 import type { TileLoader } from '../game/tiles/tile-loader'
 import type { UiPushMsg } from './game-overlays'
@@ -283,13 +283,9 @@ export class LayoutView {
   }
 
   // ui-state for a layout (the game view routes newgame-choice focus itself).
-  onUiState(raw: Record<string, unknown>): void {
-    const text = raw['text'] as string | undefined
-    const body = raw['body'] as string | undefined
-    const highlight = raw['highlight'] as string | undefined
-    const scroll = raw['scroll'] as number | undefined
-    const fromWebtiles = raw['from_webtiles'] === true
-    const actions = raw['actions'] as string | undefined
+  onUiState(m: UiStateMsg): void {
+    const { text, body, highlight, scroll, actions } = m
+    const fromWebtiles = m.from_webtiles === true
     const layout = this.d.topLayout()
     if (text) {
       const entry: UiPushMsg = { type: 'formatted-scroller', text, ...(highlight ? { highlight } : {}), ...(actions ? { actions } : {}) }
@@ -315,7 +311,7 @@ export class LayoutView {
     if (scroll !== undefined && (!fromWebtiles || this.d.spectating)) this.scrollBody(scroll)
   }
 
-  onScrollerScroll(raw: Record<string, unknown>): void {
+  onScrollerScroll(m: ScrollerScrollMsg): void {
     // The reference client skips this entirely when the top popup is a
     // formatted-scroller (ui-layouts.js:1066-1073: "formatted scrollers
     // send their own synchronization messages"). The server emits these
@@ -323,9 +319,7 @@ export class LayoutView {
     // the popup-type guard we'd ricochet our own scroll position back
     // through this channel.
     if (this.scrollerActive) return
-    const scroll = raw['scroll'] as number | undefined
-    const fromWebtiles = raw['from_webtiles'] === true
-    if (scroll !== undefined && (!fromWebtiles || this.d.spectating)) this.scrollBody(scroll)
+    if (m.scroll !== undefined && (!m.from_webtiles || this.d.spectating)) this.scrollBody(m.scroll)
   }
 
   // Server-driven updates to a focused input widget. from_webtiles=true
@@ -336,7 +330,7 @@ export class LayoutView {
   //   "seed"         — seed-selection seed entry
   //   "pregenerate"  — seed-selection checkbox
   //   "btn-*"        — buttons; presence-only, no state to apply
-  onStateSync(m: { widget_id?: string; text?: string; checked?: boolean; from_webtiles?: boolean; has_focus?: boolean }): void {
+  onStateSync(m: UiStateSyncMsg): void {
     if (m.from_webtiles && !this.d.spectating) return
     const overlay = this.d.content()
     if (m.widget_id === 'input') {

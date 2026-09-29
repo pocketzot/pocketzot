@@ -1,5 +1,8 @@
 // TypeScript interfaces for DCSS WebTiles WebSocket protocol.
 
+import type { MenuItem, MenuMsg } from '../game/menu-model'
+import type { UiPushMsg } from '../views/game-overlays'
+
 export interface CellUpdate {
   x?: number
   y?: number
@@ -196,23 +199,21 @@ export type ServerMsg =
   | { msg: 'update_spectators'; count: number; names: string }
   // Server-initiated removal of the chat UI (restricted accounts).
   | { msg: 'super_hide_chat' }
-  | { msg: 'txt'; lines: number; text: string }
-  | { msg: 'menu'; id?: string; tag?: string; flags?: number; items?: MenuItem[] }
-  | { msg: 'menu_scroll'; first?: number }
-  | { msg: 'close_menu' }
-  | { msg: 'ui-push'; type: string; body?: string }
+  | ({ msg: 'txt' } & TxtMsg)
+  | ({ msg: 'menu' } & MenuMsg)
+  | ({ msg: 'menu_scroll' } & MenuScrollMsg)
+  | ({ msg: 'ui-push' } & UiPushMsg)
   | { msg: 'ui-pop' }
   // tileweb.cc push/pop_ui_cutoff: hide every overlay layer at engine
   // menu-stack depth <= cutoff (the map runs underneath, e.g. wand aiming
   // entered from an item describe); -1 restores. See ui::cutoff_point.
   | { msg: 'ui_cutoff'; cutoff: number }
-  | { msg: 'ui-stack'; items: ServerMsg[] }
-  | { msg: 'ui-state'; type: string; props?: Record<string, unknown> }
-  | { msg: 'ui-scroller-scroll'; scroll?: number }
+  | { msg: 'ui-stack'; items?: ServerMsg[] }
+  | ({ msg: 'ui-state' } & UiStateMsg)
+  | ({ msg: 'ui-scroller-scroll' } & ScrollerScrollMsg)
   | { msg: 'flush' }
-  | { msg: 'menu' }
-  | { msg: 'update_menu'; total_items?: number; last_hovered?: number; more?: string; alt_more?: string }
-  | { msg: 'update_menu_items'; chunk_start?: number; items?: MenuItem[] }
+  | ({ msg: 'update_menu' } & UpdateMenuMsg)
+  | ({ msg: 'update_menu_items' } & UpdateMenuItemsMsg)
   | { msg: 'close_menu' }
   | { msg: 'close_all_menus' }
   | { msg: 'cursor'; id: number; loc?: { x: number; y: number } }
@@ -221,8 +222,73 @@ export type ServerMsg =
   | { msg: 'init_input'; type: string; tag?: string; prompt?: string; prefill?: string; select_prefill?: boolean; maxlen?: number; size?: number }
   | { msg: 'close_input' }
   | { msg: 'title_prompt'; prompt?: string; close?: boolean; raw?: boolean }
-  | { msg: 'ui-state-sync'; widget_id?: string; text?: string; cursor?: number; checked?: boolean; has_focus?: boolean; from_webtiles?: boolean; generation_id?: number }
+  | ({ msg: 'ui-state-sync' } & UiStateSyncMsg)
   | { msg: 'text_cursor'; enabled?: boolean }
+
+// The payload shapes below are the fields their consumers read (a message
+// may carry more). MenuMsg and UiPushMsg are documented where they're
+// parsed (game/menu-model.ts, views/game-overlays.ts).
+
+// Two shapes share the name: a CRT screen's rows (`id` + `lines`, an
+// object keyed by row number; `clear` marks a forced redraw that omits
+// blank rows, tileweb-text.cc:177) and a one-off text page (`text`).
+export interface TxtMsg {
+  id?: string | number
+  lines?: Record<string, string>
+  clear?: boolean
+  text?: string
+}
+
+export interface UpdateMenuMsg {
+  more?: string
+  alt_more?: string
+  last_hovered?: number
+  total_items?: number
+  title?: { text: string }
+}
+
+// menu.cc webtiles_update_scroll_pos. `force` marks a server-side move the
+// player's own client must follow too (menu.js server_menu_scroll).
+export interface MenuScrollMsg {
+  first?: number
+  last_hovered?: number
+  force?: boolean
+}
+
+export interface UpdateMenuItemsMsg {
+  chunk_start?: number
+  items?: MenuItem[]
+}
+
+// A layout's state change. Newgame focus arrives flat on it too
+// (outer-menu.cc scroll_button_into_view: type "newgame-choice",
+// button_focus, from_client, menu_id).
+export interface UiStateMsg {
+  type?: string
+  text?: string
+  body?: string
+  highlight?: string
+  actions?: string
+  scroll?: number
+  from_webtiles?: boolean
+  button_focus?: number
+  from_client?: boolean
+}
+
+export interface ScrollerScrollMsg {
+  scroll?: number
+  from_webtiles?: boolean
+}
+
+export interface UiStateSyncMsg {
+  widget_id?: string
+  text?: string
+  cursor?: number
+  checked?: boolean
+  has_focus?: boolean
+  from_webtiles?: boolean
+  generation_id?: number
+}
 
 export interface PlayerMsg {
   name?: string
@@ -288,15 +354,6 @@ export interface PlayerMsg {
   quiver_desc?: string
   inv?: Record<string, { name?: string; col?: number }>
   time_last_input?: number
-}
-
-export interface MenuItem {
-  idx?: number
-  level?: number
-  hotkeys?: string[]
-  style?: string
-  text?: string
-  tiles?: TileInfo[]
 }
 
 // --- Client → Server messages ---

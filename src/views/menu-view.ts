@@ -4,7 +4,7 @@
 // shows and supplies the overlay host and layering policy through
 // MenuViewDeps.
 
-import type { ClientMsg } from '../ws/types'
+import type { ClientMsg, MenuScrollMsg, UpdateMenuItemsMsg, UpdateMenuMsg } from '../ws/types'
 import type { ShiftToggle } from '../game/input/shift-state'
 import type { NavKey } from '../game/input/input-router'
 import type { TileLoader } from '../game/tiles/tile-loader'
@@ -190,7 +190,7 @@ export class MenuView {
     return true
   }
 
-  onUpdateMenu(m: { more?: string; alt_more?: string; last_hovered?: number; total_items?: number; title?: { text: string } }): void {
+  onUpdateMenu(m: UpdateMenuMsg): void {
     const active = this.model.active
     if (!active) return
     if (m.more !== undefined) {
@@ -232,7 +232,7 @@ export class MenuView {
     this.updateFooter()
   }
 
-  onMenuScroll(m: { first?: number; last_hovered?: number; force?: boolean }): void {
+  onMenuScroll(m: MenuScrollMsg): void {
     // Reference server_menu_scroll (menu.js:848): ignored entirely unless
     // forced, or we're spectating and following the player's own pager.
     // The engine force-sends its scroll position where it moved the cursor
@@ -255,7 +255,7 @@ export class MenuView {
     this.updateFooter()
   }
 
-  onUpdateItems(m: { chunk_start?: number; items?: MenuItem[] }): void {
+  onUpdateItems(m: UpdateMenuItemsMsg): void {
     const active = this.model.active
     if (!active || !m.items) return
     const flip = this.model.patchItems(m.chunk_start ?? 0, m.items)
