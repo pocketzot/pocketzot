@@ -126,6 +126,28 @@
      portrait panel cap AND the tablet-landscape sidebar width, so the keys
      are one size across iPad rotations — one token, can't drift apart. */
   --touch-panel-cap: 20rem;
+
+  /* Stacking ladder: every z-index that competes across components. Local
+     stacking inside one component (a segmented control's active segment,
+     a sticky footer in its scroller) stays a literal, as does the lobby's
+     account menu over its sticky notice (20 / 1 — both must stay under
+     --z-numpad). Ties on one rung resolve by mount order.
+     In-game floats share #game-view's `map` grid area; the map is at auto. */
+  --z-map-card: 2;      /* monster list, minimap lens — under the log, which stays readable over them */
+  --z-map-float: 3;     /* message log, X-describe strip, spell rail; landscape: d-pad, X-mode minimap slot */
+  --z-map-more: 4;      /* X-mode --more-- button */
+  --z-map-overlay: 5;   /* #ui-overlay (menus, CRTs, layouts); chat chip and pill, mounted later so over it */
+  --z-map-above-overlay: 6; /* share chip, version notice, landscape d-pad over a floating prompt */
+  --z-map-drag: 7;      /* monster list mid-drag/snap: travels over everything, the chip it trades corners with included */
+  /* Page layers: position:fixed, over the views. */
+  --z-numpad: 40;       /* on-screen numpad over the touch strip */
+  --z-exit-dialog: 50;  /* lobby post-game dialog */
+  --z-crypt: 60;        /* the crypt shell (mountCryptShell): crypt, offline Past games and its morgue, card gallery */
+  --z-reconnect: 70;    /* auto-resume card over the frozen game view */
+  --z-game-panel: 200;  /* virtual keyboard, size palette: panels over the live game */
+  --z-settings: 210;    /* over the keyboard: the HUD ⚙ stays tappable while the keyboard is open */
+  --z-doc: 220;         /* leaf modals, nothing opens on them — docs, RC editor, crypt card; over settings, whose Help opens docs */
+  --z-status-strip: 1000; /* status-blur.ts strip */
   touch-action: manipulation;
 }
 
@@ -201,7 +223,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   height: var(--status-strip-h);
   background: var(--bg);
   pointer-events: none;
-  z-index: 1000;
+  z-index: var(--z-status-strip);
 }
 /* JS toggles collapsibles via the hidden attribute; author display rules
    (flex/grid) on the same element would otherwise defeat the UA's
@@ -466,11 +488,11 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
 
 /* Full-screen "crypt": the complete retained character history (src/avatars.ts),
    a vertical-scrolling 4-wide grid of doll sprites. Opened by tapping the login
-   doll strip; mounted on body above the login view (doc-overlay z-index tier). */
+   doll strip; mounted on body above the login view. */
 .crypt-view {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-crypt);
   background: var(--bg);
   display: flex;
   flex-direction: column;
@@ -1567,7 +1589,7 @@ button.lobby-account-chip:active { background: var(--press); }
 .rc-editor {
   position: fixed;
   inset: 0;
-  z-index: 220; /* same layer as .doc-backdrop; mounted later, so on top */
+  z-index: var(--z-doc); /* mounted after any doc, so on top */
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -1632,7 +1654,7 @@ button.lobby-account-chip:active { background: var(--press); }
 .lobby-exit-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-exit-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1703,13 +1725,11 @@ button.lobby-account-chip:active { background: var(--press); }
 
 /* ── In-app document modal (About / What's new) ───────────── */
 /* Floats above login/lobby; rendered from ABOUT.md / CHANGELOG.md. Backdrop and
-   card mirror the exit dialog. Docs are leaf modals — nothing ever opens on top
-   of one — so the z-index tops every opener, including the settings page (210),
-   whose Help section opens them. */
+   card mirror the exit dialog. */
 .doc-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 220;
+  z-index: var(--z-doc);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1869,14 +1889,13 @@ button.lobby-account-chip:active { background: var(--press); }
 
 /* Old-version advisory banner (version-advisory.ts):
    floats over the map's top edge, tap-to-dismiss, auto-removed after a
-   few seconds. z-index above the floating log/rail tier (≤5), below
-   nothing that matters — server overlays replace the map wholesale. */
+   few seconds. */
 .version-notice {
   position: absolute;
   top: max(0.5rem, var(--safe-top));
   left: 50%;
   transform: translateX(-50%);
-  z-index: 6;
+  z-index: var(--z-map-above-overlay);
   max-width: min(92%, 30rem);
   padding: 0.45rem 0.8rem;
   border-radius: 0.5rem;
@@ -2056,7 +2075,7 @@ html.map-hold, html.map-hold * {
   position: absolute;
   left: 0;
   right: 0;
-  z-index: 3;
+  z-index: var(--z-map-float);
   background: var(--msglog-bg);
   overflow-y: auto;
   /* Anchoring only skips at offset 0; at −1px it held the old rows and the
@@ -2088,7 +2107,7 @@ html.map-hold, html.map-hold * {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 3;
+  z-index: var(--z-map-float);
   background: var(--msglog-bg);
   text-shadow: var(--msglog-text-shadow);
   font-size: var(--msglog-font);
@@ -2169,7 +2188,7 @@ html.map-hold, html.map-hold * {
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 3;
+    z-index: var(--z-map-float);
   }
 
   /* No portrait #more-btn offsets: the button shows only in X mode (see the
@@ -2293,7 +2312,7 @@ html.map-hold, html.map-hold * {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 40;
+  z-index: var(--z-numpad);
   background: var(--bg);
   border-top: 1px solid var(--border);
   padding: 0.5rem 0.5rem max(0.6rem, var(--safe-bottom));
@@ -2524,7 +2543,7 @@ html.map-hold, html.map-hold * {
   left: 0.25rem;
   right: 0.25rem;
   bottom: 0;
-  z-index: 4;
+  z-index: var(--z-map-more);
   background: var(--surface2);
   border: 1px solid var(--more-cyan);
   color: var(--more-cyan);
@@ -2579,7 +2598,7 @@ html.map-hold, html.map-hold * {
      promotes it to absolute so the float overlays the map without consuming
      layout space. */
   position: relative;
-  z-index: 2;
+  z-index: var(--z-map-card);
   font-size: 0.82rem;
   font-family: var(--font-mono);
   /* No max-height / overflow: the JS caps content at MAX_ROWS rows, with
@@ -2658,11 +2677,8 @@ html.map-hold, html.map-hold * {
     left: 0.4rem;
   }
 
-  /* Mid-drag and during the snap: above the log float (3) and the chip (5)
-     so the card travels over everything, including the chip it's trading
-     corners with. */
   #monster-list:is(.ml-dragging, .ml-snapping) {
-    z-index: 7;
+    z-index: var(--z-map-drag);
   }
 }
 
@@ -2796,9 +2812,7 @@ html.map-hold, html.map-hold * {
 .minimap-lens {
   position: absolute;
   inset: 0;
-  /* Above the map content; below the floating log / spell rail / --more--
-     tier (z ≥ 3), which stay readable over the lens. */
-  z-index: 2;
+  z-index: var(--z-map-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3204,7 +3218,7 @@ html.map-hold, html.map-hold * {
 #ui-overlay {
   grid-area: map;
   position: relative;
-  z-index: 5;
+  z-index: var(--z-map-overlay);
   overflow-y: auto;
   background: var(--bg);
   /* The map cell starts at the physical top of the screen (full-bleed), so
@@ -3229,7 +3243,7 @@ html.map-hold, html.map-hold * {
   position: absolute;
   bottom: max(0.5rem, var(--safe-bottom));
   right: 0.5rem;
-  z-index: 6;
+  z-index: var(--z-map-above-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4585,7 +4599,7 @@ html.map-hold, html.map-hold * {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 200;
+  z-index: var(--z-game-panel);
   background: var(--bg);
   /* Standard region-seam hairline (see the chat-sheet comment) — the old
      2px accent seam out-shouted every other edge on screen. */
@@ -4850,7 +4864,7 @@ html.map-hold, html.map-hold * {
   #ui-overlay {
     grid-area: map;
     position: relative;
-    z-index: 5;
+    z-index: var(--z-map-overlay);
     padding-left: max(0.5rem, var(--safe-left));
     padding-bottom: max(0.75rem, var(--safe-bottom));
   }
@@ -4861,9 +4875,9 @@ html.map-hold, html.map-hold * {
   #ui-overlay.overlay-float { grid-row: map; }
   /* Here the d-pad floats *inside* the map area (no separate touch row),
      so the full-span backdrop would dim and block it — lift it above the
-     float backdrop (z 5) only, keeping the prompt answerable by arrows/Esc
+     float backdrop only, keeping the prompt answerable by arrows/Esc
      like portrait. Full-screen overlays still cover it as before. */
-  #ui-overlay.overlay-float ~ #touch-controls .tc-dpad { z-index: 6; }
+  #ui-overlay.overlay-float ~ #touch-controls .tc-dpad { z-index: var(--z-map-above-overlay); }
 
   /* Placement comes from the `chat` area in the template above. Only the
      insets are landscape-specific: the map column is full-bleed, but the
@@ -4956,7 +4970,7 @@ html.map-hold, html.map-hold * {
   /* The X-mode --more-- fallback button re-anchors to the log's usual band
      (the log itself is hidden in X mode): top keeps it clear of the
      bottom-anchored xdesc strip and d-pad. Base rule provides
-     grid-area:map, absolute, left/right, z-index 4. */
+     grid-area:map, absolute, left/right, z-index. */
   #more-btn {
     top: calc(var(--safe-top) + var(--msglog-h));
     bottom: auto;
@@ -5019,7 +5033,7 @@ html.map-hold, html.map-hold * {
     align-self: end;
     justify-self: start;
     position: relative;
-    z-index: 3;
+    z-index: var(--z-map-float);
     /* Bottom margin is the --sidebar-lift variant with the floor lowered
        to match the 0.3rem side margins, so ↓/↘ taps don't ride the home
        swipe. Left margin clears the notch/island ear when it's on the left
@@ -5055,7 +5069,7 @@ html.map-hold, html.map-hold * {
     align-self: end;
     justify-self: start;
     position: relative;
-    z-index: 3;
+    z-index: var(--z-map-float);
     border: 0;
     margin: 0 0 var(--xdesc-h, 0px) var(--safe-left);
   }
@@ -5262,7 +5276,7 @@ html.map-hold, html.map-hold * {
 .reconnect-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: var(--z-reconnect);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5336,11 +5350,8 @@ html.map-hold, html.map-hold * {
 .lobby-notice-actions button:active { background: var(--press); }
 
 /* ── Settings overlay (src/views/settings-view.ts) ───────────── */
-/* Reuses the doc-viewer shell (.doc-backdrop/.doc-card); above the in-game
-   virtual keyboard (z 200) since the kbd can be open when the HUD ⚙ chip
-   is tapped (the HUD stays visible above the kbd), below plain doc
-   modals (220) since the Help section opens those on top. */
-.settings-backdrop { z-index: 210; }
+/* Reuses the doc-viewer shell (.doc-backdrop/.doc-card) one tier lower. */
+.settings-backdrop { z-index: var(--z-settings); }
 .settings-card { max-width: 26rem; }
 .settings-body {
   font-family: var(--font-mono);
@@ -5591,14 +5602,13 @@ html.map-hold, html.map-hold * {
    touch strip sit at the bottom). Because it sits away from its subjects,
    nothing that needs
    watching is behind it — so the scrim runs near-opaque for caption
-   legibility over bright glyph fields, with the log's text-shadow as backup.
-   Above all in-game tiers (log 3, overlays 5, chip 6). */
+   legibility over bright glyph fields, with the log's text-shadow as backup. */
 .size-palette {
   position: fixed;
   top: max(0.5rem, var(--safe-top));
   left: 50%;
   transform: translateX(-50%);
-  z-index: 200;
+  z-index: var(--z-game-panel);
   width: min(92%, 24rem);
   padding: 0.3rem 0.75rem 0.7rem;
   border: 1px solid rgba(245, 158, 11, 0.3);
@@ -5831,7 +5841,7 @@ html.map-hold, html.map-hold * {
 }
 
 /* Playing role: float over the map's top-right corner (same containing-block
-   trick as #more-btn). Below the version notice (6), above the log tier.
+   trick as #more-btn). Below the version notice, above the log tier.
    Over the map the opaque chip fill would fully blot out whichever cell sits
    under it, so swap it for the message-log scrim (same var → tiles-mode
    lightening applies here too) and let the log's text-shadow carry
@@ -5841,7 +5851,7 @@ html.map-hold, html.map-hold * {
   position: absolute;
   top: max(0.4rem, var(--safe-top));
   right: 0.4rem;
-  z-index: 5;
+  z-index: var(--z-map-overlay);
   background: var(--msglog-bg);
   text-shadow: var(--msglog-text-shadow);
 }
@@ -5868,7 +5878,7 @@ html.map-hold, html.map-hold * {
   width: fit-content;
   /* --msglog-box-h: ride up with the log's inline --more-- growth. */
   bottom: calc(var(--msglog-box-h) + 0.5rem);
-  z-index: 5;
+  z-index: var(--z-map-overlay);
   padding: 0.35rem 0.7rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--text-dim) 75%, transparent);
