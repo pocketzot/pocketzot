@@ -105,7 +105,7 @@ export class SpellHarvester {
   private retried = false
   // Every capture assigns a NEW array, never mutates in place: the rail
   // uses reference identity on this array to tell "content changed,
-  // rebuild" from "visibility toggled" (see renderSpellRail in game-view).
+  // rebuild" from "visibility toggled" (see SpellRail.builtFrom in views/spell-rail).
   private cache: SpellEntry[] = []
 
   constructor(private hooks: SpellHarvestHooks, private spectating: boolean) {}

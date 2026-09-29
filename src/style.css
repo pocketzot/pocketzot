@@ -2080,7 +2080,7 @@ html.map-hold, html.map-hold * {
    cursor move, so no fixed height, scroll, or column-reverse machinery.
    Anchored bottom in BOTH orientations (X mode hides the landscape sidebar
    log too, and the strip belongs next to the d-pad steering the cursor).
-   spell-row can't coexist (renderSpellRail drops the rail in X mode), so no
+   spell-row can't coexist (SpellRail.render drops the rail in X mode), so no
    rail offset variant is needed. */
 #xdesc-strip {
   grid-area: map;
@@ -2189,7 +2189,7 @@ html.map-hold, html.map-hold * {
      casters the whole session (7 tiles to the messages, 10 to the island) —
      a persistent off-center reads worse than one shift at rail fade-in.
      `#game-view` prefix outranks the base `#map-grid` padding regardless of
-     source order; spell-row and x-mode never coexist (renderSpellRail drops
+     source order; spell-row and x-mode never coexist (SpellRail.render drops
      the class while examining), so the x-mode 2px rule below can't collide. */
   #game-view #map-grid { padding-bottom: calc(2px + var(--msglog-h)); }
   #game-view.spell-row #map-grid {
@@ -3598,7 +3598,7 @@ html.map-hold, html.map-hold * {
   scrollbar-width: none;
 }
 .spell-rail-track::-webkit-scrollbar { display: none; }
-/* The spell-list button (game-view openSpellList), fixed at the trailing
+/* The spell-list button (spell-rail.ts openSpellList), fixed at the trailing
    edge whatever the spell count. Its hairline shows only while spells
    overflow (#spell-rail.overflowing): there it explains the cut edge of the
    peek; with room to spare the gap alone separates it — HIG toolbars
@@ -5098,7 +5098,7 @@ html.map-hold, html.map-hold * {
      against the inline style. The log forces flex (not block) so the
      base column-reverse bottom-pin survives — block would render the
      newest message at the top. #spell-rail is deliberately absent:
-     renderSpellRail hides it via inline display (X-mode / spectating /
+     SpellRail.render hides it via inline display (X-mode / spectating /
      no spells) and that must keep winning. */
   #game-messages { display: flex  !important; }
   #game-hud      { display: flex  !important; }

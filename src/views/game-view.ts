@@ -23,14 +23,13 @@ import { attachMapGestures, canDescribe, canHover, canOpenLevelMap } from '../ga
 import { attachCornerSwipe } from '../game/input/corner-swipe'
 import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { cursorInView, keepLocalCenter } from '../game/input/map-pan'
-import { uiColor, escHtml, dcssToHtml } from '../game/dcss-colors'
+import { escHtml, dcssToHtml } from '../game/dcss-colors'
 import { exportScreenPng, type DcssRun } from './screen-export'
 import { extractSkillHotkeys } from './skill-hotkeys'
 import { reflowSkillCrt, plainText } from './skill-reflow'
-import { TEX, getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
+import { getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
 import { formatDcssVersion, isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
-import { CELL, renderTiles } from '../game/tiles/tile-view'
 import { primeFingerprint } from '../game/tiles/atlas-dedup'
 import { OFFLINE_WS_URL } from '../offline/offline-state'
 import { CharacterRecord } from '../game/character-record'
@@ -44,8 +43,7 @@ import { compactPlace } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
 import { stripDcss } from './overlay-body'
 import { SpellHarvester, type SpellEntry } from '../game/spell-harvest'
-import { peekGap } from './rail-peek'
-import { tabIconGeometry } from './tab-icon'
+import { SpellRail } from './spell-rail'
 import { ChatView } from './chat-view'
 import {
   showInputDialog, showSeedSelection,
@@ -409,7 +407,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // view's side of the contract: uiQuiet is the non-harvest half of the
   // keystroke-injection guard, and exposeSpellCache refreshes every spell
   // surface (rail, z tab, dev hook) when the cache changes. Both are hoisted
-  // function declarations, so referencing them here is safe.
+  // function declarations, so referencing them here is safe; the harvester
+  // fires no hook while constructing, so spellRail (built below) is ready.
   const harvester = new SpellHarvester({
     send: (m) => conn.send(m),
     uiQuiet: () => uiQuiet(),
@@ -420,63 +419,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const isHarvesting = (): boolean => harvester.isHarvesting()
   const commandChannelIdle = (): boolean => harvester.channelIdle()
 
-  // Spell rail: a persistent row of quick-cast buttons floated over the map's
-  // bottom edge in portrait (landscape slots it into the sidebar `spells`
-  // row). The message log floats over the map too — always, casters or not —
-  // so the rail is out of flow; the `spell-row` class on #game-view lifts the
-  // log by the rail's height AND grows the map's bottom
-  // centering reserve to match (see the #map-grid padding rules), so the @
-  // re-centers ~1 row upward when the rail fades in — a deliberate trade,
-  // accepted on-device over the @ sitting persistently low for casters.
-  // Always visible during play once spells are harvested.
-  const spellRail = document.createElement('div')
-  spellRail.id = 'spell-rail'
-  spellRail.style.display = 'none'
-  // The rail's buttons scroll sideways inside its opaque band, spaced so the
-  // edge button always peeks (rail-peek.ts). The CSS gap is the floor: the
-  // inline override is cleared first so the stylesheet value is what's read.
-  const railTrack = document.createElement('div')
-  railTrack.className = 'spell-rail-track'
-  spellRail.appendChild(railTrack)
-  const applyRailGap = (): void => {
-    const btn = railTrack.firstElementChild
-    // Never recompute while hidden: the observer fires on display:none with
-    // a 0 width, and a floor gap left in place would shift every button
-    // under the scroll offset restored on show (renderSpellRail).
-    const trackW = railTrack.clientWidth
-    if (!btn || trackW === 0) return
-    // Measure before clearing the override: a layout read with the floor
-    // gap in place clamps scrollLeft to the narrower row (measured: a rail
-    // scrolled to the end came back one button short after X mode).
-    const btnW = btn.getBoundingClientRect().width
-    railTrack.style.columnGap = ''
-    const cssGap = parseFloat(getComputedStyle(railTrack).columnGap) || 0
-    railTrack.style.columnGap = `${peekGap(trackW, btnW, cssGap)}px`
-  }
-  // The book's divider shows only while spells overflow the scroller, where
-  // it explains the cut edge (.spell-rail-book in style.css).
-  const syncRailOverflow = (): void => {
-    if (railTrack.clientWidth === 0) return
-    spellRail.classList.toggle('overflowing', railTrack.scrollWidth > railTrack.clientWidth)
-  }
-  new ResizeObserver(() => { applyRailGap(); syncRailOverflow() }).observe(railTrack)
-  // The spell-list button, fixed right of the scroller (openSpellList). Its
-  // icon waits for the version's loader (paintRailBook).
-  const railBook = document.createElement('div')
-  railBook.className = 'spell-rail-book'
-  const railBookBtn = document.createElement('button')
-  railBookBtn.className = 'spell-rail-btn'
-  railBookBtn.title = 'Your spells (I)'
-  const railBookLbl = document.createElement('span')
-  railBookLbl.className = 'spell-letter'
-  railBookLbl.textContent = 'I'
-  railBookBtn.appendChild(railBookLbl)
-  railBook.appendChild(railBookBtn)
-  spellRail.appendChild(railBook)
-  bindSpellTap(railBookBtn, () => openSpellList())
-  // A display:none box loses its scroll offset, and the rail hides for
-  // every X-mode visit; renderSpellRail carries the offset across.
-  let railScrollLeft = 0
   let inXMode = false
   let exitedXModeForInput = false
   // The server's last vgrdc. In X mode the view center may deliberately
@@ -539,6 +481,25 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   view.id = 'game-view'
   // Widens the message log (see the #game-view.spectating rule in style.css).
   if (spectating) view.classList.add('spectating')
+
+  // Always visible during play once spells are harvested (hidden in X mode).
+  const spellRail = new SpellRail({
+    view,
+    send: (m) => conn.send(m),
+    spells: () => harvester.spells,
+    loader: () => loader,
+    spectating: !!spectating,
+    inXMode: () => inXMode,
+    // commandChannelIdle includes input_mode COMMAND (see uiQuiet), so an
+    // active target loop rejects the tap — `z<letter>` there would land
+    // mid-targeting, not cast. The monster panel is a client-only overlay
+    // that doesn't change input mode, so it needs its own gate: in landscape
+    // the rail stays visible in the sidebar beside the panel, and a tap there
+    // bypasses the touch-input swallow (the rail sends via conn.send, not
+    // that callback).
+    tapIdle: () => !monsterPanelOpen && commandChannelIdle(),
+    consumeShift: () => touchControls.consumeShift(),
+  })
 
   // --- Old-version advisory (see dev-material/old-version-support.md) ---
   // Below the 0.24 support cutoff we inform, never block: a dismissible
@@ -880,7 +841,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   const touchControls: TouchControls = buildTouchControls(dispatchTouchInput, spectating ? {} : {
-    spellTab: { render: renderSpellGrid, hasSpells: () => harvester.spells.length > 0 },
+    spellTab: { render: () => spellRail.grid(), hasSpells: () => harvester.spells.length > 0 },
     // Mirror the d-pad Shift state on the view so CSS can flip the cast
     // badges to their force-cast form ("za" → "Za") while it's engaged.
     onShiftChange: on => view.classList.toggle('shift-on', on),
@@ -1048,7 +1009,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   view.appendChild(sidebarMinimapSlot)
   view.appendChild(msgLog)
   view.appendChild(xdescStrip)
-  view.appendChild(spellRail)
+  view.appendChild(spellRail.element)
   view.appendChild(moreBtn)
   view.appendChild(hud)
   view.appendChild(numpadInput)
@@ -1964,7 +1925,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // of it needs a resync or the chip lags until the next chat event.
     chatView.syncChip()
     messageLog.syncMore()  // a pending --more-- swaps to the floating button
-    renderSpellRail()  // drop the rail row (and the log's map overlay) for the examine map
+    spellRail.render()  // drop the rail row (and the log's map overlay) for the examine map
     touchControls.enterXMode()
     // Hidden until its first paint (scheduleFit below schedules it) — a
     // fresh canvas would flash its 300×150 default.
@@ -1996,7 +1957,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     touchControls.exitXMode()
     mapView.setFontScale(1.0)
     scheduleFit()
-    renderSpellRail()  // restore the quick-cast rail hidden by enterXMode
+    spellRail.render()  // restore the quick-cast rail hidden by enterXMode
     // Log and HUD return — or, leaving a stash preview, the results menu
     // and its bar replace the map and d-pad again.
     applyLayout()
@@ -2132,185 +2093,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   function exposeSpellCache(): void {
     if (import.meta.env.DEV)
       (window as unknown as { __dcssSpellCache: SpellEntry[] }).__dcssSpellCache = harvester.spells
-    renderSpellRail()
+    spellRail.render()
     touchControls.refreshSpellTab()
-  }
-
-  // Build the spell grid for the touch-panel z tab from the harvested
-  // spells, or null when
-  // there's nothing to show (no spells / spectating) → the tab shows its empty
-  // state. Mirrors the rail's per-spell button (tile + letter badge) but in the
-  // panel's content area: costs no map space and scrolls past the visible rows.
-  // One quick-cast button (tile + "za"-style corner letter, tap to cast),
-  // shared by the rail and the z-tab grid so the two surfaces can't drift —
-  // only the container-specific button class differs.
-  function makeSpellButton(s: SpellEntry, btnClass: string): HTMLElement {
-    const btn = document.createElement('button')
-    btn.className = btnClass
-    btn.title = `${s.title}${s.fail ? ` (${s.fail})` : ''}`
-    if (typeof s.colour === 'number') btn.style.color = uiColor(s.colour)
-    btn.appendChild(renderTiles(loader, [{ t: s.tile, tex: TEX.GUI }], 1))
-    const lbl = document.createElement('span')
-    lbl.className = 'spell-letter'
-    // "za"/"zb" — the literal cast keystroke (z then the spell's letter), so
-    // the button doubles as a reminder of what tapping sends.
-    lbl.textContent = `z${s.letter}`
-    btn.appendChild(lbl)
-    bindSpellTap(btn, () => castSpellLetter(s.letter))
-    return btn
-  }
-
-  // The spell buttons' tap (rail, z-tab grid, the rail's spell-list button).
-  // Fire on click (the browser's synthesized tap-click, and real mouse
-  // clicks), but cancel if the finger dragged off first. Touch events
-  // capture to their start element, so a finger that presses this button,
-  // drags far, and lifts elsewhere still gets a synthesized click HERE —
-  // which would fire without the drift check below. We don't need the old
-  // click gate: the synthesized click targets the touchstart element, not
-  // the lift point, so a drag that merely ENDS over a button (having started
-  // on the log or the map) never fires it.
-  function bindSpellTap(btn: HTMLElement, fire: () => void): void {
-    let tapX = 0, tapY = 0, tapDrifted = false
-    btn.addEventListener('touchstart', e => {
-      const t = e.touches?.[0]
-      tapX = t?.clientX ?? 0
-      tapY = t?.clientY ?? 0
-      tapDrifted = false
-    }, { passive: true })
-    btn.addEventListener('touchmove', e => {
-      const t = e.touches?.[0]
-      if (t && Math.hypot(t.clientX - tapX, t.clientY - tapY) > 12) tapDrifted = true // px: drag, not a tap
-    }, { passive: true })
-    // Reset tapDrifted after each click so the flag is one-shot. Without this a
-    // drag-off (which leaves tapDrifted true and is never followed by a fresh
-    // touchstart that resets it) would suppress the NEXT genuine mouse click on
-    // this button — clicks have no preceding touchstart on hybrid devices
-    // (iPad + trackpad, touchscreen laptops), so they'd inherit the stale flag.
-    btn.addEventListener('click', () => { if (!tapDrifted) fire(); tapDrifted = false })
-  }
-
-  function renderSpellGrid(): HTMLElement | null {
-    if (spectating || harvester.spells.length === 0) return null
-    const grid = document.createElement('div')
-    grid.className = 'tc-spell-grid'
-    for (const s of harvester.spells) grid.appendChild(makeSpellButton(s, 'tc-spell-btn'))
-    return grid
-  }
-
-  // Cast a memorised spell from normal play: `z` opens the cast prompt and the
-  // spell's letter selects it (≡ typing `z<letter>`). Targeted spells drop the
-  // server into targeting, handled by the existing cursor/d-pad UI; self/instant
-  // spells just fire. Guarded to a clean command-mode state — the rail is always
-  // visible, so a stray tap during a menu/X-mode/overlay must be a no-op.
-  //
-  // Simplified from 88c8379/b23b85b after device testing: a tap fires on the
-  // button's `click`, cancelled if the finger drifted (see bindSpellTap) —
-  // but WITHOUT the synthetic-click gate (the lift-point phantom it guarded
-  // against doesn't occur here; the synthesized click targets the touchstart
-  // element) and WITHOUT the pending-cast queue (the single-message dispatch
-  // below shrinks the cast round-trip enough that fast double-taps survive).
-  // A tap blocked by the guard below is simply dropped. Git holds the fuller
-  // versions (click gate at 88c8379, pending-cast queue at b23b85b) if needed.
-  // The spell buttons' keystroke guard (casts and the spell-list button).
-  // commandChannelIdle includes input_mode COMMAND (see uiQuiet), so an
-  // active target loop rejects the tap — `z<letter>` there would land
-  // mid-targeting, not cast. The monster panel is a client-only overlay
-  // that doesn't change input mode, so it needs its own gate: in landscape
-  // the rail stays visible in the sidebar beside the panel, and a tap here
-  // bypasses the touch-input swallow (the rail sends via conn.send, not
-  // that callback).
-  function spellTapIdle(): boolean {
-    return !monsterPanelOpen && commandChannelIdle()
-  }
-
-  function castSpellLetter(letter: string): void {
-    if (!spellTapIdle()) return
-    // With the d-pad Shift toggle engaged, force-cast (`Z`, CMD_FORCE_CAST_SPELL:
-    // casts even with no target in view) instead of plain `z`.
-    const cmd = touchControls.consumeShift() ? 'Z' : 'z'
-    // One message, not two: the Python server writes each input message's text
-    // to the game pty in a single write (process_handler.handle_input), so
-    // "z"+letter arrive in the engine's buffer together and it never blocks
-    // (flushing the cast prompt and waiting on the socket) between them — the
-    // way it can when two messages land as two pty writes.
-    conn.send({ msg: 'input', text: `${cmd}${letter}` })
-  }
-
-  // The rail's spell-list button: `I` (CMD_DISPLAY_SPELLS), the game's own
-  // live list — names, fail %, `!` for power/damage/range, a spell to
-  // describe it.
-  function openSpellList(): void {
-    if (!spellTapIdle()) return
-    conn.send({ msg: 'input', text: 'I' })
-  }
-
-  // Render the persistent quick-cast rail from the harvested spells. Hidden
-  // when there are none. Each button casts on tap via castSpellLetter (its
-  // own guard keeps a tap during a menu/overlay/X-mode inert). The
-  // `spell-row` class on the view tracks rail visibility: while set, CSS
-  // lifts the floating message log by the rail's height so
-  // the rail fits beneath it, and grows the map's bottom centering
-  // reserve to match (the padding change refits the map via its
-  // ResizeObserver — a deliberate ~1-row re-center; see the #map-grid
-  // padding comment in style.css).
-  // The cache array the rail's buttons were last built from. Every harvest
-  // (and the dev fake-spells hook) assigns a NEW array inside the harvester,
-  // so reference identity distinguishes "content changed, rebuild" from
-  // "visibility toggled, just un/hide" — the X-mode enter/exit calls land on
-  // the cheap path instead of rebuilding every button + tile per examine.
-  let railBuiltFrom: SpellEntry[] | null = null
-
-  // The spell-list button's icon: TAB_SPELL, upstream's "your spells" symbol
-  // (local tiles' Spells tab, tilesdl.cc push_tab_region). Looked up by name
-  // in the served tileinfo — ids shift between versions — and fitted to the
-  // spell icons' CELL, clip and centring per tab-icon.ts. No TAB_SPELL (or
-  // no loader yet) leaves the badge alone — the button still works.
-  let railBookLoader: TileLoader | null = null
-  function paintRailBook(): void {
-    railBookLoader = loader
-    railBookBtn.querySelector('.tile-stack')?.remove()
-    railBookLbl.style.right = ''
-    const l = loader
-    if (!l) return
-    l.getModule('gui').then(async (mod) => {
-      const id = mod.TAB_SPELL
-      if (railBookLoader !== l || typeof id !== 'number') return
-      const s = await l.getAsync(TEX.GUI, id)
-      if (railBookLoader !== l) return
-      const g = tabIconGeometry(s, CELL)
-      const icon = renderTiles(l, [{ t: id, tex: TEX.GUI }], g.scale)
-      icon.style.width = icon.style.height = `${CELL}px`
-      if (g.clipRightPct !== null) {
-        icon.style.clipPath = `inset(0 ${g.clipRightPct}% 0 0)`
-        icon.style.left = `${g.inset}px`
-        railBookLbl.style.right = `${g.inset}px`
-      }
-      railBookBtn.querySelector('.tile-stack')?.remove()  // a same-loader paint that also resolved
-      railBookBtn.prepend(icon)
-    }).catch(() => {})
-  }
-
-  function renderSpellRail(): void {
-    // Hidden while examining (X-mode): the zoomed-out examine map claims the
-    // log/HUD rows, and the rail's row (plus the log overlay) would shrink and
-    // occlude the very cells the player entered X-mode to read.
-    const spells = harvester.spells
-    const visible = !spectating && !inXMode && spells.length > 0
-    view.classList.toggle('spell-row', visible)
-    const shown = spellRail.style.display !== 'none'
-    if (shown) railScrollLeft = railTrack.scrollLeft
-    if (!visible) { spellRail.style.display = 'none'; return }
-    if (railBookLoader !== loader) paintRailBook()
-    if (railBuiltFrom !== spells) {
-      railTrack.innerHTML = ''
-      for (const s of spells) railTrack.appendChild(makeSpellButton(s, 'spell-rail-btn'))
-      railBuiltFrom = spells
-    }
-    if (!shown) {
-      spellRail.style.display = ''
-      railTrack.scrollLeft = railScrollLeft
-    }
-    syncRailOverflow()
   }
 
   // The view's half of the harvester's keystroke-injection guard (see

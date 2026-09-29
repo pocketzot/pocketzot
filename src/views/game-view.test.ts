@@ -2684,7 +2684,7 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
 
   // Spell-rail tap handling: a quick-cast button fires on `click`, cancelled
   // if the finger drifted off first (see bindSpellTap). The pending-cast
-  // queue and the synthetic-click gate were removed (see game-view.ts) — a
+  // queue and the synthetic-click gate were removed (see spell-rail.ts) — a
   // clean tap casts, a drag-off is cancelled, and a tap that hits the
   // command-channel guard is simply dropped.
   describe('quick-cast rail tap handling', () => {
