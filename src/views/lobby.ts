@@ -11,6 +11,7 @@ import { openAboutDoc, openChangelogDoc, unreadDotHtml } from './docs'
 import { openSettings } from './settings-view'
 import { activeGameStart, clearGameStart, FORCE_TERMINATE_WARNING, rememberGameStart } from '../reconnect'
 import { classifyTransition } from '../ws/transition'
+import { combineHandlers, dispatch, type MsgOf } from '../ws/dispatcher'
 import { isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
 import { attachScrollCue } from '../util/scroll-cue'
 
@@ -242,6 +243,41 @@ export function buildLobbyView(
     })
   }
 
+  const handlers = combineHandlers({
+    set_game_links: (msg) => renderGameButtons(msg.content),
+    lobby_entry: onLobbyEntry,
+    lobby_remove: (msg) => {
+      games.delete(String(msg.id))
+      idleSinceMs.delete(String(msg.id))
+      if (complete) renderList()
+    },
+    lobby_clear: () => { games.clear(); idleSinceMs.clear() },
+    lobby_complete: () => { complete = true; renderList() },
+    close: () => onDisconnect(),
+    go_lobby: () => abortGameStart(),
+    game_ended: onGameEnded,
+    auth_error: (msg) => {
+      abortGameStart()
+      noticeEl.textContent = msg.reason
+      noticeEl.hidden = false
+    },
+    // A previous session of ours still holds the game's lockfile (typical
+    // after a phone app-swap: the server hasn't noticed the dead socket
+    // yet). The server waits ~msg.timeout seconds, tells the old process to
+    // save, then proceeds to game_started on its own — without this notice
+    // the lobby just sits silently unresponsive for 10–20s.
+    stale_processes: () => {
+      noticeEl.textContent =
+        'Closing your previous session — the game will start in a moment…'
+      noticeEl.hidden = false
+    },
+    'force_terminate?': () => showForceTerminatePrompt(),
+    hide_dialog: () => {
+      noticeEl.textContent = ''
+      noticeEl.hidden = true
+    },
+  })
+
   conn.onMessage = handleMsg
 
   function handleMsg(msg: ServerMsg): void {
@@ -274,97 +310,50 @@ export function buildLobbyView(
       }
       return
     }
-    switch (msg.msg) {
-      case 'set_game_links':
-        renderGameButtons((msg as unknown as { content: string }).content)
-        break
-      case 'lobby_entry': {
-        const e = msg as ServerMsg & LobbyEntry
-        const id = String(e.id)
-        games.set(id, e)
-        if (e.idle_time && e.idle_time > 0) {
-          idleSinceMs.set(id, Date.now() - e.idle_time * 1000)
-        } else {
-          idleSinceMs.delete(id)
-        }
-        if (complete) renderList()
-        break
-      }
-      case 'lobby_remove':
-        games.delete(String(msg.id))
-        idleSinceMs.delete(String(msg.id))
-        if (complete) renderList()
-        break
-      case 'lobby_clear':
-        games.clear()
-        idleSinceMs.clear()
-        break
-      case 'lobby_complete':
-        complete = true
-        renderList()
-        break
-      case 'close':
-        onDisconnect()
-        break
-      case 'go_lobby':
-        abortGameStart()
-        break
-      // The game we asked for ended before it started: a failed start sends
-      // game_ended then go_lobby with no game_started (trunk ws_handler.py
-      // _on_crawl_end; process_handler.py "Error while starting the Crawl
-      // process!"), so the lobby still owns the handler. Held for replay
-      // instead, it died in the go_lobby flush and Play silently did nothing.
-      // Only a start still in flight is answered: entering the lobby clears
-      // it (app.ts showLobby), so with none this is the tail of a game we
-      // already left — a client go_lobby gets its go_lobby before the
-      // stopped process's game_ended (ws_handler.py go_lobby: stop is async;
-      // traced 2026-09-27 on a resume abandoning character creation).
-      case 'game_ended': {
-        const start = activeGameStart()
-        if (!start) break
-        abortGameStart()
-        maybeShowExitDialog(view, {
-          reason: msg.reason,
-          message: msg.message,
-          dump: msg.dump,
-          spectated: start?.kind === 'watch',
-          spectatedName: start?.kind === 'watch' ? start.username : undefined,
-        })
-        break
-      }
-      case 'auth_error':
-        abortGameStart()
-        noticeEl.textContent = msg.reason
-        noticeEl.hidden = false
-        break
-      // A previous session of ours still holds the game's lockfile (typical
-      // after a phone app-swap: the server hasn't noticed the dead socket
-      // yet). The server waits ~msg.timeout seconds, tells the old process to
-      // save, then proceeds to game_started on its own — without this notice
-      // the lobby just sits silently unresponsive for 10–20s.
-      case 'stale_processes':
-        noticeEl.textContent =
-          'Closing your previous session — the game will start in a moment…'
-        noticeEl.hidden = false
-        break
-      case 'force_terminate?':
-        showForceTerminatePrompt()
-        break
-      case 'hide_dialog':
-        noticeEl.textContent = ''
-        noticeEl.hidden = true
-        break
-      default:
-        // Not the lobby's message: game state can arrive before the transition
-        // trigger — on a spectate join, update_spectators (and any join-time
-        // chat) land between game_client and watching_started, while this
-        // lobby still owns conn.onMessage. Hold everything unhandled for the
-        // game view and replay it at handover (the transition branch above),
-        // the same contract as the auto-resume handler (reconnect.ts); without
-        // this the initial spectator count and join-time chat are silently lost.
-        // Capped as a guard against a nonconforming server flooding the lobby.
-        if (preGameMsgs.length < 100) preGameMsgs.push(msg)
+    if (dispatch(handlers, msg)) return
+    // Not the lobby's message: game state can arrive before the transition
+    // trigger — on a spectate join, update_spectators (and any join-time
+    // chat) land between game_client and watching_started, while this
+    // lobby still owns conn.onMessage. Hold everything unhandled for the
+    // game view and replay it at handover (the transition branch above),
+    // the same contract as the auto-resume handler (reconnect.ts); without
+    // this the initial spectator count and join-time chat are silently lost.
+    // Capped as a guard against a nonconforming server flooding the lobby.
+    if (preGameMsgs.length < 100) preGameMsgs.push(msg)
+  }
+
+  function onLobbyEntry(e: MsgOf<'lobby_entry'>): void {
+    const id = String(e.id)
+    games.set(id, e)
+    if (e.idle_time && e.idle_time > 0) {
+      idleSinceMs.set(id, Date.now() - e.idle_time * 1000)
+    } else {
+      idleSinceMs.delete(id)
     }
+    if (complete) renderList()
+  }
+
+  // The game we asked for ended before it started: a failed start sends
+  // game_ended then go_lobby with no game_started (trunk ws_handler.py
+  // _on_crawl_end; process_handler.py "Error while starting the Crawl
+  // process!"), so the lobby still owns the handler. Held for replay
+  // instead, it died in the go_lobby flush and Play silently did nothing.
+  // Only a start still in flight is answered: entering the lobby clears
+  // it (app.ts showLobby), so with none this is the tail of a game we
+  // already left — a client go_lobby gets its go_lobby before the
+  // stopped process's game_ended (ws_handler.py go_lobby: stop is async;
+  // traced 2026-09-27 on a resume abandoning character creation).
+  function onGameEnded(msg: MsgOf<'game_ended'>): void {
+    const start = activeGameStart()
+    if (!start) return
+    abortGameStart()
+    maybeShowExitDialog(view, {
+      reason: msg.reason,
+      message: msg.message,
+      dump: msg.dump,
+      spectated: start?.kind === 'watch',
+      spectatedName: start?.kind === 'watch' ? start.username : undefined,
+    })
   }
 
   // A play/watch attempt was aborted while the lobby stayed mounted
