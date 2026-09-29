@@ -3572,6 +3572,7 @@ html.map-hold, html.map-hold * {
      area. Fixed at one button-row tall; spells past the width scroll
      sideways in the track below. */
   grid-area: map;
+  display: flex;
   padding: 0 0.25rem;
   background: var(--bg);
   /* No border-top: the translucent log overlay sits directly above, and a
@@ -3585,6 +3586,8 @@ html.map-hold, html.map-hold * {
    is a floor: game-view widens it inline so the edge button peeks
    (rail-peek.ts). */
 .spell-rail-track {
+  flex: 1;
+  min-width: 0;
   display: flex;
   gap: 0.25rem;
   height: 100%;
@@ -3595,6 +3598,27 @@ html.map-hold, html.map-hold * {
   scrollbar-width: none;
 }
 .spell-rail-track::-webkit-scrollbar { display: none; }
+/* The spell-list button (game-view openSpellList), fixed at the trailing
+   edge whatever the spell count. Its hairline shows only while spells
+   overflow (#spell-rail.overflowing): there it explains the cut edge of the
+   peek; with room to spare the gap alone separates it — HIG toolbars
+   separate groups with space, and iOS bars show their hairline only while
+   content scrolls beneath (as attachScrollCue does for the lobby). The
+   border is always present, only its colour toggles, so nothing shifts when
+   the strip starts to overflow. The fixed box keeps the peek layout stable
+   before its icon loads (or without one). */
+.spell-rail-book {
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin-left: 0.25rem;
+  padding-left: 0.25rem;
+  border-left: 1px solid transparent;
+}
+#spell-rail.overflowing .spell-rail-book {
+  border-left-color: color-mix(in srgb, var(--text-dim) 35%, transparent);
+}
+.spell-rail-book .spell-rail-btn { width: 36px; height: 36px; }
 .spell-rail-btn {
   position: relative;
   display: block;

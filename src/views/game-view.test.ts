@@ -2683,7 +2683,7 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
   })
 
   // Spell-rail tap handling: a quick-cast button fires on `click`, cancelled
-  // if the finger drifted off first (see makeSpellButton). The pending-cast
+  // if the finger drifted off first (see bindSpellTap). The pending-cast
   // queue and the synthetic-click gate were removed (see game-view.ts) — a
   // clean tap casts, a drag-off is cancelled, and a tap that hits the
   // command-channel guard is simply dropped.
@@ -2751,6 +2751,36 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
       expect(castsSent(h)).toBe(0) // guarded out…
       h.dispatch({ msg: 'input_mode', mode: 1 }) // …and not revived when it reopens
       expect(castsSent(h)).toBe(0)
+    })
+
+    // The rail's spell-list button sends `I` (the game's live spell list)
+    // through the cast guard.
+    const bookBtn = (h: Harness) => h.view.querySelector<HTMLElement>('#spell-rail .spell-rail-book .spell-rail-btn')!
+    const lastSent = (h: Harness) => sent(h).at(-1)
+
+    it('the spell-list button sends I when the command channel is idle', () => {
+      const h = setup()
+      ready(h)
+      bookBtn(h).click()
+      expect(lastSent(h)).toEqual({ msg: 'input', text: 'I' })
+    })
+
+    it('the spell-list button is inert while the channel is busy', () => {
+      const h = setup()
+      ready(h)
+      h.dispatch({ msg: 'input_mode', mode: 7 })
+      h.send.mockClear()
+      bookBtn(h).click()
+      expect(sent(h)).toEqual([])
+    })
+
+    it('the spell list it opens renders instead of being harvested', () => {
+      const h = setup()
+      ready(h)
+      bookBtn(h).click()
+      h.dispatch({ msg: 'input_mode', mode: 0 })
+      h.dispatch({ msg: 'menu', tag: 'spell', title: { text: 'Your spells (describe)' }, items: BASE })
+      expect(isHidden(overlay(h))).toBe(false)
     })
   })
 })
