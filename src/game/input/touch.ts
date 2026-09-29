@@ -67,9 +67,8 @@ export const REPEAT_INTERVAL_MS = 85
 // on such a control starts here too rather than at REPEAT_DELAY_MS.
 export const HOLD_MS = LONG_PRESS_MS
 
-// game-view owns the spell data (and the tile loader / cast logic), so it
-// supplies the grid DOM for the z tab; touch.ts just hosts it in the panel's
-// content area and manages tab switching.
+// The spell rail (views/spell-rail) supplies the z tab's grid DOM; touch.ts
+// just hosts it in the panel's content area and manages tab switching.
 export interface SpellTabConfig {
   render: () => HTMLElement | null  // grid for the current spells, or null if none
   hasSpells: () => boolean          // cheap visibility probe — no DOM built

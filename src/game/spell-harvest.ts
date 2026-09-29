@@ -16,14 +16,14 @@
 // power/damage/noise, re-add the second phase in the same change (it lives
 // in git history: `mergeSpellExtra` + the 'extra' harvestPhase).
 //
-// SpellHarvester is the probe's state machine, extracted from game-view so
-// its timer/latch/phase logic is unit-testable in isolation. game-view
-// feeds it message-handler events (onMenu / onMsgLine /
-// consumePendingClose / reset*) and supplies the environment through
-// SpellHarvestHooks; everything DOM-shaped (the rail, the z tab, input
-// suppression at the event-handler layer) stays in game-view.
+// SpellHarvester is the probe's state machine. game-view feeds it
+// message-handler events (onMenu / onMsgLine / consumePendingClose /
+// reset*) and supplies the environment through SpellHarvestHooks;
+// everything DOM-shaped lives elsewhere (the rail and z tab in
+// views/spell-rail, input suppression in the input router).
 import type { ClientMsg } from '../ws/types'
 import { stripDcss } from './dcss-colors'
+import type { MenuItem } from './menu-model'
 
 export interface SpellEntry {
   title: string
@@ -42,15 +42,8 @@ export interface SpellEntry {
   level?: number
 }
 
-// The shape of a `menu` item row the harvester consumes — structurally
-// compatible with game-view's MenuItem, declared here so this module never
-// has to import from the view layer.
-export interface SpellMenuItem {
-  text?: string
-  colour?: number
-  hotkeys?: number[]
-  tiles?: Array<{ t: number; tex: number }>
-}
+// The fields of a `menu` item row the harvester consumes.
+export type SpellMenuItem = Pick<MenuItem, 'text' | 'colour' | 'hotkeys' | 'tiles'>
 
 // Input-suppression budget for the harvest's single `I` round-trip, and how
 // much longer a slow reply is still accepted after suppression ends.
@@ -60,16 +53,12 @@ export const HARVEST_LATE_MS = 8500
 export interface SpellHarvestHooks {
   // Outbound WS send (the probe's `I` and the menu-closing Escape).
   send(msg: ClientMsg): void
-  // The view's half of the "safe to inject a command-level keystroke" check:
-  // the engine is reading a command key (input_mode COMMAND — the view's
-  // uiQuiet has why) and nothing transient is up — no menu/overlay/CRT/
-  // dialog, no examine cursor (X-mode), no `--more--` pager, no in-log y/n
-  // prompt. The harvester ANDs
-  // this with its own phase (see channelIdle) to gate every injection.
+  // The view's half of the "safe to inject a command-level keystroke" check
+  // (game-view uiQuiet has the conditions and why). The harvester ANDs this
+  // with its own phase (see channelIdle) to gate every injection.
   uiQuiet(): boolean
   // The spell list changed (menu capture, no-spells terminator, timeout
-  // expiry, dev fake-spells). game-view refreshes every spell surface: the
-  // rail, the z-tab grid, and the __dcssSpellCache dev hook.
+  // expiry, dev fake-spells).
   onSpellsChanged(): void
 }
 

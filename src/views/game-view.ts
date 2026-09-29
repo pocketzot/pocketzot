@@ -363,19 +363,15 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // lives in ../game/spell-harvest; the message handlers below feed it events
   // (onMenu / onMsgLine / consumePendingClose / reset*). The hooks are the
   // view's side of the contract: uiQuiet is the non-harvest half of the
-  // keystroke-injection guard, and exposeSpellCache refreshes every spell
-  // surface (rail, z tab, dev hook) when the cache changes. Both are hoisted
-  // function declarations, so referencing them here is safe; the harvester
-  // fires no hook while constructing, so spellRail (built below) is ready.
+  // keystroke-injection guard, and exposeSpellCache refreshes the spell
+  // surfaces. Both are hoisted function declarations, so referencing them
+  // here is safe; the harvester fires no hook while constructing, so
+  // spellRail (built below) is ready.
   const harvester = new SpellHarvester({
     send: (m) => conn.send(m),
     uiQuiet: () => uiQuiet(),
     onSpellsChanged: () => exposeSpellCache(),
   }, !!spectating)
-  // Local aliases so the many guard sites read the same as before the
-  // extraction. See SpellHarvester for what each means.
-  const isHarvesting = (): boolean => harvester.isHarvesting()
-  const commandChannelIdle = (): boolean => harvester.channelIdle()
 
   let inXMode = false
   let exitedXModeForInput = false
@@ -448,14 +444,14 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     loader: () => loader,
     spectating: !!spectating,
     inXMode: () => inXMode,
-    // commandChannelIdle includes input_mode COMMAND (see uiQuiet), so an
+    // harvester.channelIdle includes input_mode COMMAND (see uiQuiet), so an
     // active target loop rejects the tap — `z<letter>` there would land
     // mid-targeting, not cast. The monster panel is a client-only overlay
     // that doesn't change input mode, so it needs its own gate: in landscape
     // the rail stays visible in the sidebar beside the panel, and a tap there
     // bypasses the router's monster-panel layer (the rail sends via
     // conn.send).
-    tapIdle: () => !monsterPanelOpen && commandChannelIdle(),
+    tapIdle: () => !monsterPanelOpen && harvester.channelIdle(),
     consumeShift: () => touchControls.consumeShift(),
   })
 
@@ -480,16 +476,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     send: (msg) => conn.send(msg),
     focusView,
     guardedFocus,
-    harvesting: () => isHarvesting(),
+    harvesting: () => harvester.isHarvesting(),
     overlayShown: () => uiOverlay.style.display !== 'none',
     inXMode: () => inXMode,
-    // Spell-harvest line hooks (see ../game/spell-harvest onMsgLine):
-    // `true` = the line is the probe's own no-spells terminator ("You don't
-    // know any spells.") — the harvest just ended and the artifact line is
-    // swallowed so the player never sees our probe. The same hook watches
-    // for letter→spell map changes ("Spell assigned to…" / "Your memory of
-    // … unravels") and flags the rail stale; the msgs case's
-    // reharvestIfDirty resolves it.
+    // `true` swallows the harvest probe's own line (../game/spell-harvest
+    // onMsgLine).
     onLine: (text) => {
       if (harvester.onMsgLine(text)) return true
       record.onMessageLine(text)
@@ -720,7 +711,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // Player input's precedence chain (../game/input/input-router.ts). Getters,
   // since every flag here changes under the view's feet.
   const routerTargets: RouterTargets = {
-    harvesting: () => isHarvesting(),
+    harvesting: () => harvester.isHarvesting(),
     chatOpen: () => chatView.isOpen,
     closeChat: () => chatView.closeSheet(),
     spectating: !!spectating,
@@ -879,7 +870,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   // CRT screens (./crt-view.ts); the frames and their lines ride popups.
   const crtView = new CrtView({
-    overlay: uiOverlay,
     content: () => overlayContent,
     enterLayout: (touch) => enterOverlayLayout({ touch }),
     bar: menuBar,
@@ -1637,11 +1627,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     advisory.disarm()  // a menu rendered (version-advisory.ts)
     const m: MenuMsg = msg
     const titlePlain = stripDcss(m.title?.text ?? '')
-    // Silent spell harvest (see ../game/spell-harvest onMenu): the
-    // probe's own spell menu is captured + Escaped and must be swallowed
-    // (never rendered); any other menu mid-harvest aborts the harvest and
-    // drops the close-swallow latch; a spell-tag "(adjust)" menu flags
-    // the letter→spell map dirty for the next re-harvest.
+    // The harvest probe's own spell menu is swallowed, never rendered
+    // (../game/spell-harvest onMenu).
     if (harvester.onMenu(m.tag, titlePlain, m.items)) return
     // Like onUiPush, a server menu supersedes the client panel. A
     // panel-row tap sends a describe click_cell; on a multi-occupant tile
@@ -1935,13 +1922,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // SpellHarvester.channelIdle, which ANDs this with its own phase): the
   // engine is reading a command key (input_mode COMMAND) and nothing
   // transient is up — no menu/overlay/CRT/dialog, no examine cursor
-  // (X-mode), no `--more--` pager, no in-log y/n prompt.
-  // Earlier guards listed only the menu/overlay subset, so a rail tap or an
-  // auto/re-harvest fired during a `--more--` or a channel-2 prompt leaked a
-  // stray keystroke into it (eating the pager/answering the prompt, or — for
-  // a harvest — getting the `I` swallowed so the probe times out and clears
-  // the rail). The log's live prompt and --more-- are exactly that missing
-  // state. The mode check is what covers a bare get_ch() key read: those
+  // (X-mode), no `--more--` pager, no in-log y/n prompt. A rail tap or an
+  // auto/re-harvest injected during a `--more--` or a channel-2 prompt eats
+  // the pager or answers the prompt — and a harvest's `I` swallowed there
+  // times the probe out and clears the rail. The mode check is what covers a bare get_ch() key read: those
   // print a prompt line the log may give no buttons, so promptLive stays
   // false. `=` spells is one — its "(adjust)" menu flags a re-harvest, the
   // menu closes, and "Adjust to which letter?" (adjust.cc _adjust_spell)
@@ -1957,14 +1941,14 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   // Truly idle at the command prompt — safe to inject a keystroke that must
   // be read as a command (the Android back handler's 'S'). On top of
-  // commandChannelIdle (uiQuiet, which requires input_mode COMMAND, + harvest
-  // phase), the client-only panels and the two inline input rows
+  // harvester.channelIdle (uiQuiet, which requires input_mode COMMAND, +
+  // harvest phase), the client-only panels and the two inline input rows
   // (text/numpad) must route Esc too: during a server line-read, an injected
   // letter would be typed INTO the read (or pick an item slot at a slot
   // prompt). The engine answers that Esc by returning input_mode to COMMAND,
   // which is what removes the input rows client-side.
   function idleAtCommandPrompt(): boolean {
-    return commandChannelIdle()
+    return harvester.channelIdle()
       && !monsterPanelOpen && !minimaps.lensOpen
       && !messageLog.textInputOpen
       && !numpad.isOpen
@@ -2038,8 +2022,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // under it (targeting / level map entered from a popup): the screen is
     // the live map, so the message pill and client lenses behave as in
     // plain play. Dialogs live outside the engine stack and still count.
-    if (popups.hidesAll()) return dialogActive || isHarvesting()
-    return !popups.empty || dialogActive || !!menus.active || isHarvesting()
+    if (popups.hidesAll()) return dialogActive || harvester.isHarvesting()
+    return !popups.empty || dialogActive || !!menus.active || harvester.isHarvesting()
   }
 
   // Dismiss both client-side map overlays. Called wherever a server overlay

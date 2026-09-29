@@ -5,12 +5,10 @@
 // cast keystrokes and the spell-list button.
 //
 // The rail floats over the map's bottom edge in portrait (landscape slots it
-// into the sidebar `spells` row). The message log floats over the map too —
-// always, casters or not — so the rail is out of flow; the `spell-row` class
-// on #game-view lifts the log by the rail's height AND grows the map's bottom
-// centering reserve to match (see the #map-grid padding rules), so the @
-// re-centers ~1 row upward when the rail fades in — a deliberate trade,
-// accepted on-device over the @ sitting persistently low for casters.
+// into the sidebar `spells` row), out of flow like the message log; the
+// `spell-row` class on #game-view lifts the log and grows the map's bottom
+// reserve. The trade and its evidence: the #map-grid padding rules in
+// style.css.
 
 import type { ClientMsg } from '../ws/types'
 import type { SpellEntry } from '../game/spell-harvest'
@@ -77,11 +75,7 @@ export class SpellRail {
   }
 
   // Show, hide or rebuild the rail from the harvested spells. Hidden when
-  // there are none. Each button casts on tap via castSpellLetter (its guard
-  // keeps a tap during a menu/overlay/X-mode inert). The `spell-row` class
-  // on the view tracks rail visibility (layout: header comment); the
-  // padding change refits the map via its ResizeObserver — see the
-  // #map-grid padding comment in style.css.
+  // there are none.
   render(): void {
     // Hidden while examining (X-mode): the zoomed-out examine map claims the
     // log/HUD rows, and the rail's row (plus the log overlay) would shrink and
@@ -193,14 +187,12 @@ export class SpellRail {
   // spells just fire. Guarded to a clean command-mode state — the rail is always
   // visible, so a stray tap during a menu/X-mode/overlay must be a no-op.
   //
-  // Simplified from 88c8379/b23b85b after device testing: a tap fires on the
-  // button's `click`, cancelled if the finger drifted (see bindSpellTap) —
-  // but WITHOUT the synthetic-click gate (the lift-point phantom it guarded
-  // against doesn't occur here; the synthesized click targets the touchstart
-  // element) and WITHOUT the pending-cast queue (the single-message dispatch
-  // below shrinks the cast round-trip enough that fast double-taps survive).
-  // A tap blocked by the guard below is simply dropped. Git holds the fuller
-  // versions (click gate at 88c8379, pending-cast queue at b23b85b) if needed.
+  // Simplified from 88c8379/b23b85b after device testing: a tap fires via
+  // bindSpellTap (which explains why there's no click gate) and WITHOUT the
+  // pending-cast queue (the single-message dispatch below shrinks the cast
+  // round-trip enough that fast double-taps survive). A tap blocked by the
+  // guard below is simply dropped. Git holds the fuller versions (click gate
+  // at 88c8379, pending-cast queue at b23b85b) if needed.
   private castSpellLetter(letter: string): void {
     if (!this.d.tapIdle()) return
     // With the d-pad Shift toggle engaged, force-cast (`Z`, CMD_FORCE_CAST_SPELL:

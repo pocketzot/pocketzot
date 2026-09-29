@@ -48,7 +48,7 @@ export class VersionAdvisory {
     setTimeout(() => banner.remove(), 15000)
     this.d.view.appendChild(banner)
 
-    if (!this.d.spectating && this.guardTimer === undefined) {
+    if (!this.d.spectating) {
       this.guardTimer = setTimeout(() => {
         this.guardTimer = undefined
         if (this.mapSeen) return

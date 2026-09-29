@@ -10,8 +10,6 @@ import { extractSkillHotkeys } from './skill-hotkeys'
 import { reflowSkillCrt, plainText } from './skill-reflow'
 
 export interface CrtViewDeps {
-  // #ui-overlay: a mounted screen is appended here.
-  overlay: HTMLElement
   // The live overlay content root — never the inert copy of a covered frame.
   content(): HTMLElement
   // Swap the screen to overlay layout, keeping or hiding the touch strip.
@@ -45,12 +43,7 @@ export class CrtView {
 
   // Re-paints the topmost CRT frame (the one showing) from its lines.
   restore(): void {
-    const tag = this.d.topCrt()?.tag
-    this.mount(tag)
-    if (tag === 'skills') {
-      this.d.bar.build('skills')
-      this.d.showBar()
-    }
+    this.open(this.d.topCrt()?.tag)
     this.render()
   }
 
@@ -79,7 +72,7 @@ export class CrtView {
     this.d.enterLayout(tag !== 'skills')
     const el = document.createElement('div')
     el.id = 'crt-display'
-    this.d.overlay.appendChild(el)
+    this.d.content().appendChild(el)
     this.d.focusView()
   }
 
@@ -88,16 +81,14 @@ export class CrtView {
     const crt = this.d.topCrt()
     if (!el || !crt) return
     el.innerHTML = ''
-    const crtLines = crt.lines
-    const crtTag = crt.tag
-    const maxKey = crtLines.size > 0 ? Math.max(...crtLines.keys()) : 0
+    const maxKey = crt.lines.size > 0 ? Math.max(...crt.lines.keys()) : 0
     let rows: string[] = []
-    for (let i = 0; i <= maxKey; i++) rows.push(crtLines.get(i) ?? '')
+    for (let i = 0; i <= maxKey; i++) rows.push(crt.lines.get(i) ?? '')
     // The skills menu (`m`) ships a fixed two-column terminal grid; reflow it
     // into a single column so it fits a phone without horizontal panning. Only
     // then may it wrap: a grid the reflow couldn't measure is still 79 columns
     // wide, and must stay pannable rather than word-wrap mid-row.
-    const reflowed = crtTag === 'skills' ? reflowSkillCrt(rows) : null
+    const reflowed = crt.tag === 'skills' ? reflowSkillCrt(rows) : null
     el.classList.toggle('crt-skills', reflowed !== null)
     if (reflowed) rows = reflowed
     for (const html of rows) {
@@ -108,6 +99,6 @@ export class CrtView {
     }
     // Read the hotkeys from the rows just rendered, not back out of the DOM
     // they were written to.
-    if (crtTag === 'skills') this.d.bar.setSkillLetters(extractSkillHotkeys(rows.map(plainText)))
+    if (crt.tag === 'skills') this.d.bar.setSkillLetters(extractSkillHotkeys(rows.map(plainText)))
   }
 }

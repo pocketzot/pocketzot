@@ -3607,8 +3607,8 @@ html.map-hold, html.map-hold * {
 }
 /* The scroller carries the vertical padding (not the band): overflow clips
    at the padding box, and .spell-letter hangs 2px below its button. The gap
-   is a floor: game-view widens it inline so the edge button peeks
-   (rail-peek.ts). */
+   is a floor: SpellRail.applyGap (spell-rail.ts) widens it inline so the
+   edge button peeks (rail-peek.ts). */
 .spell-rail-track {
   flex: 1;
   min-width: 0;
