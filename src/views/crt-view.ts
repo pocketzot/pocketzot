@@ -14,12 +14,12 @@ export interface CrtViewDeps {
   overlay: HTMLElement
   // The live overlay content root — never the inert copy of a covered frame.
   content(): HTMLElement
-  // Swap the screen to overlay layout with the d-pad hidden.
-  enterLayout(): void
+  // Swap the screen to overlay layout, keeping or hiding the touch strip.
+  enterLayout(touch: boolean): void
   bar: MenuBar
-  // Show the (already built) menu bar. The touch strip is already hidden
-  // (enterLayout), so this only turns the bar on — unlike MenuViewDeps'
-  // showBar, which also hides the strip.
+  // Show the (already built) menu bar. For the one CRT with a bar (skills)
+  // the touch strip is already hidden (enterLayout), so this only turns the
+  // bar on — unlike MenuViewDeps' showBar, which also hides the strip.
   showBar(): void
   // The topmost CRT frame on the popup stack.
   topCrt(): { tag?: string; lines: Map<number, string> } | undefined
@@ -36,7 +36,7 @@ export class CrtView {
 
   // A freshly pushed CRT frame: an empty screen until its txt rows land.
   open(tag?: string): void {
-    this.mount()
+    this.mount(tag)
     if (tag === 'skills') {
       this.d.bar.build(tag)
       this.d.showBar()
@@ -45,8 +45,9 @@ export class CrtView {
 
   // Re-paints the topmost CRT frame (the one showing) from its lines.
   restore(): void {
-    this.mount()
-    if (this.d.topCrt()?.tag === 'skills') {
+    const tag = this.d.topCrt()?.tag
+    this.mount(tag)
+    if (tag === 'skills') {
       this.d.bar.build('skills')
       this.d.showBar()
     }
@@ -69,9 +70,13 @@ export class CrtView {
     this.render()
   }
 
-  private mount(): void {
+  private mount(tag: string | undefined): void {
     this.d.autoCloseKbdIfOurs()
-    this.d.enterLayout()
+    // Only skills brings its own bar (letter row + ⎋). Never hide the strip
+    // for any other CRT: its d-pad, ⏎/⎋ and abc▴ keyboard are that screen's
+    // only input. Pre-0.24 character creation is one (species list, tag "",
+    // CAO 0.23 captured 2026-09-29), as are trunk's startup menu and arena.
+    this.d.enterLayout(tag !== 'skills')
     const el = document.createElement('div')
     el.id = 'crt-display'
     this.d.overlay.appendChild(el)

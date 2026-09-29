@@ -778,8 +778,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // displays themselves.
   //   overlayMode: the server overlay's presentation (enterOverlayLayout /
   //     hideOverlay) — full-screen, or a float card over the live game.
-  //   touchHidden: the overlay has no use for the d-pad (newgame, CRT), or
-  //     the menu bar stands in for it.
+  //   touchHidden: the overlay has no use for the d-pad (newgame, the skills
+  //     CRT), or the menu bar stands in for it.
   //   menuBarOn: the menu-controls bar is up.
   // Derived: X mode hides the log and HUD (the map goes full-bleed), and the
   // stash-search preview — X mode with the stash results menu on top of the
@@ -884,7 +884,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const crtView = new CrtView({
     overlay: uiOverlay,
     content: () => overlayContent,
-    enterLayout: () => enterOverlayLayout({ touch: false }),
+    enterLayout: (touch) => enterOverlayLayout({ touch }),
     bar: menuBar,
     showBar: () => setMenuBar(true),
     topCrt: () => popups.topCrt(),
@@ -2065,7 +2065,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // default — the kbd-overlay is a fixed-position child of them, so hiding
   // the parent would take an open virtual keyboard down with it (and the
   // keyboard covers the d-pad anyway when open); screens with no use for
-  // the d-pad (newgame-choice, CRT) pass touch:false.
+  // the d-pad (newgame-choice, the skills CRT) pass touch:false.
   // `over`: layer the content as a prompt card over a copy of that frame's
   // last DOM (see frameDom), when there is one.
   function enterOverlayLayout(opts?: { touch?: boolean; float?: boolean; screen?: 'newgame'; over?: object }): void {

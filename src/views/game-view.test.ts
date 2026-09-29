@@ -1585,6 +1585,40 @@ describe('menu handler', () => {
     expect(overlay(h).querySelector('.crt-line')?.textContent).toBe('Skill screen')
   })
 
+  it('a keys-only CRT keeps the touch strip; the skills CRT swaps in its bar', () => {
+    const strip = (h: Harness) => h.view.querySelector<HTMLElement>('#touch-controls')!
+    const menuBar = (h: Harness) => h.view.querySelector<HTMLElement>('#menu-controls')!
+    const stripOnly = (h: Harness) => !isHidden(strip(h)) && isHidden(menuBar(h))
+    const barOnly = (h: Harness) => isHidden(strip(h)) && !isHidden(menuBar(h))
+    const describeAndPop = (h: Harness) => {
+      h.dispatch({ msg: 'ui-push', type: 'describe-generic', title: 'x', body: 'y' })
+      h.dispatch({ msg: 'ui-pop' })
+    }
+    // Pre-0.24 species choice arrives as a tag-less CRT (CAO 0.23): the strip
+    // (d-pad, ⏎/⎋, abc▴) is its only input — on open and on resurfacing.
+    const h = setup()
+    h.dispatch({ msg: 'menu', type: 'crt', tag: '' })
+    expect(stripOnly(h)).toBe(true)
+    describeAndPop(h)
+    expect(stripOnly(h)).toBe(true)
+    // A prompt menu over it, closed: the CRT resurfaces with the strip.
+    h.dispatch({ msg: 'menu', tag: 'prompt', items: [] })
+    h.dispatch({ msg: 'close_menu' })
+    expect(stripOnly(h)).toBe(true)
+
+    const s = setup()
+    s.dispatch({ msg: 'menu', type: 'crt', tag: 'skills' })
+    expect(barOnly(s)).toBe(true)
+    describeAndPop(s)
+    expect(barOnly(s)).toBe(true)
+
+    // A bar-tag menu's bar doesn't survive a keys-only CRT pushed over it.
+    const m = setup()
+    m.dispatch({ msg: 'menu', tag: 'ability', items: [] })
+    m.dispatch({ msg: 'menu', type: 'crt', tag: '' })
+    expect(stripOnly(m)).toBe(true)
+  })
+
   it('a clear:true txt blanks the rows it omits; a plain delta keeps them', () => {
     const h = setup()
     h.dispatch({ msg: 'menu', type: 'crt' })
