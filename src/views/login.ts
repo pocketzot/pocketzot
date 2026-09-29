@@ -591,7 +591,7 @@ export function buildLoginView(
 // lobby_complete) immediately on socket open, before login_success arrives.
 // Buffer those pre-login messages and replay them to whichever handler owns
 // onMessage after the login handler runs, so the lobby view sees them.
-function listenOnce(conn: WsConnection, handler: (msg: ServerMsg) => void): void {
+export function listenOnce(conn: { onMessage: (msg: ServerMsg) => void }, handler: (msg: ServerMsg) => void): void {
   const prev = conn.onMessage
   const held = new MessageHold()
   const wrapper = (msg: ServerMsg) => {
