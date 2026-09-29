@@ -1749,7 +1749,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       messageLog.removeTextInput()
       // Reference only marks on the COMMAND transition, not on every
       // COMMAND-while-COMMAND repeat (game.js set_input_mode early-returns).
-      if (prevInputMode !== 1) messageLog.markLast('cmd')
+      if (prevInputMode !== 1) {
+        messageLog.markLast('cmd')
+        harvester.retryOnCommandEntry()  // a given-up probe's one retry
+      }
       harvester.maybeAutoHarvest()  // populate the spell rail on first entry to play
       harvester.reharvestIfDirty()  // refresh after a `=` reassign (or a deferred memorise/forget)
     }

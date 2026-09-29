@@ -2401,6 +2401,57 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
       expect(sentInputI(h)).toHaveLength(3)
     })
 
+    // After a give-up the probe's one retry fires only on an input_mode 0→1
+    // transition (SpellHarvester.retryOnCommandEntry).
+    describe('retry after a give-up', () => {
+      const giveUp = (h: Harness) => {
+        startHarvest()
+        vi.advanceTimersByTime(1500 + 8500)
+        expect(cache()).toHaveLength(0)
+      }
+
+      it("retries once the player's next command returns to COMMAND", () => {
+        vi.useFakeTimers()
+        const h = setup()
+        giveUp(h)
+        h.dispatch({ msg: 'input_mode', mode: 0 })
+        expect(sentInputI(h)).toHaveLength(1)
+        h.dispatch({ msg: 'input_mode', mode: 1 })
+        h.dispatch({ msg: 'msgs', messages: [{ text: 'You hit the rat. The rat dies.' }] })
+        expect(sentInputI(h)).toHaveLength(2)
+        feedBase(h)
+        expect(cache()).toHaveLength(2)
+      })
+
+      it('ignores the COMMAND repeat a spectator join sends', () => {
+        vi.useFakeTimers()
+        const h = setup()
+        giveUp(h)
+        h.dispatch({ msg: 'input_mode', mode: 1 })  // tileweb.cc _send_everything
+        h.dispatch({ msg: 'msgs', messages: [{ text: 'bob joined.' }] })
+        expect(sentInputI(h)).toHaveLength(1)
+        h.dispatch({ msg: 'input_mode', mode: 0 })
+        h.dispatch({ msg: 'input_mode', mode: 1 })
+        expect(sentInputI(h)).toHaveLength(2)
+        feedBase(h)
+      })
+
+      it('a reply later than the give-up renders, and the retry waits for its close', () => {
+        vi.useFakeTimers()
+        const h = setup()
+        giveUp(h)
+        h.dispatch({ msg: 'input_mode', mode: 0 })  // the engine read our `I`
+        h.dispatch({ msg: 'menu', tag: 'spell', title: { text: 'Your spells (describe)' }, items: BASE })
+        expect(isHidden(overlay(h))).toBe(false)
+        h.dispatch({ msg: 'msgs', messages: [{ text: 'x' }] })
+        expect(sentInputI(h)).toHaveLength(1)
+        h.dispatch({ msg: 'close_menu' })
+        h.dispatch({ msg: 'input_mode', mode: 1 })
+        expect(sentInputI(h)).toHaveLength(2)
+        feedBase(h)
+      })
+    })
+
     it('still terminates on the no-spells line during the late window', () => {
       vi.useFakeTimers()
       const h = setup()

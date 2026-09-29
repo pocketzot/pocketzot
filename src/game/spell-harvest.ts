@@ -94,6 +94,15 @@ export class SpellHarvester {
   // cast the WRONG spell on tap. Resolved by reharvestIfDirty() at the next
   // clean command-mode moment. Event-driven, not timer-polled.
   private dirty = false
+  // The give-up's one retry (armTimeout). `retryPending` waits for
+  // retryOnCommandEntry; `retried` spends the retry until any reply
+  // (capture or no-spells terminator) or go_lobby re-arms it. A retry cut
+  // short by an abort (foreign menu, close_all_menus, layer:"game") stays
+  // spent: re-arming there could loop. Never retry unbounded — each probe
+  // costs the player 1.5s of suppressed input, so a failure that repeats
+  // (e.g. an RC keymap rebinding `I`) would cost that every turn.
+  private retryPending = false
+  private retried = false
   // Every capture assigns a NEW array, never mutates in place: the rail
   // uses reference identity on this array to tell "content changed,
   // rebuild" from "visibility toggled" (see renderSpellRail in game-view).
@@ -160,6 +169,8 @@ export class SpellHarvester {
     this.reset()
     this.autoHarvested = false
     this.dirty = false
+    this.retryPending = false
+    this.retried = false
   }
 
   // Fire a silent `I` to (re)populate the cache. Only from a clean game
@@ -193,6 +204,19 @@ export class SpellHarvester {
     if (this.harvest()) this.dirty = false
   }
 
+  // Resolve the give-up's pending retry (armTimeout). The caller invokes
+  // this only on an input_mode 0→1 transition, never on a 1→1 repeat: a
+  // spectator join makes the engine re-send the current mode to the player
+  // too (tileweb.cc _send_everything → update_input_mode(mode, true)), so
+  // a repeated 1 can reach us while the engine has yet to read our first
+  // `I` — a retry then queues a second `I` into the probe's menu. A 0→1
+  // transition means the engine left COMMAND to read a key and came back.
+  retryOnCommandEntry(): void {
+    if (!this.retryPending) return
+    if (this.spectating) { this.retryPending = false; return }
+    if (this.harvest()) this.retryPending = false
+  }
+
   // A `menu` message arrived; titlePlain is the DCSS-markup-stripped title.
   // Returns true when the menu was the probe's own spell list and has been
   // captured + Escaped — the caller must swallow it (never render).
@@ -208,6 +232,7 @@ export class SpellHarvester {
             || (this.phase === 'late-base'
                 && /^Your spells \(describe\)/.test(titlePlain)))) {
       this.reset()  // timer + phase; the latch is re-set just below
+      this.retried = false
       this.cache = (items ?? [])
         .filter(it => !!it.hotkeys?.length && !!it.tiles?.length)
         .map(parseSpellItem)
@@ -266,6 +291,7 @@ export class SpellHarvester {
     if (this.phase !== 'idle' && /^You don't know any spells\b/.test(stripDcss(text).trim())) {
       this.cache = []
       this.reset()
+      this.retried = false
       this.hooks.onSpellsChanged()
       return true
     }
@@ -297,9 +323,16 @@ export class SpellHarvester {
   // menu so a slow reply is still captured silently — a reset-to-idle here
   // would let that late menu render as an unrequested full-screen spell
   // list AND leave the rail empty for the rest of the game (autoHarvested
-  // stays true; nothing retries). Only after the extended `late-base`
-  // window also passes do we conclude the frame was truly dropped and clear
-  // the cache.
+  // stays true). Only after the extended `late-base` window also passes do
+  // we conclude the frame was truly dropped and clear the cache — it is
+  // either empty (the auto-harvest) or suspect (a letter-change re-harvest;
+  // a stale letter casts the wrong spell).
+  // The give-up then flags one retry, never an immediate `I`: the engine
+  // sends input_mode 0 as it reads our `I` (main.cc _get_next_keycode's
+  // mouse_control), so a reply merely slower than this window arrives
+  // behind that 0 and retryOnCommandEntry can't fire into its menu. Never
+  // drop the retry: autoHarvested is spent and `dirty` already cleared, so
+  // nothing else would re-probe this game.
   private armTimeout(): void {
     clearTimeout(this.timer)
     this.timer = window.setTimeout(() => {
@@ -309,6 +342,7 @@ export class SpellHarvester {
         if (this.phase !== 'late-base') return
         this.reset()
         this.cache = []
+        if (!this.retried) { this.retried = true; this.retryPending = true }
         this.hooks.onSpellsChanged()
       }, HARVEST_LATE_MS)
     }, HARVEST_SUPPRESS_MS)

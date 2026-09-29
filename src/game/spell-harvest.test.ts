@@ -142,6 +142,74 @@ describe('timing ladder (base → late-base → give-up)', () => {
     expect(h.channelIdle()).toBe(true)
   })
 
+  it('a give-up schedules exactly one retry, at the next command prompt', () => {
+    const { h, sentI } = makeHarvester()
+    h.harvest()
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
+    expect(sentI()).toBe(1)  // no immediate re-probe on expiry
+    h.reharvestIfDirty()      // the letter-change path doesn't carry it
+    expect(sentI()).toBe(1)
+    h.retryOnCommandEntry()   // next input_mode 0→1
+    expect(sentI()).toBe(2)
+    // The retry fails too: give up for good.
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
+    h.retryOnCommandEntry()
+    expect(sentI()).toBe(2)
+  })
+
+  it('the retry waits while the channel is busy, then fires', () => {
+    const { h, sentI, setQuiet } = makeHarvester()
+    h.harvest()
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
+    setQuiet(false)  // e.g. a --more-- or menu up at that command entry
+    h.retryOnCommandEntry()
+    expect(sentI()).toBe(1)
+    setQuiet(true)
+    h.retryOnCommandEntry()
+    expect(sentI()).toBe(2)
+  })
+
+  it('a capture re-arms the retry', () => {
+    const { h, sentI } = makeHarvester()
+    h.harvest()
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
+    h.retryOnCommandEntry()                                      // the retry…
+    h.onMenu('spell', DESCRIBE_TITLE, [row('a', 'Freeze')])      // …succeeds
+    h.onMsgLine("Spell assigned to 'b'.")                        // later letter change
+    h.reharvestIfDirty()
+    expect(sentI()).toBe(3)
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS) // that one drops
+    h.retryOnCommandEntry()
+    expect(sentI()).toBe(4)
+  })
+
+  it('the no-spells terminator re-arms the retry', () => {
+    const { h, sentI } = makeHarvester()
+    h.harvest()
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
+    h.retryOnCommandEntry()                                      // the retry…
+    h.onMsgLine("You don't know any spells.")                    // …answers
+    h.onMsgLine("You finish memorising. Spell assigned to 'a'.") // first spell
+    h.reharvestIfDirty()
+    expect(sentI()).toBe(3)
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS) // that one drops
+    h.retryOnCommandEntry()
+    expect(sentI()).toBe(4)
+  })
+
+  it('go_lobby re-arms the retry for the next game', () => {
+    const { h, sentI } = makeHarvester()
+    h.harvest()
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
+    h.retryOnCommandEntry()
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)  // retry spent
+    h.resetForNewGame()
+    h.harvest()
+    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
+    h.retryOnCommandEntry()
+    expect(sentI()).toBe(4)
+  })
+
   it('reset() disarms the pending timers so a torn-down probe cannot fire later', () => {
     const { h, changed } = makeHarvester()
     h.setSpells([{ letter: 'a', title: 'Freeze', tile: 42 }])
