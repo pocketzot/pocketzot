@@ -41,7 +41,6 @@ import { attachCornerSwipe } from '../game/input/corner-swipe'
 import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { cursorInView, keepLocalCenter } from '../game/input/map-pan'
 import { escHtml } from '../game/dcss-colors'
-import { exportScreenPng } from './screen-export'
 import { getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
 import { primeFingerprint } from '../game/tiles/atlas-dedup'
@@ -50,7 +49,7 @@ import { CharacterRecord } from '../game/character-record'
 import { PopupStack, type PopupFrame } from '../game/popup-stack'
 import { MenuBar, menuTagHasBar } from './menu-bar'
 import { MenuView } from './menu-view'
-import { LayoutView, type ExportSource } from './layout-view'
+import { LayoutView } from './layout-view'
 import { CrtView } from './crt-view'
 import { VersionAdvisory } from './version-advisory'
 import { MessageLog } from './message-log'
@@ -872,7 +871,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     },
     repaint: () => restoreTopLayer(),
     showTextPage: (text) => showTxtPage(text),
-    setExportSource: (src) => setExportSource(src),
   })
 
   // CRT screens (./crt-view.ts); the frames and their lines ride popups.
@@ -885,34 +883,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     autoCloseKbdIfOurs,
     focusView,
   })
-
-  // Share chip for exportable fixed-width screens (screen-export.ts): the `%`
-  // overview and the end screen (the allowlist in LayoutView.show). A sibling of
-  // the overlay (not a child — enterOverlayLayout wipes uiOverlay.innerHTML
-  // on every render), absolutely positioned over the map area, visible only
-  // while an exportable screen is up, reachable regardless of how far the
-  // body has scrolled.
-  const exportBtn = document.createElement('button')
-  exportBtn.className = 'screen-export-btn'
-  exportBtn.hidden = true
-  exportBtn.setAttribute('aria-label', 'Share as image')
-  exportBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>'
-  let exportSource: ExportSource | null = null
-  let exportBusy = false
-  exportBtn.addEventListener('click', () => {
-    const src = exportSource
-    if (!src || exportBusy) return
-    exportBusy = true
-    // runs() evaluates inside the async body so a synchronous throw can't
-    // skip the finally and latch the chip disabled.
-    void (async () => exportScreenPng(src.runs(), src.slug))()
-      .catch((e: unknown) => console.error('screen export failed', e))
-      .finally(() => { exportBusy = false })
-  })
-  function setExportSource(src: typeof exportSource): void {
-    exportSource = src
-    exportBtn.hidden = !src
-  }
 
   view.appendChild(uiOverlay)
   view.appendChild(mapWrap)
@@ -959,7 +929,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     view.appendChild(menuControls)
   }
   // Both roles: spectators share the watched player's screens too.
-  view.appendChild(exportBtn)
+  view.appendChild(layoutView.exportButton)
 
   view.setAttribute('tabindex', '0')
   requestAnimationFrame(() => focusView())
@@ -2063,9 +2033,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // enterOverlayLayout and hideOverlay, run before either resets the layout
   // state retireOverlay reads.
   function clearOverlayContent(): void {
-    // Whatever renders next isn't (yet) exportable; the exportable show
-    // (LayoutView.show) re-sets this after it has laid content down.
-    setExportSource(null)
+    layoutView.clearExport()
     newgameFocus = null
     retireOverlay()
     uiOverlay.innerHTML = ''

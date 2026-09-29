@@ -1,7 +1,8 @@
 // ui-push layouts: the reference's ui-layouts.js display side for the
 // generic title/body/actions frame (describe-*, formatted-scroller,
 // game-over, version, …), the formatted scroller's client-owned scrolling,
-// and the ui-state / ui-scroller-scroll / ui-state-sync handlers. The
+// the share chip for exportable screens, and the ui-state /
+// ui-scroller-scroll / ui-state-sync handlers. The
 // standalone screens (creation, get-line input, seed selection —
 // game-overlays.ts, newgame-view.ts) and the layering policy stay in the
 // game view, which supplies the overlay host through LayoutViewDeps.
@@ -12,7 +13,7 @@ import type { NavKey } from '../game/input/input-router'
 import type { TileLoader } from '../game/tiles/tile-loader'
 import type { UiPushMsg } from './game-overlays'
 import { fitToWidth } from './fit-terminal'
-import { htmlToRuns, screenSlug, type DcssRun } from './screen-export'
+import { exportScreenPng, htmlToRuns, screenSlug, type DcssRun } from './screen-export'
 import { reflowOverview, isDungeonOverview } from './overview-reflow'
 import { dcssToHtml } from '../game/dcss-colors'
 import { fgHaloDngnName } from '../game/hud/monster-style'
@@ -23,7 +24,7 @@ import {
 } from './overlay-body'
 import { SCROLL_SYNC_DEBOUNCE_MS } from './menu-view'
 
-export interface ExportSource { runs: () => DcssRun[][]; slug: string }
+interface ExportSource { runs: () => DcssRun[][]; slug: string }
 
 export interface LayoutViewDeps {
   // The live overlay content root — never the inert copy of a covered frame.
@@ -40,7 +41,6 @@ export interface LayoutViewDeps {
   repaint(): void
   // ui-state text with no layout open.
   showTextPage(text: string): void
-  setExportSource(src: ExportSource | null): void
 }
 
 // Formatted-scroller: client-owned scroll widget.
@@ -71,8 +71,45 @@ export class LayoutView {
     this.scheduleScrollerSync()
   }
 
+  // Share chip for exportable fixed-width screens (screen-export.ts): the `%`
+  // overview and the end screen (the allowlist in show). The game view
+  // mounts it as a sibling of the overlay (not a child — enterOverlayLayout
+  // wipes uiOverlay.innerHTML on every render), absolutely positioned over
+  // the map area, visible only while an exportable screen is up, reachable
+  // regardless of how far the body has scrolled.
+  readonly exportButton = document.createElement('button')
+  private exportSource: ExportSource | null = null
+  private exportBusy = false
+
   constructor(deps: LayoutViewDeps) {
     this.d = deps
+    const btn = this.exportButton
+    btn.className = 'screen-export-btn'
+    btn.hidden = true
+    btn.setAttribute('aria-label', 'Share as image')
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>'
+    btn.addEventListener('click', () => {
+      const src = this.exportSource
+      if (!src || this.exportBusy) return
+      this.exportBusy = true
+      // runs() evaluates inside the async body so a synchronous throw can't
+      // skip the finally and latch the chip disabled.
+      void (async () => exportScreenPng(src.runs(), src.slug))()
+        .catch((e: unknown) => console.error('screen export failed', e))
+        .finally(() => { this.exportBusy = false })
+    })
+  }
+
+  // Whatever renders next isn't (yet) exportable: the game view calls this
+  // as it clears the overlay, and show re-arms the chip after it has laid
+  // an exportable screen down.
+  clearExport(): void {
+    this.setExportSource(null)
+  }
+
+  private setExportSource(src: ExportSource | null): void {
+    this.exportSource = src
+    this.exportButton.hidden = !src
   }
 
   // The connection belongs to the next view after this: no more syncs.
@@ -285,7 +322,7 @@ export class LayoutView {
         const slugSrc = title || firstLine || msg.type
         // Whole body through dcssToHtml in one call (unlike the per-line
         // display path) so open colour switches persist across newlines.
-        this.d.setExportSource({ runs: () => htmlToRuns(dcssToHtml(exportText)), slug: screenSlug(slugSrc) })
+        this.setExportSource({ runs:() => htmlToRuns(dcssToHtml(exportText)), slug: screenSlug(slugSrc) })
       }
     }
   }
