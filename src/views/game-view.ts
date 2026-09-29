@@ -25,8 +25,6 @@ import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { cursorInView, keepLocalCenter } from '../game/input/map-pan'
 import { escHtml } from '../game/dcss-colors'
 import { exportScreenPng, type DcssRun } from './screen-export'
-import { extractSkillHotkeys } from './skill-hotkeys'
-import { reflowSkillCrt, plainText } from './skill-reflow'
 import { getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
 import { formatDcssVersion, isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
@@ -37,6 +35,7 @@ import { PopupStack, type PopupFrame } from '../game/popup-stack'
 import { MenuBar, menuTagHasBar } from './menu-bar'
 import { MenuView } from './menu-view'
 import { LayoutView } from './layout-view'
+import { CrtView } from './crt-view'
 import { MessageLog } from './message-log'
 import { MenuModel, isPromptFamily, type MenuMsg } from '../game/menu-model'
 import { compactPlace } from '../game/char-label'
@@ -329,7 +328,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // Paints one frame. The CRT's lines ride its frame.
   const paintFrame = (f: PopupFrame<MenuMsg, UiPushMsg>): void => {
     if (f.kind === 'ui') showUiPush(f.push)
-    else if (f.kind === 'crt') restoreCrt()
+    else if (f.kind === 'crt') crtView.restore()
     else menuView.show(f.menu)
   }
   // What belongs on screen right now, as one function of overlay state: the
@@ -932,6 +931,18 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     repaint: () => restoreTopLayer(),
     showTextPage: (text) => showTxtPage(text),
     setExportSource: (src) => setExportSource(src),
+  })
+
+  // CRT screens (./crt-view.ts); the frames and their lines ride popups.
+  const crtView = new CrtView({
+    overlay: uiOverlay,
+    content: () => overlayContent,
+    enterLayout: () => enterOverlayLayout({ touch: false }),
+    bar: menuBar,
+    showBar: () => setMenuBar(true),
+    topCrt: () => popups.topCrt(),
+    autoCloseKbdIfOurs,
+    focusView,
   })
 
   // Share chip for exportable fixed-width screens (screen-export.ts): the `%`
@@ -1592,7 +1603,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     disarmCreationGuard()
     const lines = msg.lines
     if (msg.id && lines && typeof lines === 'object' && !Array.isArray(lines)) {
-      updateCrtLines(lines, msg.clear === true)
+      crtView.updateLines(lines, msg.clear === true)
     }
   }
 
@@ -1971,78 +1982,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     menuView.captureScroll()
     popups.pushCrt(tag)
     menuShift.reset()
-    mountCrtEl()
-    if (tag === 'skills') {
-      menuBar.build(tag)
-      setMenuBar(true)
-    }
-  }
-
-  // Re-paints the topmost CRT frame (the one showing) from its lines.
-  function restoreCrt(): void {
-    mountCrtEl()
-    if (popups.topCrt()?.tag === 'skills') {
-      menuBar.build('skills')
-      setMenuBar(true)
-    }
-    renderCrtEl()
-  }
-
-  function mountCrtEl(): void {
-    autoCloseKbdIfOurs()
-    enterOverlayLayout({ touch: false })
-    const el = document.createElement('div')
-    el.id = 'crt-display'
-    uiOverlay.appendChild(el)
-    focusView()
-  }
-
-  function renderCrtEl(): void {
-    const el = overlayContent.querySelector('#crt-display')
-    const crt = popups.topCrt()
-    if (!el || !crt) return
-    el.innerHTML = ''
-    const crtLines = crt.lines
-    const crtTag = crt.tag
-    const maxKey = crtLines.size > 0 ? Math.max(...crtLines.keys()) : 0
-    let rows: string[] = []
-    for (let i = 0; i <= maxKey; i++) rows.push(crtLines.get(i) ?? '')
-    // The skills menu (`m`) ships a fixed two-column terminal grid; reflow it
-    // into a single column so it fits a phone without horizontal panning. Only
-    // then may it wrap: a grid the reflow couldn't measure is still 79 columns
-    // wide, and must stay pannable rather than word-wrap mid-row.
-    const reflowed = crtTag === 'skills' ? reflowSkillCrt(rows) : null
-    el.classList.toggle('crt-skills', reflowed !== null)
-    if (reflowed) rows = reflowed
-    for (const html of rows) {
-      const line = document.createElement('div')
-      line.className = 'crt-line'
-      line.innerHTML = html
-      el.appendChild(line)
-    }
-    if (crtTag === 'skills') updateSkillLetterButtons(rows)
-  }
-
-  // `rows` is what we just rendered — read the hotkeys from it, not back out of
-  // the DOM we wrote it to.
-  function updateSkillLetterButtons(rows: string[]): void {
-    menuBar.setSkillLetters(extractSkillHotkeys(rows.map(plainText)))
-  }
-
-  function updateCrtLines(lines: Record<string, string>, clear: boolean): void {
-    // A forced redraw (WebTextArea::send, tileweb-text.cc:177) sends only its
-    // non-empty rows plus clear:true, so rows it omits are blank now — the
-    // reference empties them (text.js handle_text_update). Text for a CRT
-    // no longer on the stack (a txt trailing its close) has nowhere to go.
-    const crtLines = popups.topCrt()?.lines
-    if (!crtLines) return
-    if (clear) {
-      for (const k of crtLines.keys()) if (!(k in lines)) crtLines.set(k, '')
-    }
-    for (const [k, v] of Object.entries(lines)) {
-      crtLines.set(Number(k), v)
-    }
-    renderCrtEl()
+    crtView.open(tag)
   }
 
   // Keep the dev inspection hook pointing at the current cache array, and
