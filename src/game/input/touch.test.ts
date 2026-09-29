@@ -16,15 +16,25 @@ beforeEach(() => {
   localStorage.clear()
 })
 
+// Controls built here, destroyed after each test: their window/document
+// listeners outlive the DOM otherwise (destroy is the only release).
+const built: Array<ReturnType<typeof buildTouchControls>> = []
+function build(...args: Parameters<typeof buildTouchControls>) {
+  const tc = buildTouchControls(...args)
+  built.push(tc)
+  return tc
+}
+
 afterEach(() => {
+  for (const tc of built.splice(0)) tc.destroy()
   document.body.innerHTML = ''
   vi.restoreAllMocks()
 })
 
 function setup() {
   const sent: ClientMsg[] = []
-  const tc = buildTouchControls(msg => sent.push(msg))
-  document.body.appendChild(tc.element)  // connected: the live-apply listener stays subscribed
+  const tc = build(msg => sent.push(msg))
+  document.body.appendChild(tc.element)
   return { tc, sent }
 }
 
@@ -491,7 +501,7 @@ describe('consumeShift — spell-rail force-cast hook', () => {
 
   it('notifies onShiftChange on engage and on consume', () => {
     const states: boolean[] = []
-    const tc = buildTouchControls(() => {}, { onShiftChange: on => states.push(on) })
+    const tc = build(() => {}, { onShiftChange: on => states.push(on) })
     document.body.appendChild(tc.element)
     shiftBtn(tc.element).click()
     expect(states).toEqual([true])

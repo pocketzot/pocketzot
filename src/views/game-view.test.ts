@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { buildGameView, type SpectateTarget } from './game-view'
+import { disposeView } from './view-dispose'
 import { unwrapHangingIndents } from './overlay-body'
 import { ENABLE_SPELL_TAB } from '../game/input/touch'
 import type { WsConnection } from '../ws/connection'
@@ -43,15 +44,21 @@ function setup(spectating?: SpectateTarget, gameId = '', resumed = false): Harne
   } as unknown as WsConnection
   const onLobby = vi.fn()
   const view = buildGameView({ conn, onLobby, spectating, gameId, resumed })
+  mounted.push(view)
   document.body.appendChild(view)
   return { view, send, onLobby, dispatch: (msg) => conn.onMessage(msg as ServerMsg) }
 }
+
+// Views mounted by a test, disposed after it as the app shell would
+// (dispose is the only release of their document/window listeners).
+const mounted: HTMLElement[] = []
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', fakeStorage())
 })
 
 afterEach(() => {
+  for (const view of mounted.splice(0)) disposeView(view)
   document.body.innerHTML = ''
   vi.unstubAllGlobals()
 })
@@ -83,6 +90,7 @@ function setupOffline(readMorgue: (f: string) => Promise<Uint8Array<ArrayBuffer>
   } as unknown as WsConnection
   const onLobby = vi.fn()
   const view = buildGameView({ conn, onLobby, username: 'Dumptest', gameId: 'offline', readMorgue })
+  mounted.push(view)
   document.body.appendChild(view)
   return { view, send, onLobby, dispatch: (msg) => conn.onMessage(msg as ServerMsg) }
 }

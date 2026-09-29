@@ -1059,16 +1059,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   // Live-apply when the settings page changes the render-mode pref while a
-  // game is up (the HUD ⚙ chip opens settings over the game). exitToLobby releases
-  // the listener on the normal way out; the isConnected self-unhook (same
-  // pattern as the touch panel's CONTROLS_CHANGED_EVENT listener) is the
-  // backstop for exits that skip it, e.g. socket loss — these events fire
-  // rarely, so a dead view must not wait on the next one to unhook.
+  // game is up (the HUD ⚙ chip opens settings over the game).
   function onRenderModePref(): void {
-    if (!view.isConnected) {
-      window.removeEventListener(RENDER_MODE_CHANGED_EVENT, onRenderModePref)
-      return
-    }
     setRenderMode(getPref('mapRenderMode'))
   }
   window.addEventListener(RENDER_MODE_CHANGED_EVENT, onRenderModePref)
@@ -1076,10 +1068,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // Same live-apply for the monster-list mode (the in-game chevron writes the
   // pref too, but setListMode no-ops when the value matches).
   function onMonsterListModePref(): void {
-    if (!view.isConnected) {
-      window.removeEventListener(MONSTER_LIST_MODE_CHANGED_EVENT, onMonsterListModePref)
-      return
-    }
     monsterListView.setListMode(getPref('monsterListMode'))
   }
   window.addEventListener(MONSTER_LIST_MODE_CHANGED_EVENT, onMonsterListModePref)
@@ -1099,7 +1087,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // physical Esc KEY as the close signal — arming would double-fire every
   // Esc. One watcher alive at a time, re-armed per close; no CloseWatcher
   // (pre-126 Chromium, Samsung Internet <28) means native back behavior,
-  // accepted. Destroyed in exitToLobby, isConnected as the backstop.
+  // accepted. Destroyed in dispose().
   let closeWatcher: CloseWatcherLike | null = null
   function armCloseWatcher(): void {
     // The platform gate lives here (not just at the initial arming) so the
@@ -1120,9 +1108,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     closeWatcher = w
   }
   function onBackRequest(): void {
-    // Declining to re-arm IS the self-unhook (the fired watcher is already
-    // spent), same backstop pattern as the pref listeners above.
-    if (!view.isConnected) return
     armCloseWatcher()  // the fired watcher is spent; re-arm before handling
     // Body-mounted overlays (Settings, docs, crypt) sit over everything and
     // are invisible to uiQuiet — dismiss the topmost, like their Escape
@@ -1268,7 +1253,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   if (getPref('mapRenderMode') === 'tiles') setRenderMode('tiles')
 
   const docKeyHandler = (e: KeyboardEvent) => {
-    if (!view.isConnected) { document.removeEventListener('keydown', docKeyHandler); return }
     // A body-mounted overlay (Settings, docs, crypt) is open over the game and
     // owns the keyboard: don't forward anything to the game underneath. Its own
     // Escape listener (overlay.ts) handles dismissal, so no preventDefault here.
@@ -1292,13 +1276,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // change one bound and the other must move with it, or a height could get
   // the compact chip inside the wide sidebar. Portrait floats the full list
   // over the map and never matches this query. Re-sync on rotation/resize.
-  // dispose() removes the listener; the isConnected self-removal (like
-  // docKeyHandler's) is the fallback for a mount that bypasses the app
-  // shell's setView (perf/replay.ts). Set the initial state before the
-  // first map message so the first render is already in the right mode.
+  // Set the initial state before the first map message so the first render
+  // is already in the right mode.
   const compactMql = window.matchMedia('(orientation: landscape) and (max-height: 600px)')
   const syncMonsterCompact = (): void => {
-    if (!view.isConnected) { compactMql.removeEventListener('change', syncMonsterCompact); return }
     monsterListView.setCompact(compactMql.matches)
   }
   compactMql.addEventListener('change', syncMonsterCompact)
@@ -2156,11 +2137,14 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     })
   }
 
-  // Everything this view installed outside its own subtree. Idempotent: the
-  // deliberate exits (exitToLobby) run it before handing over, and the app
-  // shell runs it again when it replaces the view (views/view-dispose.ts) —
-  // that second route is the only teardown a resume-rebuilt view gets.
-  // Declared last so every handle it releases is initialized above it.
+  // Everything this view installed outside its own subtree, and the one
+  // teardown for it: listeners don't self-unhook on a detached view. Every
+  // route off the view reaches here — the deliberate exits (exitToLobby)
+  // before handing over, and the app shell on every view swap (app.ts
+  // setView → views/view-dispose.ts), the only teardown a resume-rebuilt
+  // view gets. Idempotent, since both can run. A test that mounts a view
+  // disposes it too. Declared last so every handle it releases is
+  // initialized above it.
   let disposed = false
   function dispose(): void {
     if (disposed) return

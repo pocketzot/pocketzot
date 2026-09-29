@@ -585,27 +585,17 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
 
   // Sync the panel to the active control set: used for the initial render
   // and for live-apply when settings changes (activating, editing, or
-  // deleting the active set) fire CONTROLS_CHANGED_EVENT. game-view calls
-  // destroy() on the way back to the lobby; the isConnected self-unhook is
-  // the backstop for exits that skip that path (socket loss), so a dead
-  // panel is never re-rendered.
+  // deleting the active set) fire CONTROLS_CHANGED_EVENT. The owner's
+  // destroy() releases the listener (game-view's dispose).
   function applyControlSet(): void {
     controlSet = getActiveControlSet()
     rebuildTabs()
     renderPanel()
   }
-
-  function onControlsChanged(): void {
-    if (!root.isConnected) {
-      destroy()
-      return
-    }
-    applyControlSet()
-  }
-  window.addEventListener(CONTROLS_CHANGED_EVENT, onControlsChanged)
+  window.addEventListener(CONTROLS_CHANGED_EVENT, applyControlSet)
 
   function destroy(): void {
-    window.removeEventListener(CONTROLS_CHANGED_EVENT, onControlsChanged)
+    window.removeEventListener(CONTROLS_CHANGED_EVENT, applyControlSet)
     for (const type of ['touchstart', 'touchend', 'touchcancel'] as const) {
       document.removeEventListener(type, onDocTouch, { capture: true })
     }
