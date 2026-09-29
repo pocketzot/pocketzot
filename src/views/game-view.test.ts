@@ -47,8 +47,13 @@ function setup(spectating?: SpectateTarget, gameId = '', resumed = false): Harne
   return { view, send, onLobby, dispatch: (msg) => conn.onMessage(msg as ServerMsg) }
 }
 
+beforeEach(() => {
+  vi.stubGlobal('localStorage', fakeStorage())
+})
+
 afterEach(() => {
   document.body.innerHTML = ''
+  vi.unstubAllGlobals()
 })
 
 // Offline variant: wires the readMorgue seam the way app.ts does from
@@ -2978,7 +2983,6 @@ describe('game_ending: the offline flush-time outcome', () => {
   let beacons: string[]
 
   beforeEach(() => {
-    vi.stubGlobal('localStorage', fakeStorage())
     beacons = []
     import.meta.env.DEV = false
     Object.defineProperty(navigator, 'sendBeacon', {
@@ -2989,7 +2993,6 @@ describe('game_ending: the offline flush-time outcome', () => {
 
   afterEach(() => {
     import.meta.env.DEV = realDev
-    vi.unstubAllGlobals()
   })
 
   // The slot's live entry, as a map capture would have left it.

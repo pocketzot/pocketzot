@@ -127,13 +127,18 @@ export default defineConfig({
           // The tile path (exercised by monster-list.test.ts) lazily appends
           // <script src=…/tileinfo-*.js> to load AMD tileinfo modules. happy-dom
           // can't execute external scripts and otherwise logs a noisy
-          // DOMException per attempt. Treat the disabled load as a silent no-op
-          // (fires a 'load' event instead of console.error'ing): the tile
-          // painters already no-op without real atlas/module loads, and those
-          // tests only assert DOM row structure.
+          // DOMException per attempt. Treat the disabled load as a 'load'
+          // event instead: the tile painters no-op without real atlas/module
+          // loads, and those tests only assert DOM row structure.
           handleDisabledFileLoadingAsSuccess: true,
         },
       },
     },
+    // That fake 'load' never reaches define(), so tile-loader's loadModule
+    // rejects it ("… loaded without defining a module") and each caller's
+    // fallback warns with a stack (~70 per screen-trace run). No script ever
+    // executes here, so the message is always this artifact: drop it, let
+    // every other log through.
+    onConsoleLog: (log) => !log.includes('loaded without defining a module'),
   },
 })
