@@ -2255,9 +2255,14 @@ html.map-hold, html.map-hold * {
 .msg-turn-mark.cmd  { color: var(--color-8); }
 .msg-turn-mark.turn { color: var(--color-7); }
 
+/* Sized to the log's line pitch: at .action-btn's own padding and the
+   button's UA line-height a prompt row measured 23.4px against a 13.2px
+   line, costing most of a line of the fixed-height log per button row. */
 .game-prompt .action-btn {
   vertical-align: middle;
   margin: 0 0.1rem;
+  padding-block: 1px;
+  line-height: var(--msglog-line);
 }
 
 .game-text-input {
