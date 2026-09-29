@@ -1867,7 +1867,7 @@ button.lobby-account-chip:active { background: var(--press); }
   --msglog-h: calc((var(--pz-msglog-lines, 5) + 3) * var(--msglog-font) * var(--msglog-line));
 }
 
-/* Old-version advisory banner (maybeShowVersionNotice in game-view.ts):
+/* Old-version advisory banner (version-advisory.ts):
    floats over the map's top edge, tap-to-dismiss, auto-removed after a
    few seconds. z-index above the floating log/rail tier (≤5), below
    nothing that matters — server overlays replace the map wholesale. */

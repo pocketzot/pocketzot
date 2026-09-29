@@ -27,7 +27,6 @@ import { escHtml } from '../game/dcss-colors'
 import { exportScreenPng, type DcssRun } from './screen-export'
 import { getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
-import { formatDcssVersion, isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
 import { primeFingerprint } from '../game/tiles/atlas-dedup'
 import { OFFLINE_WS_URL } from '../offline/offline-state'
 import { CharacterRecord } from '../game/character-record'
@@ -36,6 +35,7 @@ import { MenuBar, menuTagHasBar } from './menu-bar'
 import { MenuView } from './menu-view'
 import { LayoutView } from './layout-view'
 import { CrtView } from './crt-view'
+import { VersionAdvisory } from './version-advisory'
 import { MessageLog } from './message-log'
 import { MenuModel, isPromptFamily, type MenuMsg } from '../game/menu-model'
 import { compactPlace } from '../game/char-label'
@@ -460,72 +460,19 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     consumeShift: () => touchControls.consumeShift(),
   })
 
-  // --- Old-version advisory (see dev-material/old-version-support.md) ---
-  // Below the 0.24 support cutoff we inform, never block: a dismissible
-  // banner on any parsed-old game, plus — for a *played* game only — a
-  // back-to-lobby door if NOTHING renders within the timeout (below 0.24
-  // the server has no newgame-choice; a fresh game can sit on a black
-  // screen). Any rendered content disarms it: the first `map` (resumed
-  // save), a txt/CRT screen (0.23 creation can arrive this way and is
-  // driveable from the virtual keyboard), a menu, or a ui-push. Version
-  // detection fails open (trunk/forks/hash dirs parse null → no notice),
-  // so this never touches modern games.
-  let versionNoticeShown = false
-  let creationGuardTimer: ReturnType<typeof setTimeout> | undefined
-  let mapSeen = false
-  const CREATION_GUARD_MS = 6000
-
-  function maybeShowVersionNotice(...candidates: Array<string | undefined>): void {
-    if (versionNoticeShown) return
-    const ver = parseDcssVersion(...candidates)
-    if (!isBelowSupportCutoff(ver)) return
-    versionNoticeShown = true
-
-    const banner = document.createElement('div')
-    banner.className = 'version-notice'
-    banner.textContent = `DCSS ${formatDcssVersion(ver!)} is older than PocketZot supports — expect rough edges. Tap to dismiss.`
-    banner.addEventListener('click', () => banner.remove())
-    setTimeout(() => banner.remove(), 15000)
-    view.appendChild(banner)
-
-    if (!spectating && creationGuardTimer === undefined) {
-      creationGuardTimer = setTimeout(() => {
-        creationGuardTimer = undefined
-        if (mapSeen) return
-        banner.remove()  // the dialog says it all; don't stack notices
-        renderOverlay('Unsupported version', () => {
-          const body = document.createElement('div')
-          body.className = 'dialog-body'
-          const p = document.createElement('p')
-          p.textContent = `Character creation on DCSS ${formatDcssVersion(ver!)} isn’t supported by PocketZot (versions before 0.24 predate the character-creation menus it supports).`
-          const btnRow = document.createElement('div')
-          btnRow.className = 'dialog-buttons'
-          const btn = document.createElement('button')
-          // 'button' class = the shared server-dialog button styling
-          // (.dialog-body .button in style.css).
-          btn.className = 'button'
-          btn.textContent = 'Back to lobby'
-          btn.addEventListener('click', () => leaveToLobby())
-          btnRow.appendChild(btn)
-          body.append(p, btnRow)
-          uiOverlay.appendChild(body)
-        })
-      }, CREATION_GUARD_MS)
-    }
-  }
-
-  function disarmCreationGuard(): void {
-    if (creationGuardTimer !== undefined) {
-      clearTimeout(creationGuardTimer)
-      creationGuardTimer = undefined
-    }
-  }
-
+  // The pre-0.24 banner and "nothing rendered" guard (./version-advisory.ts).
+  const advisory = new VersionAdvisory({
+    view,
+    overlay: uiOverlay,
+    renderOverlay: (title, build) => renderOverlay(title, build),
+    leave: () => leaveToLobby(),
+    spectating: !!spectating,
+  })
   // Mount-time check covers games whose id already tells the story (the play
   // button's game_id, e.g. "dcss-0.23") and the lobby-resolved loader; the
   // game_client handler re-checks with the server's gamedata version for
   // servers where neither is known yet at mount.
-  maybeShowVersionNotice(gameId, loader?.version)
+  advisory.check(gameId, loader?.version)
 
   // The message log, --more--, prompt rows and the X-describe strip
   // (./message-log.ts).
@@ -1485,7 +1432,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     monsterListView.setLoader(loader)
     monsterPanel.setLoader(loader)
     adoptEnums(loader)
-    maybeShowVersionNotice(gameId, msg.version)
+    advisory.check(gameId, msg.version)
     if (renderMode === 'tiles') {
       void (mapView as TileMapView).preloadAtlases(loader)
       monsterListView.update(store.getMonsters())
@@ -1493,11 +1440,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   function onMap(msg: MsgOf<'map'>): void {
-    // A map frame means we're in (or resumed) a real game — the old-
-    // version creation guard's "nothing rendered" case can't apply.
-    // Not a creation signal, though (character-record.ts welcomeLine).
-    mapSeen = true
-    disarmCreationGuard()
+    // A real game is on screen — but a map is not a character-creation
+    // signal (character-record.ts welcomeLine).
+    advisory.onMap()
     if (msg.clear) {
       store.clear()
       // `[`/`]` in the level map arrive as a cleared map (tile_new_level
@@ -1596,11 +1541,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   function onTxt(msg: MsgOf<'txt'>): void {
-    // Renders a CRT screen's rows — visible content, so the old-version
-    // creation guard's "nothing rendered" case can't apply (0.23 char
-    // creation arrives as a CRT text screen, driveable from the virtual
-    // keyboard).
-    disarmCreationGuard()
+    advisory.disarm()  // a CRT screen rendered (version-advisory.ts)
     const lines = msg.lines
     if (msg.id && lines && typeof lines === 'object' && !Array.isArray(lines)) {
       crtView.updateLines(lines, msg.clear === true)
@@ -1608,7 +1549,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   function onUiPush(msg: MsgOf<'ui-push'>): void {
-    disarmCreationGuard()  // an overlay rendered — see onTxt
+    advisory.disarm()  // an overlay rendered (version-advisory.ts)
     const pushMsg: UiPushMsg = msg
     if (resumed && !spectating && CREATION_PUSHES.has(pushMsg.type)) {
       abandoningResume = true
@@ -1699,7 +1640,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   function onMenu(msg: MsgOf<'menu'>): void {
-    disarmCreationGuard()  // a menu rendered — see onTxt
+    advisory.disarm()  // a menu rendered (version-advisory.ts)
     const m: MenuMsg = msg
     const titlePlain = stripDcss(m.title?.text ?? '')
     // Silent spell harvest (see ../game/spell-harvest onMenu): the
@@ -1858,12 +1799,12 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // drops any pending re-harvest so neither carries into the next game.
   function onLeave(): void {
     harvester.resetForNewGame()
-    disarmCreationGuard()
+    advisory.disarm()
     exitToLobby()
   }
 
   function onGameEnded(msg: MsgOf<'game_ended'>): void {
-    disarmCreationGuard()
+    advisory.disarm()
     record.recordEnding(msg.reason, msg.message, msg.dump)
     // Forward exit details so the lobby renders the exit dialog after the
     // layer switch. The trailing go_lobby + lobby list (often batched with
@@ -2285,7 +2226,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     menuView.dispose()
     layoutView.dispose()
     cancelTileGesture()
-    disarmCreationGuard()
+    advisory.disarm()
   }
   registerViewDispose(view, dispose)
   return view
