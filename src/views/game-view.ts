@@ -1,5 +1,6 @@
 import type { GameConnection } from '../ws/connection'
 import type { ClientMsg, ServerMsg, GameExit } from '../ws/types'
+import { combineHandlers, dispatch, type MsgOf } from '../ws/dispatcher'
 import { registerViewDispose } from './view-dispose'
 import { MapStore } from '../game/map/map-store'
 import { MapView } from '../game/map/map-view'
@@ -1384,562 +1385,512 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   compactMql.addEventListener('change', syncMonsterCompact)
   monsterListView.setCompact(compactMql.matches)
 
+  // The messages the game view handles itself: those that move the popup
+  // stack or the layout, or touch several modules at once. The views own
+  // the rest (their `handlers`); combineHandlers keeps one owner per type.
+  const handlers = combineHandlers(
+    chatView.handlers, menuView.handlers, layoutView.handlers, messageLog.handlers,
+    {
+      layer: onLayer,
+      set_layer: onLayer,
+      show_dialog: onShowDialog,
+      hide_dialog: () => { if (dialogActive) { dialogActive = false; hideOverlay() } },
+      game_client: onGameClient,
+      map: onMap,
+      player: onPlayer,
+      options: (msg) => statsView.setOptions(msg.options ?? {}),
+      txt: onTxt,
+      'ui-push': onUiPush,
+      'ui-stack': onUiStack,
+      'ui-pop': () => { popups.pop(); restoreTopLayer() },
+      ui_cutoff: onUiCutoff,
+      'ui-state': onUiState,
+      menu: onMenu,
+      input_mode: onInputMode,
+      init_input: onInitInput,
+      // A memorise/forget this frame leaves us at a command prompt (the
+      // delay finished; no input_mode transition fires), so re-harvest now
+      // rather than waiting for the next menu round-trip.
+      msgs: (msg) => { messageLog.onMsgs(msg); harvester.reharvestIfDirty() },
+      cursor: onCursor,
+      close_input: onCloseInput,
+      close_menu: onCloseMenu,
+      close_all_menus: onCloseAllMenus,
+      go_lobby: onLeave,
+      close: onLeave,
+      game_ending: (msg) => record.recordEnding(msg.reason, msg.message),
+      game_ended: onGameEnded,
+    },
+  )
+
   conn.onMessage = handleMsg
 
   function handleMsg(msg: ServerMsg): void {
     if (abandoningResume && msg.msg !== 'go_lobby' && msg.msg !== 'close') return
-    switch (msg.msg) {
-      // No upstream emitter: trunk and 0.34.1 only receive it (client.js
-      // "layer": do_set_layer). The one sender seen is CDI's `layer:"crt"`
-      // ahead of its save-transfer show_dialog (wire capture 2026-09-27),
-      // a no-op here. The `game` reset is defensive; nothing sent it in that
-      // capture (stable + trunk start, exit, spectate) or in any recording.
-      case 'layer':
-      case 'set_layer':
-        if (msg.layer === 'game') { popups.clear(); dialogActive = false; menus.active = null; closeClientOverlays(); harvester.reset(); hideOverlay() }
-        break
+    dispatch(handlers, msg)
+  }
 
-      // Raw-HTML modal. No emitter in upstream trunk or 0.34.1 (the reference
-      // only handles it); the known sender is CDI's own save-transfer prompt
-      // on its trunk game. Mirrors reference handle_dialog: inject the HTML,
-      // wire [data-key] buttons to send that key. Without this the game
-      // blocks on an invisible prompt — a black screen.
-      case 'show_dialog': {
-        const html = msg.html ?? ''
-        // Like any server overlay, it supersedes the client panel and lens
-        // (see the ui-push case) — a panel flag left set would keep
-        // swallowing keys after hide_dialog.
-        closeClientOverlays()
-        dialogActive = true
-        renderOverlay('', () => {
-          const body = document.createElement('div')
-          body.className = 'dialog-body'
-          body.innerHTML = html
-          // Group the server's [data-key] buttons into one flex row. The
-          // server appends them in reverse visual order and floats them
-          // right (e.g. [No, Yes] → renders "Yes  No"); .dialog-buttons
-          // uses row-reverse to reproduce that intent for any button set.
-          const btnRow = document.createElement('div')
-          btnRow.className = 'dialog-buttons'
-          body.querySelectorAll<HTMLElement>('[data-key]').forEach((el) => {
-            el.addEventListener('click', () => {
-              const k = el.getAttribute('data-key') ?? ''
-              if (k) conn.send({ msg: 'input', text: k })
-            })
-            btnRow.appendChild(el)
-          })
-          if (btnRow.children.length) body.appendChild(btnRow)
-          uiOverlay.appendChild(body)
+  // No upstream emitter: trunk and 0.34.1 only receive it (client.js
+  // "layer": do_set_layer). The one sender seen is CDI's `layer:"crt"`
+  // ahead of its save-transfer show_dialog (wire capture 2026-09-27), a
+  // no-op here. The `game` reset is defensive; nothing sent it in that
+  // capture (stable + trunk start, exit, spectate) or in any recording.
+  function onLayer(msg: MsgOf<'layer'> | MsgOf<'set_layer'>): void {
+    if (msg.layer === 'game') { popups.clear(); dialogActive = false; menus.active = null; closeClientOverlays(); harvester.reset(); hideOverlay() }
+  }
+
+  // Raw-HTML modal. No emitter in upstream trunk or 0.34.1 (the reference
+  // only handles it); the known sender is CDI's own save-transfer prompt
+  // on its trunk game. Mirrors reference handle_dialog: inject the HTML,
+  // wire [data-key] buttons to send that key. Without this the game
+  // blocks on an invisible prompt — a black screen.
+  function onShowDialog(msg: MsgOf<'show_dialog'>): void {
+    const html = msg.html ?? ''
+    // Like any server overlay, it supersedes the client panel and lens
+    // (see onUiPush) — a panel flag left set would keep swallowing keys
+    // after hide_dialog.
+    closeClientOverlays()
+    dialogActive = true
+    renderOverlay('', () => {
+      const body = document.createElement('div')
+      body.className = 'dialog-body'
+      body.innerHTML = html
+      // Group the server's [data-key] buttons into one flex row. The
+      // server appends them in reverse visual order and floats them
+      // right (e.g. [No, Yes] → renders "Yes  No"); .dialog-buttons
+      // uses row-reverse to reproduce that intent for any button set.
+      const btnRow = document.createElement('div')
+      btnRow.className = 'dialog-buttons'
+      body.querySelectorAll<HTMLElement>('[data-key]').forEach((el) => {
+        el.addEventListener('click', () => {
+          const k = el.getAttribute('data-key') ?? ''
+          if (k) conn.send({ msg: 'input', text: k })
         })
-        break
-      }
+        btnRow.appendChild(el)
+      })
+      if (btnRow.children.length) body.appendChild(btnRow)
+      uiOverlay.appendChild(body)
+    })
+  }
 
-      case 'hide_dialog':
-        if (dialogActive) { dialogActive = false; hideOverlay() }
-        break
+  function onGameClient(msg: MsgOf<'game_client'>): void {
+    // Server tells us the gamedata version on game start. Use it to build
+    // URLs for tile atlases (gui.png, main.png, ...) served at
+    // /gamedata/<version>/.
+    if (!msg.version) return
+    // Resolve this game's per-version loader. getTileLoader memoizes by
+    // version, so a same-version resume reuses the warm cache while a
+    // different version gets a fully isolated instance — no shared state
+    // to clear, no stale-atlas race. This is the moment a persisted
+    // tile-mode view (built before game_client) or a pre-game_client
+    // gesture toggle gets its loader and starts painting.
+    loader = getTileLoader(conn.httpBase, msg.version)
+    // Offline games only (httpBase '' → the same-origin pack): refresh
+    // the pack's layout fingerprint so record.captureAvatar can stamp it on
+    // captures synchronously and eager-bake against it. Forced because
+    // the pack's content shifts under constant coords across engine
+    // updates — and right now the mounted pack is what we'd bake from,
+    // so recompute-from-source is exactly the fresh value. Server
+    // version dirs are immutable and never need this (their fingerprint
+    // fills lazily on the first login-shelf resolve).
+    if (conn.httpBase === '') void primeFingerprint('', msg.version, true)
+    // Dev hook — see the initialLoader assignment near the top.
+    if (import.meta.env.DEV) (window as unknown as { __dcssLoader: TileLoader }).__dcssLoader = loader
+    monsterListView.setLoader(loader)
+    monsterPanel.setLoader(loader)
+    adoptEnums(loader)
+    maybeShowVersionNotice(gameId, msg.version)
+    if (renderMode === 'tiles') {
+      void (mapView as TileMapView).preloadAtlases(loader)
+      monsterListView.update(store.getMonsters())
+    }
+  }
 
-      case 'chat':
-        chatView.handleChat(msg.content ?? '', !!msg.meta)
-        break
+  function onMap(msg: MsgOf<'map'>): void {
+    // A map frame means we're in (or resumed) a real game — the old-
+    // version creation guard's "nothing rendered" case can't apply.
+    // Not a creation signal, though (character-record.ts welcomeLine).
+    mapSeen = true
+    disarmCreationGuard()
+    if (msg.clear) {
+      store.clear()
+      // `[`/`]` in the level map arrive as a cleared map (tile_new_level
+      // → clear_minimap), and a tap-walk landing held for the vgrdc
+      // policy below then names a cell on the level just left. It can't
+      // wait for the cursor report to retire it: place_cursor defers
+      // CURSOR_MAP until AFTER a pending full map (tileweb.cc "if map is
+      // going to be updated, send the cursor after that"; _send_map's
+      // force_full tail sends it, tileweb.cc:2014), so the hold would
+      // refuse this map's vgrdc, and the late cursor retires the hold
+      // without re-panning (MapJumper.onCursor) while no further vgrdc
+      // follows — the held view then showed the new level around the old
+      // level's stair. The spectator-join clear (above) drops a hold
+      // too; that only re-centers on the cursor.
+      mapJumper.reset()
+    }
+    // vgrdc is the server's complete view-centering signal (present on a
+    // map message whenever it matters — roughly half of them in
+    // practice); setViewCenter returns true only on a real pan. The
+    // player handler never pans — reference parity (its player.js has no
+    // view-center writes at all). In X mode vgrdc is pinned to the
+    // cursor every redraw; a tap-walk toward an on-screen cell holds
+    // the (possibly drag-panned) view instead — policy in map-pan.ts.
+    let panned = false
+    if (msg.vgrdc) {
+      serverCenter = msg.vgrdc
+      const keep = inXMode && keepLocalCenter(mapJumper.destination(), mapView.viewRect())
+      if (!keep) panned = mapView.setViewCenter(msg.vgrdc)
+    }
+    // Sticky like the reference's inv_mons_msg: only a present key
+    // changes it ('' clears); store.clear() above also resets it.
+    if (msg.invis_mon_desc !== undefined) store.invisMonDesc = msg.invis_mon_desc
+    if (msg.player_on_level !== undefined) store.playerOnLevel = msg.player_on_level
+    const dirty = store.merge(msg.cells ?? [])
+    // Render now, synchronously (reference display.js order, except we
+    // merge before panning so the blit's exposed strips paint this turn's
+    // cells instead of last turn's — panRender dedups strip∪dirty).
+    if (msg.clear) mapView.fullRender()          // store wiped — hard
+    else if (panned) mapView.panRender(dirty)    // origin moved — blit
+    else mapView.render(dirty)
+    monsterListView.update(store.getMonsters())
+    if (monsterPanelOpen) monsterPanel.update(store.getMonsters())
+    scheduleMinimapRepaint()
+    record.captureAvatar(store.get(store.playerPos.x, store.playerPos.y), loader)
+  }
 
-      case 'update_spectators':
-        chatView.handleSpectators(msg.count ?? 0, msg.names ?? '')
-        break
-
-      case 'super_hide_chat':
-        chatView.superHide()
-        break
-
-      case 'game_client': {
-        // Server tells us the gamedata version on game start. Use it to
-        // build URLs for tile atlases (gui.png, main.png, ...) served at
-        // /gamedata/<version>/.
-        if (msg.version) {
-          // Resolve this game's per-version loader. getTileLoader memoizes by
-          // version, so a same-version resume reuses the warm cache while a
-          // different version gets a fully isolated instance — no shared state
-          // to clear, no stale-atlas race. This is the moment a persisted
-          // tile-mode view (built before game_client) or a pre-game_client
-          // gesture toggle gets its loader and starts painting.
-          loader = getTileLoader(conn.httpBase, msg.version)
-          // Offline games only (httpBase '' → the same-origin pack): refresh
-          // the pack's layout fingerprint so record.captureAvatar can stamp it on
-          // captures synchronously and eager-bake against it. Forced because
-          // the pack's content shifts under constant coords across engine
-          // updates — and right now the mounted pack is what we'd bake from,
-          // so recompute-from-source is exactly the fresh value. Server
-          // version dirs are immutable and never need this (their fingerprint
-          // fills lazily on the first login-shelf resolve).
-          if (conn.httpBase === '') void primeFingerprint('', msg.version, true)
-          // Dev hook — see the initialLoader assignment near the top.
-          if (import.meta.env.DEV) (window as unknown as { __dcssLoader: TileLoader }).__dcssLoader = loader
-          monsterListView.setLoader(loader)
-          monsterPanel.setLoader(loader)
-          adoptEnums(loader)
-          maybeShowVersionNotice(gameId, msg.version)
-          if (renderMode === 'tiles') {
-            void (mapView as TileMapView).preloadAtlases(loader)
-            monsterListView.update(store.getMonsters())
-          }
-        }
-        break
-      }
-
-      case 'map': {
-        // A map frame means we're in (or resumed) a real game — the old-
-        // version creation guard's "nothing rendered" case can't apply.
-        // Not a creation signal, though (character-record.ts welcomeLine).
-        mapSeen = true
-        disarmCreationGuard()
-        if (msg.clear) {
-          store.clear()
-          // `[`/`]` in the level map arrive as a cleared map (tile_new_level
-          // → clear_minimap), and a tap-walk landing held for the vgrdc
-          // policy below then names a cell on the level just left. It can't
-          // wait for the cursor report to retire it: place_cursor defers
-          // CURSOR_MAP until AFTER a pending full map (tileweb.cc "if map is
-          // going to be updated, send the cursor after that"; _send_map's
-          // force_full tail sends it, tileweb.cc:2014), so the hold would
-          // refuse this map's vgrdc, and the late cursor retires the hold
-          // without re-panning (MapJumper.onCursor) while no further vgrdc
-          // follows — the held view then showed the new level around the old
-          // level's stair. The spectator-join clear (above) drops a hold
-          // too; that only re-centers on the cursor.
-          mapJumper.reset()
-        }
-        // vgrdc is the server's complete view-centering signal (present on a
-        // map message whenever it matters — roughly half of them in
-        // practice); setViewCenter returns true only on a real pan. The
-        // player handler never pans — reference parity (its player.js has no
-        // view-center writes at all). In X mode vgrdc is pinned to the
-        // cursor every redraw; a tap-walk toward an on-screen cell holds
-        // the (possibly drag-panned) view instead — policy in map-pan.ts.
-        let panned = false
-        if (msg.vgrdc) {
-          serverCenter = msg.vgrdc
-          const keep = inXMode && keepLocalCenter(mapJumper.destination(), mapView.viewRect())
-          if (!keep) panned = mapView.setViewCenter(msg.vgrdc)
-        }
-        // Sticky like the reference's inv_mons_msg: only a present key
-        // changes it ('' clears); store.clear() above also resets it.
-        if (msg.invis_mon_desc !== undefined) store.invisMonDesc = msg.invis_mon_desc
-        if (msg.player_on_level !== undefined) store.playerOnLevel = msg.player_on_level
-        const dirty = store.merge(msg.cells ?? [])
-        // Render now, synchronously (reference display.js order, except we
-        // merge before panning so the blit's exposed strips paint this turn's
-        // cells instead of last turn's — panRender dedups strip∪dirty).
-        if (msg.clear) mapView.fullRender()          // store wiped — hard
-        else if (panned) mapView.panRender(dirty)    // origin moved — blit
-        else mapView.render(dirty)
-        monsterListView.update(store.getMonsters())
-        if (monsterPanelOpen) monsterPanel.update(store.getMonsters())
-        scheduleMinimapRepaint()
-        record.captureAvatar(store.get(store.playerPos.x, store.playerPos.y), loader)
-        break
-      }
-
-      case 'player': {
-        record.onPlayer(msg)
-        // Zoom floor follows what the character can perceive (los.ts).
-        if (msg.species !== undefined) sight.species = msg.species
-        if (msg.god !== undefined) sight.god = msg.god
-        if (msg.piety_rank !== undefined) sight.pietyRank = msg.piety_rank
-        if (mapView.setSight(sight)) scheduleFit()
-        if (msg.place !== undefined || msg.depth !== undefined) {
-          touchControls.setXModePlace(compactPlace(record.meta.place ?? '', record.meta.depth))
-        }
-        if (msg.pos) {
-          store.playerPos = { x: msg.pos.x, y: msg.pos.y }
-          // Deliberately NO view-center change here: the view pans only on
-          // map.vgrdc, like the reference client (its player.js never touches
-          // the center). vgrdc arrives on the same turn's map message, whose
-          // handler pans and repaints synchronously before anything else runs.
-          scheduleMinimapRepaint()
-        }
-        // Feed HP/MP to the renderer (tile mode draws under-tile mini-bars).
-        // Runs before the scheduled flush, so a full render picks up the fresh
-        // values; merged into playerStats so a later tile-mode swap can seed.
-        if (msg.hp !== undefined) playerStats.hp = msg.hp
-        if (msg.hp_max !== undefined) playerStats.hp_max = msg.hp_max
-        if (msg.mp !== undefined) playerStats.mp = msg.mp
-        if (msg.mp_max !== undefined) playerStats.mp_max = msg.mp_max
-        mapView.setPlayerStats(playerStats)
-        inventoryStore.update(msg.inv)
-        statsView.update(msg)
-        if (msg.status !== undefined) statusView.update(msg.status)
-        if (msg.time !== undefined) messageLog.markLast('turn')
-        if (!hudRevealed) {
-          hudRevealed = true
-          // Don't reveal the HUD while an overlay covers the screen: the
-          // newgame-choice character-creation screens send `player` messages
-          // carrying placeholder stats ("the Conjurer — Yak", 0/0 HP, …)
-          // before any character exists. uiOverlay being shown is the signal
-          // a full overlay is up; when it closes, the next applyLayout
-          // (hudRevealed is now true) reveals it.
-          if (uiOverlay.style.display === 'none') {
-            applyLayout()
-            // First fit, now that the HUD occupies its row (applyLayout above) and
-            // statsView/statusView have populated it this same message — so the
-            // container is at its settled height. Synchronous (forces one
-            // layout) so a `map` message later in this same WS batch renders
-            // straight into the final viewport rather than the pre-fit size.
-            // The ResizeObserver stays gated until exactly here; see its comment.
-            fitNow()
-          }
-        }
-        break
-      }
-
-      case 'options':
-        statsView.setOptions(msg.options ?? {})
-        break
-
-      case 'txt': {
-        // Renders a CRT screen / txt page / message — visible content, so the
-        // old-version creation guard's "nothing rendered" case can't apply
-        // (0.23 char creation arrives as a CRT text screen, driveable from
-        // the virtual keyboard).
-        disarmCreationGuard()
-        const lines = msg.lines
-        if (msg.id && lines && typeof lines === 'object' && !Array.isArray(lines)) {
-          updateCrtLines(lines, msg.clear === true)
-        } else {
-          const text = String(msg.text ?? '')
-          if (text.includes('\n')) showTxtPage(text)
-          else messageLog.append(text)
-        }
-        break
-      }
-
-      case 'ui-push': {
-        disarmCreationGuard()  // an overlay rendered — see the 'txt' case
-        const pushMsg: UiPushMsg = msg
-        if (resumed && !spectating && CREATION_PUSHES.has(pushMsg.type)) {
-          abandoningResume = true
-          conn.send({ msg: 'go_lobby' })
-          break
-        }
-        if (pushMsg.type === 'game-over') gameOverSeen = true
-        record.onUiPush(pushMsg)
-        // A server overlay supersedes our client-side monster panel and
-        // minimap lens; clear/close so subsequent map updates don't rewrite
-        // the overlay body or repaint a stale lens.
-        closeClientOverlays()
-        // describe-* overlays hint "(press '!' for details)" inside the body,
-        // not in the actions footer — promote it to a tappable button so it's
-        // reachable on mobile. Mutating actions persists across ui-state body
-        // swaps, so the button stays put while the user toggles in/out.
-        if (/press '!' for details/.test(pushMsg.body ?? '') && !/\(!\)/.test(pushMsg.actions ?? '')) {
-          const trimmed = (pushMsg.actions ?? '').replace(/\.\s*$/, '')
-          pushMsg.actions = trimmed ? `${trimmed}, (!)details.` : '(!)details.'
-        }
-        popups.pushUi(pushMsg)
-        showUiPush(pushMsg)
-        break
-      }
-
-      case 'ui-stack': {
-        // _send_everything()'s snapshot of the engine-side UI stack, sent to
-        // every receiver — the player too — on each spectator join, and
-        // offline by the mini-server's attach. A player online already holds
-        // that stack live; taking it doubled the menus, reset the targeting
-        // cutoff and repainted the menus. So, as the reference
-        // (ui-layouts.js recv_ui_stack): a spectator takes the first one
-        // only, a player online none. Offline has no spectators, and the
-        // boot watchdog's rescue resend (mini-server.ts) may carry the only
-        // good copy, so it takes every one.
-        if (!localEngine && (!spectating || uiStackTaken)) break
-        const items = msg.items
-        if (!Array.isArray(items)) break
-        uiStackTaken = true
-        // Each item carries its own `msg` (ui-push, menu, crt menu), so it
-        // re-dispatches through this handler — onto an emptied engine stack:
-        // offline the newgame screen is already up live when the snapshot
-        // lands, and appending left a phantom copy under it. The snapshot
-        // never replays ui_cutoff (tileweb.cc _send_everything), so a stale
-        // cutoff must not hide the re-sent stack.
-        popups.clear()
-        menus.active = null
-        menuView.dropFilter()  // its DOM goes with the menu being rebuilt
-        for (const item of items) handleMsg(item)
-        // A snapshot with no layouts repaints its top frame; an empty one
-        // must also clear a stale overlay (dialogs live outside the engine
-        // stack, so one stays up).
-        if (!popups.has('ui')) {
-          const top = popups.top()
-          if (top) paintFrame(top)
-          else if (!dialogActive) hideOverlay()
-        }
-        break
-      }
-
-      case 'ui-pop':
-        popups.pop()
-        restoreTopLayer()
-        break
-
-      case 'ui_cutoff': {
-        // pop_ui_cutoff sends the *enclosing* cutoff (tileweb.cc:971), not
-        // always -1 — never branch on sign. Skip rendering under the
-        // end-screen hold (the offline mini-server swallows stack teardown
-        // after exitDeclared but not ui_cutoff — a trailing -1 must not
-        // paint a menu over the death screen) and under show_dialog modals
-        // (outside the engine stack, so no cutoff should touch them).
-        if (msg.cutoff === popups.cutoff) break  // equal re-send: nothing to repaint
-        // A push hiding a visible menu wipes its list DOM (restoreTopLayer's
-        // hidden arm), and the pop's rebuild would land at the top — capture
-        // scroll first so e.g. a stash-preview round trip returns to where
-        // the user was. Safe here, unlike inside restoreTopLayer: any list
-        // in the DOM belongs to menus.active (the close_menu divergence can't
-        // be in flight), and on pops the overlay is hidden so this no-ops.
-        menuView.captureScroll()
-        popups.cutoff = msg.cutoff
-        if (!gameOverSeen && !dialogActive) restoreTopLayer()
-        break
-      }
-
-      case 'ui-state': {
-        // Newgame focus (types.ts UiStateMsg): the server emits an initial
-        // focus right after the push and re-emits on server-side arrow
-        // navigation.
-        if (msg.type === 'newgame-choice') {
-          const focus = msg.button_focus
-          if (typeof focus === 'number') newgameFocus?.(focus, msg.from_client === true)
-          break
-        }
-        layoutView.onUiState(msg)
-        break
-      }
-
-      case 'ui-scroller-scroll':
-        layoutView.onScrollerScroll(msg)
-        break
-
-      case 'ui-state-sync':
-        layoutView.onStateSync(msg)
-        break
-
-      case 'menu': {
-        disarmCreationGuard()  // a menu rendered — see the 'txt' case
-        const m: MenuMsg = msg
-        const titlePlain = stripDcss(m.title?.text ?? '')
-        // Silent spell harvest (see ../game/spell-harvest onMenu): the
-        // probe's own spell menu is captured + Escaped and must be swallowed
-        // (never rendered); any other menu mid-harvest aborts the harvest and
-        // drops the close-swallow latch; a spell-tag "(adjust)" menu flags
-        // the letter→spell map dirty for the next re-harvest.
-        if (harvester.onMenu(m.tag, titlePlain, m.items)) break
-        // Like the ui-push case, a server menu supersedes the client panel. A
-        // panel-row tap sends a describe click_cell; on a multi-occupant tile
-        // the server answers with a selection menu, not a describe ui-push.
-        // Clear the flag so the Esc guard hands off to the menu-close path —
-        // else the first Esc closes the panel locally (never reaching the
-        // server) and the live menu blocks re-opening the list until a 2nd Esc.
-        closeClientOverlays()
-        if (m.type === 'crt') showCrt(m.tag)
-        else {
-          popups.pushMenu(m, !!m.replace)
-          menuView.show(m)
-        }
-        break
-      }
-
-      case 'update_menu':
-        menuView.onUpdateMenu(msg)
-        break
-
-      case 'menu_scroll':
-        menuView.onMenuScroll(msg)
-        break
-
-      case 'update_menu_items':
-        menuView.onUpdateItems(msg)
-        break
-
-      case 'input_mode': {
-        const prevInputMode = currentInputMode
-        currentInputMode = msg.mode
-        if (msg.mode === 1) {  // COMMAND: normal play resumed
-          messageLog.hideMore()
-          messageLog.disablePrompt()
-          messageLog.removeTextInput()
-          // Reference only marks on the COMMAND transition, not on every
-          // COMMAND-while-COMMAND repeat (game.js set_input_mode early-returns).
-          if (prevInputMode !== 1) messageLog.markLast('cmd')
-          harvester.maybeAutoHarvest()  // populate the spell rail on first entry to play
-          harvester.reharvestIfDirty()  // refresh after a `=` reassign (or a deferred memorise/forget)
-        }
-        // YESNO prompts fire inside any menu that calls yesno() while open:
-        // shop purchase (shopping.cc), acquirement (acquire.cc), Nemelex
-        // StackFive (decks.cc:708). Menus with their own permanent bar
-        // (menuTagHasBar) rebuild on every mode change so the bar
-        // can swap to ⎋ Y N. Other menus get a bar only for the duration of
-        // the YESNO prompt — shown on the entering edge, hidden on the
-        // leaving edge.
-        if (menus.active) {
-          const tag = menus.active.tag
-          const tagHasBar = menuTagHasBar(tag)
-          const enteringYesno = msg.mode === MOUSE_MODE_YESNO
-          const leavingYesno = prevInputMode === MOUSE_MODE_YESNO && !enteringYesno
-          if (tagHasBar || enteringYesno || leavingYesno) {
-            menuBar.build(tag, menus.active.flags)
-            if (!tagHasBar) setMenuBar(enteringYesno)
-          }
-        }
-        break
-      }
-
-      case 'title_prompt': {
-        // `raw` is used for keycode capture in the macro editor — we don't
-        // implement that, so treat it like close (do nothing / dismiss any
-        // existing input).
-        if (msg.close || msg.raw) menuView.closeFilter()
-        else menuView.openFilter(msg.prompt ?? '')
-        break
-      }
-
-      case 'init_input': {
-        // Suppress the init/close pair that piggybacks on title_prompt — see
-        // MenuView's filterInput.
-        if (menuView.filterOpen) break
-        if (msg.type === 'messages') {
-          if (inXMode) { exitedXModeForInput = true; exitXMode() }
-          messageLog.showTextInput(msg.prefill ?? '', msg.maxlen ?? 99, msg.tag)
-        } else if (msg.type === 'generic' && msg.tag === 'skill_target') {
-          // `type:"generic"` fires only for prompts inside a CRT menu, and
-          // the only such prompt in DCSS 0.34 is the skill target editor.
-          // The numpad sends each keystroke directly to the server, whose
-          // line_reader echoes it into the highlighted target cell.
-          showNumpadInput(msg.prompt ?? '')
-        }
-        // Other `type:"generic"` tags are dropped — none are known to fire
-        // in normal play. `type:"seed-selection"` uses ui-state-sync widgets,
-        // not init_input (see showSeedSelection in game-overlays.ts).
-        break
-      }
-
-      case 'dump':
-        messageLog.onDump(msg)
-        break
-
-      case 'msgs':
-        messageLog.onMsgs(msg)
-        // A memorise/forget this frame leaves us at a command prompt (the delay
-        // finished; no input_mode transition fires), so re-harvest now rather
-        // than waiting for the next menu round-trip.
-        harvester.reharvestIfDirty()
-        break
-
-      case 'cursor': {
-        const id = msg.id
-        if (id !== 0 && id !== 1 && id !== 2) break
-        cursors[id] = msg.loc
-        mapView.setCursor(shownCursor())
-        // The d-pad's steering-a-cursor state: the chooser's cursor (x
-        // examine, targeting). X mode's own x-mode class covers id 2, and
-        // paths that leave X without a cursor-clear (exit-for-text-input)
-        // must not strand this one.
-        touchControls.setCursorMode(!!cursors[0])
-        // X mode follows id 2 only. While a text input has X stepped aside,
-        // close_input re-enters it — a resent id 2 must not do it early.
-        if (id === 2) {
-          if (msg.loc) mapJumper.onCursor(msg.loc)
-          if (msg.loc && !inXMode && !exitedXModeForInput) enterXMode()
-          else if (!msg.loc && inXMode) exitXMode()
-          if (!msg.loc) exitedXModeForInput = false
-          scheduleMinimapRepaint()  // the X minimap's cursor ring
-        }
-        break
-      }
-
-      case 'close_input':
-        if (menuView.filterOpen) break
-        messageLog.removeTextInput()
-        removeNumpadInput()
-        if (exitedXModeForInput) { exitedXModeForInput = false; enterXMode() }
-        break
-
-      case 'close_menu': {
-        // Swallow the close for a spell menu we harvested but never pushed,
-        // so it can't pop/clear a real overlay underneath.
-        if (harvester.consumePendingClose()) break
-        // Pops the top frame, whatever its kind (tileweb.cc pop_menu) — a CRT
-        // screen ends through this same close_menu. The usual `m` skill
-        // screen masks that: main.cc skill_menu() → redraw_screen() →
-        // pop_all_ui_layouts sends a close_all_menus right after. But
-        // check_selected_skills() on load (files.cc _restore_game, a save
-        // with no skill training) runs before _post_init sets need_save, so
-        // redraw_screen takes its early-return arm and only the bare
-        // close_menu arrives; a CRT left on the stack re-mounted empty over
-        // the map: a black screen, no controls, forever.
-        popups.pop()
-        const prev = popups.topMenu() ?? null
-        menuShift.reset()
-        menuView.dropFilter()
-        // Don't pre-assign menus.active = prev: menuView.show must see the closing
-        // menu as `menus.active !== msg` so its fresh-look reset runs —
-        // otherwise the closing menu's hover state (a stacked prompt's
-        // seeded default, or user-driven hover) leaks into the restored
-        // menu as indices in the wrong item space. The restored menu's own
-        // pre-cover hover was already reset when the covering menu opened,
-        // so this loses nothing: fresh look, fresh opt-in.
-        if (prev) {
-          const top = popups.top()
-          if (popups.hidesAll() || top?.kind !== 'menu') {
-            // The menu isn't what shows: a close above an active cutoff must
-            // not repaint it over the targeting map, and a CRT or layout
-            // above it paints instead. Take the bookkeeping without the DOM
-            // build, then let restoreTopLayer paint (or hide).
-            menuView.adopt(prev)
-            restoreTopLayer()
-          } else menuView.show(prev)
-        } else {
-          menus.active = null
-          restoreTopLayer()
-        }
-        break
-      }
-
-      case 'close_all_menus':
-        popups.clear()
-        dialogActive = false
-        menus.active = null
-        menuShift.reset()
-        closeClientOverlays()
-        menuView.dropFilter()
-        harvester.reset()
-        if (!gameOverSeen) hideOverlay()
-        break
-
-      case 'go_lobby':
-      case 'close':
-        // Also re-arms the once-per-game auto-harvest and drops any pending
-        // re-harvest so neither carries into the next game.
-        harvester.resetForNewGame()
-        disarmCreationGuard()
-        exitToLobby()
-        break
-
-      case 'game_ending':
-        record.recordEnding(msg.reason, msg.message)
-        break
-
-      case 'game_ended': {
-        disarmCreationGuard()
-        record.recordEnding(msg.reason, msg.message, msg.dump)
-        // Forward exit details so the lobby renders the exit dialog after the
-        // layer switch. The trailing go_lobby + lobby list (often batched with
-        // this) land on the lobby's message handler, not ours.
-        exitToLobby({
-          reason: msg.reason,
-          message: msg.message,
-          dump: msg.dump,
-          spectated: !!spectating,
-          spectatedName: spectating?.username,
-        })
-        break
+  function onPlayer(msg: MsgOf<'player'>): void {
+    record.onPlayer(msg)
+    // Zoom floor follows what the character can perceive (los.ts).
+    if (msg.species !== undefined) sight.species = msg.species
+    if (msg.god !== undefined) sight.god = msg.god
+    if (msg.piety_rank !== undefined) sight.pietyRank = msg.piety_rank
+    if (mapView.setSight(sight)) scheduleFit()
+    if (msg.place !== undefined || msg.depth !== undefined) {
+      touchControls.setXModePlace(compactPlace(record.meta.place ?? '', record.meta.depth))
+    }
+    if (msg.pos) {
+      store.playerPos = { x: msg.pos.x, y: msg.pos.y }
+      // Deliberately NO view-center change here: the view pans only on
+      // map.vgrdc, like the reference client (its player.js never touches
+      // the center). vgrdc arrives on the same turn's map message, whose
+      // handler pans and repaints synchronously before anything else runs.
+      scheduleMinimapRepaint()
+    }
+    // Feed HP/MP to the renderer (tile mode draws under-tile mini-bars).
+    // Runs before the scheduled flush, so a full render picks up the fresh
+    // values; merged into playerStats so a later tile-mode swap can seed.
+    if (msg.hp !== undefined) playerStats.hp = msg.hp
+    if (msg.hp_max !== undefined) playerStats.hp_max = msg.hp_max
+    if (msg.mp !== undefined) playerStats.mp = msg.mp
+    if (msg.mp_max !== undefined) playerStats.mp_max = msg.mp_max
+    mapView.setPlayerStats(playerStats)
+    inventoryStore.update(msg.inv)
+    statsView.update(msg)
+    if (msg.status !== undefined) statusView.update(msg.status)
+    if (msg.time !== undefined) messageLog.markLast('turn')
+    if (!hudRevealed) {
+      hudRevealed = true
+      // Don't reveal the HUD while an overlay covers the screen: the
+      // newgame-choice character-creation screens send `player` messages
+      // carrying placeholder stats ("the Conjurer — Yak", 0/0 HP, …)
+      // before any character exists. uiOverlay being shown is the signal
+      // a full overlay is up; when it closes, the next applyLayout
+      // (hudRevealed is now true) reveals it.
+      if (uiOverlay.style.display === 'none') {
+        applyLayout()
+        // First fit, now that the HUD occupies its row (applyLayout above) and
+        // statsView/statusView have populated it this same message — so the
+        // container is at its settled height. Synchronous (forces one
+        // layout) so a `map` message later in this same WS batch renders
+        // straight into the final viewport rather than the pre-fit size.
+        // The ResizeObserver stays gated until exactly here; see its comment.
+        fitNow()
       }
     }
+  }
+
+  function onTxt(msg: MsgOf<'txt'>): void {
+    // Renders a CRT screen / txt page / message — visible content, so the
+    // old-version creation guard's "nothing rendered" case can't apply
+    // (0.23 char creation arrives as a CRT text screen, driveable from
+    // the virtual keyboard).
+    disarmCreationGuard()
+    const lines = msg.lines
+    if (msg.id && lines && typeof lines === 'object' && !Array.isArray(lines)) {
+      updateCrtLines(lines, msg.clear === true)
+    } else {
+      const text = String(msg.text ?? '')
+      if (text.includes('\n')) showTxtPage(text)
+      else messageLog.append(text)
+    }
+  }
+
+  function onUiPush(msg: MsgOf<'ui-push'>): void {
+    disarmCreationGuard()  // an overlay rendered — see onTxt
+    const pushMsg: UiPushMsg = msg
+    if (resumed && !spectating && CREATION_PUSHES.has(pushMsg.type)) {
+      abandoningResume = true
+      conn.send({ msg: 'go_lobby' })
+      return
+    }
+    if (pushMsg.type === 'game-over') gameOverSeen = true
+    record.onUiPush(pushMsg)
+    // A server overlay supersedes our client-side monster panel and
+    // minimap lens; clear/close so subsequent map updates don't rewrite
+    // the overlay body or repaint a stale lens.
+    closeClientOverlays()
+    // describe-* overlays hint "(press '!' for details)" inside the body,
+    // not in the actions footer — promote it to a tappable button so it's
+    // reachable on mobile. Mutating actions persists across ui-state body
+    // swaps, so the button stays put while the user toggles in/out.
+    if (/press '!' for details/.test(pushMsg.body ?? '') && !/\(!\)/.test(pushMsg.actions ?? '')) {
+      const trimmed = (pushMsg.actions ?? '').replace(/\.\s*$/, '')
+      pushMsg.actions = trimmed ? `${trimmed}, (!)details.` : '(!)details.'
+    }
+    popups.pushUi(pushMsg)
+    showUiPush(pushMsg)
+  }
+
+  function onUiStack(msg: MsgOf<'ui-stack'>): void {
+    // _send_everything()'s snapshot of the engine-side UI stack, sent to
+    // every receiver — the player too — on each spectator join, and
+    // offline by the mini-server's attach. A player online already holds
+    // that stack live; taking it doubled the menus, reset the targeting
+    // cutoff and repainted the menus. So, as the reference
+    // (ui-layouts.js recv_ui_stack): a spectator takes the first one
+    // only, a player online none. Offline has no spectators, and the
+    // boot watchdog's rescue resend (mini-server.ts) may carry the only
+    // good copy, so it takes every one.
+    if (!localEngine && (!spectating || uiStackTaken)) return
+    const items = msg.items
+    if (!Array.isArray(items)) return
+    uiStackTaken = true
+    // Each item carries its own `msg` (ui-push, menu, crt menu), so it
+    // re-dispatches through handleMsg — onto an emptied engine stack:
+    // offline the newgame screen is already up live when the snapshot
+    // lands, and appending left a phantom copy under it. The snapshot
+    // never replays ui_cutoff (tileweb.cc _send_everything), so a stale
+    // cutoff must not hide the re-sent stack.
+    popups.clear()
+    menus.active = null
+    menuView.dropFilter()  // its DOM goes with the menu being rebuilt
+    for (const item of items) handleMsg(item)
+    // A snapshot with no layouts repaints its top frame; an empty one
+    // must also clear a stale overlay (dialogs live outside the engine
+    // stack, so one stays up).
+    if (!popups.has('ui')) {
+      const top = popups.top()
+      if (top) paintFrame(top)
+      else if (!dialogActive) hideOverlay()
+    }
+  }
+
+  function onUiCutoff(msg: MsgOf<'ui_cutoff'>): void {
+    // pop_ui_cutoff sends the *enclosing* cutoff (tileweb.cc:971), not
+    // always -1 — never branch on sign. Skip rendering under the
+    // end-screen hold (the offline mini-server swallows stack teardown
+    // after exitDeclared but not ui_cutoff — a trailing -1 must not
+    // paint a menu over the death screen) and under show_dialog modals
+    // (outside the engine stack, so no cutoff should touch them).
+    if (msg.cutoff === popups.cutoff) return  // equal re-send: nothing to repaint
+    // A push hiding a visible menu wipes its list DOM (restoreTopLayer's
+    // hidden arm), and the pop's rebuild would land at the top — capture
+    // scroll first so e.g. a stash-preview round trip returns to where
+    // the user was. Safe here, unlike inside restoreTopLayer: any list
+    // in the DOM belongs to menus.active (the close_menu divergence can't
+    // be in flight), and on pops the overlay is hidden so this no-ops.
+    menuView.captureScroll()
+    popups.cutoff = msg.cutoff
+    if (!gameOverSeen && !dialogActive) restoreTopLayer()
+  }
+
+  function onUiState(msg: MsgOf<'ui-state'>): void {
+    // Newgame focus (types.ts UiStateMsg): the server emits an initial
+    // focus right after the push and re-emits on server-side arrow
+    // navigation.
+    if (msg.type === 'newgame-choice') {
+      const focus = msg.button_focus
+      if (typeof focus === 'number') newgameFocus?.(focus, msg.from_client === true)
+      return
+    }
+    layoutView.onUiState(msg)
+  }
+
+  function onMenu(msg: MsgOf<'menu'>): void {
+    disarmCreationGuard()  // a menu rendered — see onTxt
+    const m: MenuMsg = msg
+    const titlePlain = stripDcss(m.title?.text ?? '')
+    // Silent spell harvest (see ../game/spell-harvest onMenu): the
+    // probe's own spell menu is captured + Escaped and must be swallowed
+    // (never rendered); any other menu mid-harvest aborts the harvest and
+    // drops the close-swallow latch; a spell-tag "(adjust)" menu flags
+    // the letter→spell map dirty for the next re-harvest.
+    if (harvester.onMenu(m.tag, titlePlain, m.items)) return
+    // Like onUiPush, a server menu supersedes the client panel. A
+    // panel-row tap sends a describe click_cell; on a multi-occupant tile
+    // the server answers with a selection menu, not a describe ui-push.
+    // Clear the flag so the Esc guard hands off to the menu-close path —
+    // else the first Esc closes the panel locally (never reaching the
+    // server) and the live menu blocks re-opening the list until a 2nd Esc.
+    closeClientOverlays()
+    if (m.type === 'crt') showCrt(m.tag)
+    else {
+      popups.pushMenu(m, !!m.replace)
+      menuView.show(m)
+    }
+  }
+
+  function onInputMode(msg: MsgOf<'input_mode'>): void {
+    const prevInputMode = currentInputMode
+    currentInputMode = msg.mode
+    if (msg.mode === 1) {  // COMMAND: normal play resumed
+      messageLog.hideMore()
+      messageLog.disablePrompt()
+      messageLog.removeTextInput()
+      // Reference only marks on the COMMAND transition, not on every
+      // COMMAND-while-COMMAND repeat (game.js set_input_mode early-returns).
+      if (prevInputMode !== 1) messageLog.markLast('cmd')
+      harvester.maybeAutoHarvest()  // populate the spell rail on first entry to play
+      harvester.reharvestIfDirty()  // refresh after a `=` reassign (or a deferred memorise/forget)
+    }
+    // YESNO prompts fire inside any menu that calls yesno() while open:
+    // shop purchase (shopping.cc), acquirement (acquire.cc), Nemelex
+    // StackFive (decks.cc:708). Menus with their own permanent bar
+    // (menuTagHasBar) rebuild on every mode change so the bar
+    // can swap to ⎋ Y N. Other menus get a bar only for the duration of
+    // the YESNO prompt — shown on the entering edge, hidden on the
+    // leaving edge.
+    if (menus.active) {
+      const tag = menus.active.tag
+      const tagHasBar = menuTagHasBar(tag)
+      const enteringYesno = msg.mode === MOUSE_MODE_YESNO
+      const leavingYesno = prevInputMode === MOUSE_MODE_YESNO && !enteringYesno
+      if (tagHasBar || enteringYesno || leavingYesno) {
+        menuBar.build(tag, menus.active.flags)
+        if (!tagHasBar) setMenuBar(enteringYesno)
+      }
+    }
+  }
+
+  function onInitInput(msg: MsgOf<'init_input'>): void {
+    // Suppress the init/close pair that piggybacks on title_prompt — see
+    // MenuView's filterInput.
+    if (menuView.filterOpen) return
+    if (msg.type === 'messages') {
+      if (inXMode) { exitedXModeForInput = true; exitXMode() }
+      messageLog.showTextInput(msg.prefill ?? '', msg.maxlen ?? 99, msg.tag)
+    } else if (msg.type === 'generic' && msg.tag === 'skill_target') {
+      // `type:"generic"` fires only for prompts inside a CRT menu, and
+      // the only such prompt in DCSS 0.34 is the skill target editor.
+      // The numpad sends each keystroke directly to the server, whose
+      // line_reader echoes it into the highlighted target cell.
+      showNumpadInput(msg.prompt ?? '')
+    }
+    // Other `type:"generic"` tags are dropped — none are known to fire
+    // in normal play. `type:"seed-selection"` uses ui-state-sync widgets,
+    // not init_input (see showSeedSelection in game-overlays.ts).
+  }
+
+  function onCursor(msg: MsgOf<'cursor'>): void {
+    const id = msg.id
+    if (id !== 0 && id !== 1 && id !== 2) return
+    cursors[id] = msg.loc
+    mapView.setCursor(shownCursor())
+    // The d-pad's steering-a-cursor state: the chooser's cursor (x
+    // examine, targeting). X mode's own x-mode class covers id 2, and
+    // paths that leave X without a cursor-clear (exit-for-text-input)
+    // must not strand this one.
+    touchControls.setCursorMode(!!cursors[0])
+    // X mode follows id 2 only. While a text input has X stepped aside,
+    // close_input re-enters it — a resent id 2 must not do it early.
+    if (id === 2) {
+      if (msg.loc) mapJumper.onCursor(msg.loc)
+      if (msg.loc && !inXMode && !exitedXModeForInput) enterXMode()
+      else if (!msg.loc && inXMode) exitXMode()
+      if (!msg.loc) exitedXModeForInput = false
+      scheduleMinimapRepaint()  // the X minimap's cursor ring
+    }
+  }
+
+  function onCloseInput(): void {
+    if (menuView.filterOpen) return
+    messageLog.removeTextInput()
+    removeNumpadInput()
+    if (exitedXModeForInput) { exitedXModeForInput = false; enterXMode() }
+  }
+
+  function onCloseMenu(): void {
+    // Swallow the close for a spell menu we harvested but never pushed,
+    // so it can't pop/clear a real overlay underneath.
+    if (harvester.consumePendingClose()) return
+    // Pops the top frame, whatever its kind (tileweb.cc pop_menu) — a CRT
+    // screen ends through this same close_menu. The usual `m` skill
+    // screen masks that: main.cc skill_menu() → redraw_screen() →
+    // pop_all_ui_layouts sends a close_all_menus right after. But
+    // check_selected_skills() on load (files.cc _restore_game, a save
+    // with no skill training) runs before _post_init sets need_save, so
+    // redraw_screen takes its early-return arm and only the bare
+    // close_menu arrives; a CRT left on the stack re-mounted empty over
+    // the map: a black screen, no controls, forever.
+    popups.pop()
+    const prev = popups.topMenu() ?? null
+    menuShift.reset()
+    menuView.dropFilter()
+    // Don't pre-assign menus.active = prev: menuView.show must see the closing
+    // menu as `menus.active !== msg` so its fresh-look reset runs —
+    // otherwise the closing menu's hover state (a stacked prompt's
+    // seeded default, or user-driven hover) leaks into the restored
+    // menu as indices in the wrong item space. The restored menu's own
+    // pre-cover hover was already reset when the covering menu opened,
+    // so this loses nothing: fresh look, fresh opt-in.
+    if (prev) {
+      const top = popups.top()
+      if (popups.hidesAll() || top?.kind !== 'menu') {
+        // The menu isn't what shows: a close above an active cutoff must
+        // not repaint it over the targeting map, and a CRT or layout
+        // above it paints instead. Take the bookkeeping without the DOM
+        // build, then let restoreTopLayer paint (or hide).
+        menuView.adopt(prev)
+        restoreTopLayer()
+      } else menuView.show(prev)
+    } else {
+      menus.active = null
+      restoreTopLayer()
+    }
+  }
+
+  function onCloseAllMenus(): void {
+    popups.clear()
+    dialogActive = false
+    menus.active = null
+    menuShift.reset()
+    closeClientOverlays()
+    menuView.dropFilter()
+    harvester.reset()
+    if (!gameOverSeen) hideOverlay()
+  }
+
+  // go_lobby / close. Also re-arms the once-per-game auto-harvest and
+  // drops any pending re-harvest so neither carries into the next game.
+  function onLeave(): void {
+    harvester.resetForNewGame()
+    disarmCreationGuard()
+    exitToLobby()
+  }
+
+  function onGameEnded(msg: MsgOf<'game_ended'>): void {
+    disarmCreationGuard()
+    record.recordEnding(msg.reason, msg.message, msg.dump)
+    // Forward exit details so the lobby renders the exit dialog after the
+    // layer switch. The trailing go_lobby + lobby list (often batched with
+    // this) land on the lobby's message handler, not ours.
+    exitToLobby({
+      reason: msg.reason,
+      message: msg.message,
+      dump: msg.dump,
+      spectated: !!spectating,
+      spectatedName: spectating?.username,
+    })
   }
 
   // --- X mode (eXamine level map) ---

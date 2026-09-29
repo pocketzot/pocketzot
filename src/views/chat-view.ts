@@ -1,12 +1,14 @@
 // WebTiles chat: bottom-sheet history + input, an entry chip (spectator count
 // + unread badge), and a transient pill previewing messages while the sheet
-// is closed. One instance per game view; game-view.ts feeds it `chat` and
-// `update_spectators` messages and mounts chip/sheet/pill where the role
+// is closed. One instance per game view; it handles the chat messages
+// (`handlers`), and game-view.ts mounts chip/sheet/pill where the role
 // (player vs spectator) wants them.
 //
 // Glyph conventions (no emoji — they fight the CRT aesthetic and render
 // differently per platform): ◉ = spectators (an eye), # = chat (IRC channel),
 // * prefix = meta/server notices, » = send.
+
+import type { Handlers } from '../ws/dispatcher'
 
 const HISTORY_CAP = 200
 const PILL_MS = 4000
@@ -218,6 +220,12 @@ export class ChatView {
    *  focus elsewhere during this — a programmatic focus/blur drops the
    *  phone keyboard mid-word. */
   get inputFocused(): boolean { return document.activeElement === this.inputEl }
+
+  readonly handlers: Handlers = {
+    chat: (m) => this.handleChat(m.content ?? '', !!m.meta),
+    update_spectators: (m) => this.handleSpectators(m.count ?? 0, m.names ?? ''),
+    super_hide_chat: () => this.superHide(),
+  }
 
   handleChat(content: string, meta: boolean): void {
     if (this.hidden) return

@@ -1,34 +1,29 @@
+// Server-message handlers as one typed table, one handler per msg type —
+// the reference's comm.js register_handlers, where each module registers
+// the messages it owns. There a later registration silently replaces an
+// earlier one ($.extend); combineHandlers refuses it instead, so two
+// modules can't both believe they handle a message.
+
 import type { ServerMsg } from './types'
 
-type Handler<T extends ServerMsg> = (msg: T) => void
+export type MsgType = ServerMsg['msg']
+export type MsgOf<K extends MsgType> = Extract<ServerMsg, { msg: K }>
+export type Handlers = { [K in MsgType]?: (msg: MsgOf<K>) => void }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyHandler = Handler<any>
-
-export class Dispatcher {
-  private handlers = new Map<string, AnyHandler[]>()
-
-  on<T extends ServerMsg>(type: T['msg'], handler: Handler<T>): () => void {
-    const list = this.handlers.get(type) ?? []
-    list.push(handler as AnyHandler)
-    this.handlers.set(type, list)
-    return () => this.off(type, handler)
+export function combineHandlers(...parts: Handlers[]): Handlers {
+  const out: Record<string, unknown> = {}
+  for (const part of parts) {
+    for (const [type, handler] of Object.entries(part)) {
+      if (type in out) throw new Error(`two handlers for server message "${type}"`)
+      out[type] = handler
+    }
   }
+  return out as Handlers
+}
 
-  off<T extends ServerMsg>(type: T['msg'], handler: Handler<T>): void {
-    const list = this.handlers.get(type)
-    if (!list) return
-    const idx = list.indexOf(handler as AnyHandler)
-    if (idx !== -1) list.splice(idx, 1)
-  }
-
-  dispatch(msg: ServerMsg): void {
-    const list = this.handlers.get(msg.msg)
-    if (!list) return
-    for (const h of list) h(msg)
-  }
-
-  clear(): void {
-    this.handlers.clear()
-  }
+// Unhandled types are dropped: the lobby's messages reach the game view
+// in the same batch as its exit (game_ended, go_lobby, lobby list).
+export function dispatch(handlers: Handlers, msg: ServerMsg): void {
+  const handler = handlers[msg.msg] as ((m: ServerMsg) => void) | undefined
+  handler?.(msg)
 }

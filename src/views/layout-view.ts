@@ -7,6 +7,7 @@
 // game view, which supplies the overlay host through LayoutViewDeps.
 
 import type { ClientMsg, ScrollerScrollMsg, UiStateMsg, UiStateSyncMsg } from '../ws/types'
+import type { Handlers } from '../ws/dispatcher'
 import type { NavKey } from '../game/input/input-router'
 import type { TileLoader } from '../game/tiles/tile-loader'
 import type { UiPushMsg } from './game-overlays'
@@ -280,6 +281,13 @@ export class LayoutView {
         this.d.setExportSource({ runs: () => htmlToRuns(dcssToHtml(exportText)), slug: screenSlug(slugSrc) })
       }
     }
+  }
+
+  // ui-push, ui-pop and ui-state stay with the game view: they move the
+  // popup stack or route newgame focus.
+  readonly handlers: Handlers = {
+    'ui-scroller-scroll': (m) => this.onScrollerScroll(m),
+    'ui-state-sync': (m) => this.onStateSync(m),
   }
 
   // ui-state for a layout (the game view routes newgame-choice focus itself).

@@ -5,6 +5,7 @@
 // MenuViewDeps.
 
 import type { ClientMsg, MenuScrollMsg, UpdateMenuItemsMsg, UpdateMenuMsg } from '../ws/types'
+import type { Handlers } from '../ws/dispatcher'
 import type { ShiftToggle } from '../game/input/shift-state'
 import type { NavKey } from '../game/input/input-router'
 import type { TileLoader } from '../game/tiles/tile-loader'
@@ -188,6 +189,17 @@ export class MenuView {
       case 'end': this.jump(true); break
     }
     return true
+  }
+
+  // The active menu's in-place updates. `menu` and close_menu stay with
+  // the game view: they move the popup stack.
+  readonly handlers: Handlers = {
+    update_menu: (m) => this.onUpdateMenu(m),
+    menu_scroll: (m) => this.onMenuScroll(m),
+    update_menu_items: (m) => this.onUpdateItems(m),
+    // `raw` is keycode capture for the macro editor, which we don't
+    // implement: treated like close.
+    title_prompt: (m) => { if (m.close || m.raw) this.closeFilter(); else this.openFilter(m.prompt ?? '') },
   }
 
   onUpdateMenu(m: UpdateMenuMsg): void {

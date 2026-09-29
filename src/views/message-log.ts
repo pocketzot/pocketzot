@@ -6,6 +6,7 @@
 // MessageLogDeps.
 
 import type { ClientMsg } from '../ws/types'
+import type { Handlers } from '../ws/dispatcher'
 import { dcssToHtml } from '../game/dcss-colors'
 import { stripDcss } from './overlay-body'
 import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
@@ -221,6 +222,12 @@ export class MessageLog {
   // decorate the log line the same way, but order-tolerantly — if the line
   // already landed as the newest row, link it in place; else arm for a
   // coming flush.
+  // `msgs` stays with the game view, which follows it with a spell
+  // re-harvest.
+  readonly handlers: Handlers = {
+    dump: (m) => this.onDump(m),
+  }
+
   onDump(msg: { filename?: string; url?: string }): void {
     if (msg.filename && this.d.readMorgue) this.pendingDumpFile = msg.filename
     else if (msg.url) {
