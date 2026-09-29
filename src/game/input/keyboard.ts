@@ -77,7 +77,7 @@ const CK_CTRL_SHIFT_SPACE  = -191
 
 // Export direction keycodes for touch input
 export {
-  CK_UP, CK_DOWN, CK_LEFT, CK_RIGHT, CK_HOME, CK_END, CK_PGUP, CK_PGDN, CK_CLEAR,
+  CK_UP, CK_DOWN, CK_LEFT, CK_RIGHT, CK_HOME, CK_END, CK_PGUP, CK_PGDN,
   CK_SHIFT_UP, CK_SHIFT_DOWN, CK_SHIFT_LEFT, CK_SHIFT_RIGHT,
   CK_SHIFT_HOME, CK_SHIFT_END, CK_SHIFT_PGUP, CK_SHIFT_PGDN,
   CK_CTRL_UP, CK_CTRL_DOWN, CK_CTRL_LEFT, CK_CTRL_RIGHT,
@@ -248,7 +248,7 @@ export function typedCharToMsg(ch: string, ctrl: boolean): ClientMsg | null {
 
 // The wire message a physical key means, or null for a key with none (browser
 // shortcuts, bare modifiers, uncaptured Ctrl keys). Pure: the caller decides
-// whether the key is consumed (see handleKeydown and the game view's router).
+// whether the key is consumed (the input router's verdict).
 export function keyToMsg(e: KeyboardEvent): ClientMsg | null {
   const { keyCode, shiftKey, ctrlKey, altKey, metaKey } = e
 
@@ -292,15 +292,4 @@ export function keyToMsg(e: KeyboardEvent): ClientMsg | null {
   // Enter sends as newline
   if (e.key === 'Enter') return { msg: 'key', keycode: 13 }
   return null
-}
-
-// Sends the key's wire message, consuming the event, when it has one.
-export function handleKeydown(
-  e: KeyboardEvent,
-  send: (msg: ClientMsg) => void
-): void {
-  const msg = keyToMsg(e)
-  if (!msg) return
-  e.preventDefault()
-  send(msg)
 }

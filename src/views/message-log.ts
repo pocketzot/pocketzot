@@ -26,7 +26,6 @@ export interface MessageLogDeps {
   send(msg: ClientMsg): void
   focusView(): void
   guardedFocus(el: HTMLElement): void
-  autoCloseKbdIfOurs(): void
   // The silent spell harvest owns the command channel (log taps drop).
   harvesting(): boolean
   // A server overlay covers the log (log taps drop).
@@ -345,10 +344,7 @@ export class MessageLog {
   }
 
   removeTextInput(): void {
-    const row = this.element.querySelector<HTMLElement>('.game-text-input-row')
-    if (!row) return
-    row.remove()
-    this.d.autoCloseKbdIfOurs()
+    this.element.querySelector('.game-text-input-row')?.remove()
   }
 
   xdescReset(): void {

@@ -3,13 +3,10 @@
 // [123]/[ABC] toggle. Replaces the touch-controls strip while open; the
 // strip (touch.ts) mounts it and supplies the tap binding.
 
-import type { ClientMsg } from '../../ws/types'
 import { CK_CTRL_BKSP, typedCharToMsg } from './keyboard'
-import { createShiftToggle } from './shift-state'
+import { createModifiers, createShiftToggle } from './shift-state'
 
-import type { BindTap } from './touch'
-
-type SendFn = (msg: ClientMsg) => void
+import type { BindTap, SendFn } from './touch'
 
 // The text field on screen, if any. Not a field in the inert copy of a
 // covered frame (game-view frameDom).
@@ -28,7 +25,6 @@ export function buildKeyboardOverlay(
 ): { element: HTMLElement; open: () => void; close: () => void } {
   type Layer = 'letters' | 'symbols'
   let layer: Layer = 'letters'
-  let ctrlActive = false
 
   const overlay = document.createElement('div')
   overlay.id = 'kbd-overlay'
@@ -38,54 +34,19 @@ export function buildKeyboardOverlay(
   layerEl.className = 'kbd-layer'
   overlay.appendChild(layerEl)
 
-  const shiftBtns: HTMLButtonElement[] = []
-  const ctrlBtns: HTMLButtonElement[] = []
+  // The current layer's ⇧ and ⌃ keys (rebuild makes one of each).
+  let shiftBtn: HTMLButtonElement | null = null
+  let ctrlBtn: HTMLButtonElement | null = null
 
   const shift = createShiftToggle({ onChange: refreshMods })
+  const mods = createModifiers(shift, refreshMods)
 
   function refreshMods(): void {
-    for (const b of shiftBtns) {
-      b.classList.toggle('active', shift.state === 'once')
-      b.classList.toggle('locked', shift.state === 'lock')
-    }
-    for (const b of ctrlBtns) b.classList.toggle('active', ctrlActive)
+    shiftBtn?.classList.toggle('active', shift.state === 'once')
+    shiftBtn?.classList.toggle('locked', shift.state === 'lock')
+    ctrlBtn?.classList.toggle('active', mods.ctrl)
     overlay.classList.toggle('shift-on', shift.isOn)
-    overlay.classList.toggle('ctrl-on', ctrlActive)
-  }
-
-  // Called after each key dispatch. Keeps lock engaged across taps; clears
-  // one-shot shift and ctrl.
-  function clearOneshot(): void {
-    shift.consume()
-    if (ctrlActive) {
-      ctrlActive = false
-      refreshMods()
-    }
-  }
-
-  function clearAllMods(): void {
-    shift.reset()
-    if (ctrlActive) {
-      ctrlActive = false
-      refreshMods()
-    }
-  }
-
-  // Shift and Ctrl are mutually exclusive on the kbd: arming one disarms the
-  // other so a double-mod combo doesn't leave both lit.
-  function toggleShift(): void {
-    const wasOff = shift.state === 'off'
-    shift.tap()
-    if (wasOff && ctrlActive) {
-      ctrlActive = false
-      refreshMods()
-    }
-  }
-
-  function toggleCtrl(): void {
-    ctrlActive = !ctrlActive
-    if (ctrlActive) shift.reset()
-    refreshMods()
+    overlay.classList.toggle('ctrl-on', mods.ctrl)
   }
 
   // These focus() calls run inside a key's tap, which lets iOS raise the
@@ -125,18 +86,14 @@ export function buildKeyboardOverlay(
   }
 
   function dispatchChar(ch: string, shifted?: string): void {
-    const shiftOn = shift.isOn
+    const out = shift.isOn ? (shifted ?? ch.toUpperCase()) : ch
     const input = activeTextInput()
-    if (input && !ctrlActive) {
-      const out = shiftOn ? (shifted !== undefined ? shifted : ch.toUpperCase()) : ch
-      typeIntoInput(input, out)
-      clearOneshot()
-      return
+    if (input && !mods.ctrl) typeIntoInput(input, out)
+    else {
+      const msg = typedCharToMsg(out, mods.ctrl)
+      if (msg) send(msg)
     }
-    const out = shiftOn ? (shifted !== undefined ? shifted : ch.toUpperCase()) : ch
-    const msg = typedCharToMsg(out, ctrlActive)
-    if (msg) send(msg)
-    clearOneshot()
+    mods.consume()
   }
 
   function dispatchKey(keycode: number, ctrlKeycode?: number): void {
@@ -145,12 +102,11 @@ export function buildKeyboardOverlay(
       if (keycode === 8) backspaceInput(input)
       else if (keycode === 13) dispatchSpecialToInput(input, 'Enter')
       else if (keycode === 27) dispatchSpecialToInput(input, 'Escape')
-      clearOneshot()
-      return
+    } else {
+      const code = mods.ctrl && ctrlKeycode !== undefined ? ctrlKeycode : keycode
+      send({ msg: 'key', keycode: code })
     }
-    const code = ctrlActive && ctrlKeycode !== undefined ? ctrlKeycode : keycode
-    send({ msg: 'key', keycode: code })
-    clearOneshot()
+    mods.consume()
   }
 
   function setLayer(next: Layer): void {
@@ -160,7 +116,7 @@ export function buildKeyboardOverlay(
 
   function close(): void {
     overlay.style.display = 'none'
-    clearAllMods()
+    mods.reset()
     // Blurred, so the next tap on the field is a fresh focus that raises
     // the system keyboard.
     const field = activeTextInput()
@@ -181,43 +137,39 @@ export function buildKeyboardOverlay(
   }
 
   // Character keys and backspace hold-to-repeat like hardware keys; control
-  // keys (Esc/Enter/Tab, mods, layer switch, close) stay single-fire.
-  function makeCharBtn(label: string, ch: string, shifted?: string): HTMLButtonElement {
-    return makeBtn(label, '', () => dispatchChar(ch, shifted), { repeat: true })
+  // keys (Esc/Enter, mods, layer switch, close) stay single-fire.
+  function charBtn(ch: string): HTMLButtonElement {
+    return makeBtn(ch, '', () => dispatchChar(ch), { repeat: true })
   }
 
-  function makeLetterBtn(ch: string): HTMLButtonElement {
-    return makeBtn(ch, 'letter', () => dispatchChar(ch), { repeat: true })
-  }
-
-  function makeLetterBtnWithCorner(ch: string, corner: string): HTMLButtonElement {
+  // A key with a small second face in its corner: a letter's vi direction,
+  // or a symbol's shifted character.
+  function twoFaceBtn(
+    ch: string, corner: string, cls: string, cornerCls: string, onTap: () => void,
+  ): HTMLButtonElement {
     const b = document.createElement('button')
-    b.className = 'kbd-key letter with-corner'
+    b.className = 'kbd-key ' + cls
     const sup = document.createElement('span')
-    sup.className = 'kbd-corner'
+    sup.className = cornerCls
     sup.textContent = corner
     const main = document.createElement('span')
     main.className = 'kbd-main'
     main.textContent = ch
     b.appendChild(sup)
     b.appendChild(main)
-    bindTap(b, () => dispatchChar(ch), { repeat: true })
+    bindTap(b, onTap, { repeat: true })
     return b
   }
 
-  function makeShiftedCharBtn(ch: string, shifted: string): HTMLButtonElement {
-    const b = document.createElement('button')
-    b.className = 'kbd-key with-shifted'
-    const sup = document.createElement('span')
-    sup.className = 'kbd-shifted'
-    sup.textContent = shifted
-    const main = document.createElement('span')
-    main.className = 'kbd-main'
-    main.textContent = ch
-    b.appendChild(sup)
-    b.appendChild(main)
-    bindTap(b, () => dispatchChar(ch, shifted), { repeat: true })
-    return b
+  function letterBtn(ch: string): HTMLButtonElement {
+    const dir = LETTER_DIRS[ch]
+    return dir
+      ? twoFaceBtn(ch, dir, 'letter with-corner', 'kbd-corner', () => dispatchChar(ch))
+      : makeBtn(ch, 'letter', () => dispatchChar(ch), { repeat: true })
+  }
+
+  function shiftedCharBtn(ch: string, shifted: string): HTMLButtonElement {
+    return twoFaceBtn(ch, shifted, 'with-shifted', 'kbd-shifted', () => dispatchChar(ch, shifted))
   }
 
   function addRow(btns: HTMLButtonElement[]): void {
@@ -245,9 +197,8 @@ export function buildKeyboardOverlay(
   function buildBottomRow(switchLabel: string, nextLayer: Layer): HTMLButtonElement[] {
     const btns: HTMLButtonElement[] = []
     btns.push(makeBtn('⎋', 'wide flex glyph', () => dispatchKey(27)))
-    const cb = makeBtn('⌃', 'mod wide flex glyph', toggleCtrl)
-    ctrlBtns.push(cb)
-    btns.push(cb)
+    ctrlBtn = makeBtn('⌃', 'mod wide flex glyph', mods.tapCtrl)
+    btns.push(ctrlBtn)
     btns.push(makeBtn(switchLabel, 'wide flex', () => setLayer(nextLayer)))
     // Tab repeats; the other control keys stay single-fire.
     btns.push(makeBtn('⇥', 'wide flex glyph', () => dispatchKey(9), { repeat: true }))
@@ -256,30 +207,26 @@ export function buildKeyboardOverlay(
     return btns
   }
 
+  // ⇧, the keys, ⌫.
+  function modRow(keys: HTMLButtonElement[]): HTMLButtonElement[] {
+    shiftBtn = makeBtn('⇧', 'mod wide flex glyph', mods.tapShift)
+    return [
+      shiftBtn, ...keys,
+      makeBtn('⌫', 'wide flex glyph', () => dispatchKey(8, CK_CTRL_BKSP), { repeat: true }),
+    ]
+  }
+
   function rebuild(): void {
     layerEl.innerHTML = ''
-    shiftBtns.length = 0
-    ctrlBtns.length = 0
-
     if (layer === 'letters') {
-      addRow(LETTER_ROW_1.map(c => LETTER_DIRS[c] ? makeLetterBtnWithCorner(c, LETTER_DIRS[c]) : makeLetterBtn(c)))
-      addRow(LETTER_ROW_2.map(c => LETTER_DIRS[c] ? makeLetterBtnWithCorner(c, LETTER_DIRS[c]) : makeLetterBtn(c)))
-      const r3: HTMLButtonElement[] = []
-      const sb = makeBtn('⇧', 'mod wide flex glyph', toggleShift)
-      shiftBtns.push(sb); r3.push(sb)
-      for (const c of LETTER_ROW_3) r3.push(LETTER_DIRS[c] ? makeLetterBtnWithCorner(c, LETTER_DIRS[c]) : makeLetterBtn(c))
-      r3.push(makeBtn('⌫', 'wide flex glyph', () => dispatchKey(8, CK_CTRL_BKSP), { repeat: true }))
-      addRow(r3)
+      addRow(LETTER_ROW_1.map(letterBtn))
+      addRow(LETTER_ROW_2.map(letterBtn))
+      addRow(modRow(LETTER_ROW_3.map(letterBtn)))
       addRow(buildBottomRow('123', 'symbols'))
     } else {
-      addRow(SYMBOL_ROW_1.map(c => makeCharBtn(c, c)))
-      addRow(SYMBOL_ROW_2.map(c => makeCharBtn(c, c)))
-      const r3: HTMLButtonElement[] = []
-      const sb = makeBtn('⇧', 'mod wide flex glyph', toggleShift)
-      shiftBtns.push(sb); r3.push(sb)
-      for (const [ch, sh] of SYMBOL_ROW_3) r3.push(makeShiftedCharBtn(ch, sh))
-      r3.push(makeBtn('⌫', 'wide flex glyph', () => dispatchKey(8, CK_CTRL_BKSP), { repeat: true }))
-      addRow(r3)
+      addRow(SYMBOL_ROW_1.map(charBtn))
+      addRow(SYMBOL_ROW_2.map(charBtn))
+      addRow(modRow(SYMBOL_ROW_3.map(([ch, sh]) => shiftedCharBtn(ch, sh))))
       addRow(buildBottomRow('ABC', 'letters'))
     }
     refreshMods()
@@ -287,7 +234,7 @@ export function buildKeyboardOverlay(
 
   function open(): void {
     layer = 'letters'
-    clearAllMods()
+    mods.reset()
     rebuild()
     overlay.style.display = 'flex'
   }

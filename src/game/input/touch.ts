@@ -8,7 +8,7 @@ import {
   CK_CTRL_HOME, CK_CTRL_END, CK_CTRL_PGUP, CK_CTRL_PGDN,
   typedCharToMsg,
 } from './keyboard'
-import { createShiftToggle } from './shift-state'
+import { createModifiers, createShiftToggle } from './shift-state'
 import { activeTextInput, buildKeyboardOverlay, dispatchSpecialToInput } from './virtual-keyboard'
 import { LONG_PRESS_MS } from './map-tap'
 import {
@@ -17,7 +17,7 @@ import {
 import type { ControlSet, ControlTabDef, SlotDef } from './control-sets'
 import { X_MODE_COLS, X_MODE_KEYS } from './x-mode-keys'
 
-type SendFn = (msg: ClientMsg) => void
+export type SendFn = (msg: ClientMsg) => void
 // The three control tabs keep stable positional ids (micro/macro/info =
 // tabs[0..2] of the active control set); their visible labels come from the
 // set and are user-renameable.
@@ -51,7 +51,7 @@ export type BindTap = (
 // touchstart shuts down — so Android showed no highlight at all (reported
 // 2026-08-28) while iOS did. Toggle a `pressed` class off the same events
 // instead; the selectors pair it with :active for the mouse path.
-export const PRESSED_CLASS = 'pressed'
+const PRESSED_CLASS = 'pressed'
 export function bindPressedClass(btn: HTMLElement): void {
   btn.addEventListener('touchstart', () => btn.classList.add(PRESSED_CLASS), { passive: true })
   const release = (): void => btn.classList.remove(PRESSED_CLASS)
@@ -93,8 +93,7 @@ export interface TouchControls {
   // dev-material/cursor-mode-reticle.md.
   setCursorMode(on: boolean): void
   // Tracks "a server overlay is up" (root class `overlay-mode`), set from
-  // game-view's single overlay entry/exit (enterOverlayLayout /
-  // hideOverlay). Read by the d-pad hold (see buildDpad).
+  // game-view's applyLayout. Read by the d-pad hold (see buildDpad).
   setOverlayMode(on: boolean): void
   openKbd(): void
   closeKbd(): void
@@ -157,9 +156,8 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
     const field = activeTextInput()
     if (field) dispatchSpecialToInput(field, keycode === 13 ? 'Enter' : 'Escape')
     else send({ msg: 'key', keycode })
-    clearOneshot()
+    mods.consume()
   }
-  let ctrlActive = false
   let activeTab: TabKey = 'micro'
   let controlSet!: ControlSet  // assigned by applyControlSet() before first read
   // While the X level map is up the panel shows its own key grid
@@ -178,6 +176,7 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
     refreshMods()
     opts.onShiftChange?.(shift.isOn)
   } })
+  const mods = createModifiers(shift, refreshMods)
 
   // Single owner of the z-tab reveal rule, used by the tab strip and
   // refreshSpellTab alike. ENABLE_SPELL_TAB gates only visibility — the grid
@@ -289,40 +288,24 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
   function refreshMods(): void {
     shiftBtn.classList.toggle('active', shift.state === 'once')
     shiftBtn.classList.toggle('locked', shift.state === 'lock')
-    ctrlBtn.classList.toggle('active', ctrlActive)
+    ctrlBtn.classList.toggle('active', mods.ctrl)
   }
 
-  // Called after each key dispatch. Keeps shift lock engaged so the next d-pad
-  // tap is still shifted (e.g. running across the level in X mode); clears
-  // one-shot shift and ctrl.
-  function clearOneshot(): void {
-    shift.consume()
-    if (ctrlActive) {
-      ctrlActive = false
-      refreshMods()
-    }
-  }
-
-  function clearAllMods(): void {
-    shift.reset()
-    if (ctrlActive) {
-      ctrlActive = false
-      refreshMods()
-    }
-  }
-
+  // Each key dispatch ends in mods.consume(): a Shift lock stays engaged so
+  // the next d-pad tap is still shifted (e.g. running across the level in X
+  // mode).
   function sendTabKey(def: SlotDef): void {
     if (def.text !== undefined) {
       let text = def.text
       if (shift.isOn && text.length === 1) text = text.toUpperCase()
       // Modifiers apply to a single key; a multi-character slot is a macro
       // sent as typed.
-      const msg: ClientMsg | null = text.length === 1 ? typedCharToMsg(text, ctrlActive) : { msg: 'input', text }
+      const msg: ClientMsg | null = text.length === 1 ? typedCharToMsg(text, mods.ctrl) : { msg: 'input', text }
       if (msg) send(msg)
     } else if (def.key !== undefined) {
       send({ msg: 'key', keycode: def.key })
     }
-    clearOneshot()
+    mods.consume()
   }
 
   // Returns whether the direction went out unmodified — the d-pad hold path
@@ -332,11 +315,11 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
     if ('text' in def) {
       send({ msg: 'input', text: def.text })
     } else {
-      const code = ctrlActive ? def.ctrled : shift.isOn ? def.shifted : def.plain
+      const code = mods.ctrl ? def.ctrled : shift.isOn ? def.shifted : def.plain
       plain = code === def.plain
       send({ msg: 'key', keycode: code })
     }
-    clearOneshot()
+    mods.consume()
     return plain
   }
 
@@ -441,27 +424,14 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
   shiftBtn.className = 'tc-shift'
   shiftBtn.textContent = '⇧'
   shiftBtn.title = 'Shift modifier (tap = next key, double-tap = lock)'
-  function tapShift(): void {
-    const wasOff = shift.state === 'off'
-    shift.tap()
-    if (wasOff && ctrlActive) {
-      ctrlActive = false
-      refreshMods()
-    }
-  }
-  bindTap(shiftBtn, tapShift)
+  bindTap(shiftBtn, mods.tapShift)
   footerEl.appendChild(shiftBtn)
 
   ctrlBtn = document.createElement('button')
   ctrlBtn.className = 'tc-ctrl'
   ctrlBtn.textContent = '⌃'
   ctrlBtn.title = 'Ctrl modifier (next key only)'
-  function toggleCtrlMod() {
-    ctrlActive = !ctrlActive
-    if (ctrlActive) shift.reset()
-    refreshMods()
-  }
-  bindTap(ctrlBtn, toggleCtrlMod)
+  bindTap(ctrlBtn, mods.tapCtrl)
   footerEl.appendChild(ctrlBtn)
 
   const kbdBtn = document.createElement('button')
@@ -515,7 +485,7 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
             }
             if (downPlain) {
               send({ msg: 'key', keycode: def.shifted })
-              clearOneshot()  // a Shift tapped mid-hold must not arm a second run
+              mods.consume()  // a Shift tapped mid-hold must not arm a second run
             }
             return true
           }
@@ -649,14 +619,14 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
   function enterXMode(): void {
     inXMode = true
     root.classList.add('x-mode')
-    clearAllMods()
+    mods.reset()
     renderPanel()
   }
 
   function exitXMode(): void {
     inXMode = false
     root.classList.remove('x-mode')
-    clearAllMods()
+    mods.reset()
     renderPanel()
   }
 

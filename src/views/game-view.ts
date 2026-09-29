@@ -16,8 +16,7 @@ import { buildTouchControls } from '../game/input/touch'
 import type { TouchControls } from '../game/input/touch'
 import { openSettings } from './settings-view'
 import { isOverlayOpen, closeTopOverlay } from './overlay'
-import { keyToMsg } from '../game/input/keyboard'
-import { isEscMsg, keyNav, routeInput, wireNav, type RouterTargets } from '../game/input/input-router'
+import { keyInput, routeInput, touchInput, type RouterTargets } from '../game/input/input-router'
 import { createShiftToggle } from '../game/input/shift-state'
 import { attachMapGestures, canDescribe, canHover, canOpenLevelMap } from '../game/input/map-tap'
 import { attachCornerSwipe } from '../game/input/corner-swipe'
@@ -340,9 +339,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const restoreTopLayer = () => {
     // The monster panel can be up when this runs — it opens mid-cutoff by
     // design (see serverPromptActive) — and every arm below wipes or hides
-    // its uiOverlay DOM. Drop the flag with the DOM, else the touch dispatch
-    // keeps swallowing keys for a panel that's gone and the list tap refuses
-    // to reopen. Flag only, not closeClientOverlays(): the paint arms manage
+    // its uiOverlay DOM. Drop the flag with the DOM, else the router's
+    // monster-panel layer keeps swallowing keys for a panel that's gone and
+    // the list tap refuses to reopen. Flag only, not closeClientOverlays(): the paint arms manage
     // the minimap themselves (enterOverlayLayout), and the hideOverlay arms
     // must keep restoring a suspended spectator lens.
     monsterPanelOpen = false
@@ -454,8 +453,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // mid-targeting, not cast. The monster panel is a client-only overlay
     // that doesn't change input mode, so it needs its own gate: in landscape
     // the rail stays visible in the sidebar beside the panel, and a tap there
-    // bypasses the touch-input swallow (the rail sends via conn.send, not
-    // that callback).
+    // bypasses the router's monster-panel layer (the rail sends via
+    // conn.send).
     tapIdle: () => !monsterPanelOpen && commandChannelIdle(),
     consumeShift: () => touchControls.consumeShift(),
   })
@@ -481,7 +480,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     send: (msg) => conn.send(msg),
     focusView,
     guardedFocus,
-    autoCloseKbdIfOurs,
     harvesting: () => isHarvesting(),
     overlayShown: () => uiOverlay.style.display !== 'none',
     inXMode: () => inXMode,
@@ -739,9 +737,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // The touch strip's and the Android back gesture's way in: an injected Esc
   // means exactly what a tapped one does.
   function dispatchTouchInput(msg: ClientMsg): void {
-    routeInput({
-      origin: 'touch', msg, nav: wireNav(msg), scrollPage: null, esc: isEscMsg(msg), typing: false,
-    }, routerTargets)
+    routeInput(touchInput(msg), routerTargets)
   }
 
   const touchControls: TouchControls = buildTouchControls(dispatchTouchInput, spectating ? {} : {
@@ -801,6 +797,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Hidden until the first `player` message (hudRevealed).
     hud.style.display = playfield && hudRevealed ? '' : 'none'
     touchControls.element.style.display = touchHidden && !stashPreview ? 'none' : ''
+    touchControls.setOverlayMode(overlayMode !== 'none')
     // The bar REPLACES the touch panel. Portrait gets that from the inline
     // hide on #touch-controls, but landscape forces the controls back to
     // `display: contents` (see the style.css landscape block) so the d-pad
@@ -1138,13 +1135,12 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       manualCloseKbd()
       return
     }
+    // Chat and spectator mirror physical Esc (the router's kbd-only layers).
     if (chatView.isOpen) {
-      chatView.closeSheet()  // same routing as physical Esc (docKeyHandler)
+      chatView.closeSheet()
       return
     }
     if (spectating) {
-      // The server discards a watcher's game input, so an injected Esc
-      // would make back a no-op; leave client-side like physical Esc does.
       leaveToLobby()
       return
     }
@@ -1283,10 +1279,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (isOverlayOpen()) return
     // (Keys typed while the chat input is focused never reach here — the
     // input's own handler stops propagation.)
-    const verdict = routeInput({
-      origin: 'kbd', msg: keyToMsg(e), ...keyNav(e), esc: e.key === 'Escape',
-      typing: document.activeElement instanceof HTMLInputElement,
-    }, routerTargets)
+    const verdict = routeInput(
+      keyInput(e, document.activeElement instanceof HTMLInputElement), routerTargets)
     if (verdict === 'handled') e.preventDefault()
   }
   document.addEventListener('keydown', docKeyHandler)
@@ -2008,9 +2002,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Client-only overlay, but the touch controls stay up (renderOverlay's
     // default) — the same chrome as inventory and every other plain menu, so
     // the control band never swaps across open → row-tap describe → close.
-    // Their Esc closes the panel locally and every other key is swallowed by
-    // the monsterPanelOpen guard in the touch dispatch (same deal in both
-    // orientations; landscape always worked this way).
+    // Keys while it's up: the router's monster-panel layer.
 
     monsterPanel.setOnPickCoord((x, y) => {
       if (spectating) return  // row tap closes via the body handler above
@@ -2099,7 +2091,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     touchHidden = opts?.touch === false
     menuBarOn = false
     applyLayout()
-    touchControls.setOverlayMode(true)
     chatView.syncChip()
     promptHost = uiOverlay
     if (covered) {
@@ -2194,7 +2185,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     promptHost = uiOverlay
     chatView.syncChip()  // chip retracts while an overlay is up; map's back
     menuBar.clear()
-    touchControls.setOverlayMode(false)
     minimaps.reopenSuspendedLens()
     requestAnimationFrame(() => {
       // The restore above painted the lens against the pre-fit viewport;

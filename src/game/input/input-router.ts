@@ -10,7 +10,7 @@
 // traffic (menu_hover, scroller sync, hover/describe, chat).
 
 import type { ClientMsg } from '../../ws/types'
-import { CK_DOWN, CK_END, CK_HOME, CK_PGDN, CK_PGUP, CK_UP } from './keyboard'
+import { CK_DOWN, CK_END, CK_HOME, CK_PGDN, CK_PGUP, CK_UP, keyToMsg } from './keyboard'
 
 export type NavKey = 'up' | 'down' | 'pageUp' | 'pageDown' | 'home' | 'end'
 
@@ -110,4 +110,13 @@ export function wireNav(msg: ClientMsg): NavKey | null {
   return msg.msg === 'key' ? KEYCODE_NAV[msg.keycode] ?? null : null
 }
 
-export const isEscMsg = (msg: ClientMsg): boolean => msg.msg === 'key' && msg.keycode === 27
+// A touch-strip (or back-gesture) message as the router sees it.
+export const touchInput = (msg: ClientMsg): RoutedInput => ({
+  origin: 'touch', msg, nav: wireNav(msg), scrollPage: null,
+  esc: msg.msg === 'key' && msg.keycode === 27, typing: false,
+})
+
+// A physical key as the router sees it; `typing` = a text field has focus.
+export const keyInput = (e: KeyboardEvent, typing: boolean): RoutedInput => ({
+  origin: 'kbd', msg: keyToMsg(e), ...keyNav(e), esc: e.key === 'Escape', typing,
+})
