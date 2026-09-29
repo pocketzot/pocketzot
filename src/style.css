@@ -2093,7 +2093,7 @@ html.map-hold, html.map-hold * {
   text-shadow: var(--msglog-text-shadow);
   font-size: var(--msglog-font);
   line-height: var(--msglog-line);
-  padding: 0.2rem 0.2rem;
+  padding: 0.2rem 0.2rem 0.4rem;
 }
 #xdesc-strip .xdesc-actions {
   display: flex;
@@ -3625,9 +3625,16 @@ html.map-hold, html.map-hold * {
   gap: 0.3rem;
 }
 
+/* Engine-offered choices as buttons (prompt rows, X-describe strip, layout
+   actions bar, random-combo confirm). Neutral edge, like the chat pill —
+   the other thing drawn over the map. Never an amber border: amber alpha is
+   the emphasis ladder (--border 12% → --border-card 22% → --accent-line
+   35%), and at a strength that reads over tiles it lands on --accent-line,
+   putting near-accent outlines on every prompt option. Transparent on
+   purpose: the log's text already shows the map through. */
 .action-btn {
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--text-dim) 45%, transparent);
   border-radius: 3px;
   color: var(--text);
   font-family: var(--font-mono);
