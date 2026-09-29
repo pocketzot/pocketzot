@@ -12,6 +12,7 @@ import { openSettings } from './settings-view'
 import { activeGameStart, clearGameStart, FORCE_TERMINATE_WARNING, rememberGameStart } from '../reconnect'
 import { classifyTransition } from '../ws/transition'
 import { combineHandlers, dispatch, type MsgOf } from '../ws/dispatcher'
+import { MessageHold } from '../ws/message-hold'
 import { isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
 import { attachScrollCue } from '../util/scroll-cue'
 
@@ -49,9 +50,10 @@ export function buildLobbyView(
   // game_client only arrives after the transition (e.g. CDI), where the game
   // view's own game_client handler resolves the loader instead.
   let activeLoader: TileLoader | null = null
-  // Messages the lobby doesn't handle, held for the game view (see handleMsg's
-  // default case) and replayed right after onGameStart mounts it.
-  const preGameMsgs: ServerMsg[] = []
+  // Messages the lobby doesn't handle, held for the game view (see
+  // handleMsg's fallback) and replayed right after onGameStart mounts it.
+  // Capped as a guard against a nonconforming server flooding the lobby.
+  const preGame = new MessageHold(100)
 
   const view = document.createElement('div')
   view.id = 'lobby-view'
@@ -302,11 +304,8 @@ export function buildLobbyView(
         onGameStart(transition.spectating, activeLoader ?? undefined, playedGameId)
         // onGameStart mounted the game view synchronously (app.ts:showGame),
         // so conn.onMessage is now its handler — replay the pre-transition
-        // game state into it. splice-then-iterate so a replay that somehow
-        // lands back here (handler unchanged) re-buffers instead of looping.
-        if (conn.onMessage !== handleMsg) {
-          for (const m of preGameMsgs.splice(0)) conn.onMessage?.(m)
-        }
+        // game state into it.
+        preGame.replay(conn, handleMsg)
       }
       return
     }
@@ -318,8 +317,7 @@ export function buildLobbyView(
     // game view and replay it at handover (the transition branch above),
     // the same contract as the auto-resume handler (reconnect.ts); without
     // this the initial spectator count and join-time chat are silently lost.
-    // Capped as a guard against a nonconforming server flooding the lobby.
-    if (preGameMsgs.length < 100) preGameMsgs.push(msg)
+    preGame.hold(msg)
   }
 
   function onLobbyEntry(e: MsgOf<'lobby_entry'>): void {
@@ -365,7 +363,7 @@ export function buildLobbyView(
   // die with it too — they belong to the game that never started.
   function abortGameStart(): void {
     clearGameStart()
-    preGameMsgs.length = 0
+    preGame.clear()
   }
 
   // The stale process didn't exit when asked; the server wants a yes/no.

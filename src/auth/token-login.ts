@@ -12,6 +12,7 @@
 // them into the void.
 import type { ClientMsg, ServerMsg } from '../ws/types'
 import { clearSession, saveSession, type StoredSession } from './session'
+import { MessageHold } from '../ws/message-hold'
 
 // Canonical copy for the one user-visible failure ("log in" vs "sign in"
 // had drifted between the old copies).
@@ -40,22 +41,16 @@ export function tokenLogin(conn: TokenLoginConn, session: StoredSession, cb: Tok
   // Keep the rotating cookie fresh on every successful (re)login.
   conn.onLoginCookie = (cookie, days) => saveSession(session.wsUrl, session.username, cookie, days)
 
-  const buffered: ServerMsg[] = []
+  const held = new MessageHold()
   const pump = (msg: ServerMsg): void => {
     if (msg.msg === 'login_success') {
       conn.send({ msg: 'set_login_cookie' })
-      cb.onSuccess(msg.username, () => {
-        // If no destination took over onMessage, replaying would feed the
-        // buffer straight back into itself.
-        if (conn.onMessage === pump) return
-        for (let i = 0; i < buffered.length; i++) conn.onMessage(buffered[i]!)
-        buffered.length = 0
-      })
+      cb.onSuccess(msg.username, () => held.replay(conn, pump))
     } else if (msg.msg === 'login_fail') {
       clearSession(session.wsUrl, session.username)
       cb.onFail()
     } else {
-      buffered.push(msg)
+      held.hold(msg)
     }
   }
   conn.onMessage = pump

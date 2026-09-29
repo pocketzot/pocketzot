@@ -21,6 +21,7 @@
 import { WsConnection } from './ws/connection'
 import type { ClientMsg, GameExit, ServerMsg } from './ws/types'
 import { classifyTransition } from './ws/transition'
+import { MessageHold } from './ws/message-hold'
 import { loadSession } from './auth/session'
 import { SESSION_EXPIRED_NOTICE, tokenLogin } from './auth/token-login'
 import { getTileLoader, type TileLoader } from './game/tiles/tile-loader'
@@ -216,8 +217,8 @@ export function resumeOnConn(
     let settled = false
     let deadline: number | null = null
     let loader: TileLoader | undefined
-    const buffered: ServerMsg[] = []
-    const bufferHandler = (m: ServerMsg): void => { buffered.push(m) }
+    const held = new MessageHold()
+    const bufferHandler = (m: ServerMsg): void => { held.hold(m) }
 
     function clearDeadline(): void {
       if (deadline != null) { window.clearTimeout(deadline); deadline = null }
@@ -243,16 +244,7 @@ export function resumeOnConn(
       conn.onMessage = bufferHandler
       resolve({
         ...outcome,
-        flush: () => {
-          // If no destination view took over onMessage, replaying would feed
-          // the buffer straight back into itself forever.
-          if (conn.onMessage === bufferHandler) return
-          // Index loop (shift() is quadratic on a big buffered lobby stream);
-          // re-read conn.onMessage each round — a replayed message can itself
-          // reassign the handler.
-          for (let i = 0; i < buffered.length; i++) conn.onMessage(buffered[i]!)
-          buffered.length = 0
-        },
+        flush: () => held.replay(conn, bufferHandler),
       })
     }
 
@@ -347,7 +339,7 @@ export function resumeOnConn(
         default:
           // Everything else (pre-login lobby snapshot, post-abort lobby list,
           // …) is held for the destination view.
-          buffered.push(msg)
+          held.hold(msg)
       }
     }
 

@@ -17,6 +17,7 @@ import {
 } from '../offline/artifact-store'
 import { compactPlace, nameTitle } from '../game/char-label'
 import { escHtml } from '../game/dcss-colors'
+import { MessageHold } from '../ws/message-hold'
 
 export interface LoginResult {
   conn: WsConnection
@@ -592,16 +593,14 @@ export function buildLoginView(
 // onMessage after the login handler runs, so the lobby view sees them.
 function listenOnce(conn: WsConnection, handler: (msg: ServerMsg) => void): void {
   const prev = conn.onMessage
-  const buffered: ServerMsg[] = []
+  const held = new MessageHold()
   const wrapper = (msg: ServerMsg) => {
     if (msg.msg === 'login_success' || msg.msg === 'login_fail') {
       handler(msg)
       if (conn.onMessage === wrapper) conn.onMessage = prev
-      const next = conn.onMessage
-      for (const m of buffered) next(m)
-      buffered.length = 0
+      held.replay(conn)
     } else {
-      buffered.push(msg)
+      held.hold(msg)
     }
   }
   conn.onMessage = wrapper
