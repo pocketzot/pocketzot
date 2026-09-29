@@ -16,7 +16,7 @@ const SMART_PUNCTUATION: Record<string, string> = {
   '—': '--', '–': '-', '…': '...',
 }
 const SMART_RE = /[‘’“”—–…]/g
-export const asciiPunctuation = (s: string): string => s.replace(SMART_RE, c => SMART_PUNCTUATION[c])
+const asciiPunctuation =(s: string): string => s.replace(SMART_RE, c => SMART_PUNCTUATION[c])
 
 export function systemKeyboardField(className: string): HTMLInputElement {
   const input = document.createElement('input')

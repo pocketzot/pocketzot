@@ -20,7 +20,7 @@ import { menuTagHasBar, type MenuBar } from './menu-bar'
 import { systemKeyboardField } from './text-field'
 
 // Debounce for reporting a client-side scroll back to the server — menus
-// here, the formatted scroller in the game view.
+// here, the formatted scroller in LayoutView.
 export const SCROLL_SYNC_DEBOUNCE_MS = 100
 
 // Where a menu shows: the whole overlay, a card floating over the live map,

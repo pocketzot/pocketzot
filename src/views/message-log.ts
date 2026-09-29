@@ -6,18 +6,11 @@
 // MessageLogDeps.
 
 import type { ClientMsg } from '../ws/types'
-import type { Handlers } from '../ws/dispatcher'
+import type { Handlers, MsgOf } from '../ws/dispatcher'
 import { dcssToHtml } from '../game/dcss-colors'
 import { isKeyHintsLine, parsePromptText, PROMPT_TRIGGER_RE, type PromptSegment } from './prompt-parse'
 import { systemKeyboardField } from './text-field'
 import { downloadPackFile } from '../offline/save-transfer'
-
-export interface MsgsMessage {
-  messages?: Array<{ text?: string; channel?: number }>
-  rollback?: number
-  more?: boolean
-  more_text?: string
-}
 
 export interface MessageLogDeps {
   // The game view's root: carries the .more-active frame class and the
@@ -85,7 +78,7 @@ export class MessageLog {
   // this X session, not its live one: trunk rebuilds the strip per cursor
   // move with 0–4 describe lines, and tracking that bounced the minimap up
   // and down on every step. Grow-only means at most a few early rises;
-  // resetXdescPeak (X-mode exit) resets it.
+  // syncXMode (X-mode exit) resets it.
   private xdescPeakH = 0
 
   constructor(deps: MessageLogDeps) {
@@ -134,7 +127,7 @@ export class MessageLog {
   get promptLive(): boolean { return this.livePrompt.length > 0 }
   get textInputOpen(): boolean { return !!this.element.querySelector('.game-text-input-row') }
 
-  onMsgs(msg: MsgsMessage): void {
+  onMsgs(msg: MsgOf<'msgs'>): void {
     const log = this.element
     const inX = this.d.inXMode()
     // The inline --more-- row must not be in the DOM while the batch
@@ -155,13 +148,10 @@ export class MessageLog {
     for (const m of msg.messages ?? []) {
       if (!m.text) continue
       if (this.d.onLine(m.text)) continue
-      // Mirror into the X-mode describe strip; the line ALSO takes the
-      // normal path below into the (hidden) real log, which is what
-      // keeps the server's rollback counts consistent on X-mode exit.
-      // In X mode the strip owns the visible/tappable prompt; the real
-      // log is hidden and only needs a placeholder node per message to
-      // keep rollback counts consistent, so skip the (invisible) prompt
-      // row + its buttons/listeners and append a plain line instead.
+      // Mirror into the X-mode describe strip, which owns the visible,
+      // tappable prompt there. The line ALSO lands in the (hidden) real
+      // log as a plain row — one node per message keeps the server's
+      // rollback counts consistent on X-mode exit.
       if (inX) this.xdescAdd(m.text, m.channel)
       // One prompt = the MSGCH_PROMPT (2, mpr.h) lines of one batch. The
       // engine never merges prompt lines (message.cc add: the merge is
@@ -189,7 +179,7 @@ export class MessageLog {
         this.pushRow(row)
       } else if (!inX && this.pendingDumpUrl !== null
           && m.text.includes(DUMP_OK_LINE)) {
-        const row = this.row(m.text, true)
+        const row = this.row(m.text)
         this.decorateDumpUrlRow(row, this.pendingDumpUrl)
         this.pendingDumpUrl = null
         this.pushRow(row)
@@ -199,7 +189,7 @@ export class MessageLog {
         this.livePrompt.push(row)
         this.pushRow(row)
       } else {
-        this.append(m.text, true)
+        this.pushRow(this.row(m.text))
       }
     }
     // The dump line lands in the FIRST msgs flush after {msg:'dump'}
@@ -227,7 +217,7 @@ export class MessageLog {
   // decorate the log line the same way, but order-tolerantly — if the line
   // already landed as the newest row, link it in place; else arm for a
   // coming flush.
-  onDump(msg: { filename?: string; url?: string }): void {
+  private onDump(msg: MsgOf<'dump'>): void {
     if (msg.filename && this.d.readMorgue) this.pendingDumpFile = msg.filename
     else if (msg.url) {
       // Arm (superseding any stale arm), then attempt an immediate
@@ -272,7 +262,7 @@ export class MessageLog {
   // frame in normal play, the floating button in X mode (log hidden there).
   // Also called by the msgs merge (reattach after detach) and the X-mode
   // transitions, so a --more-- pending across enter/exit swaps presentation.
-  syncMore(): void {
+  private syncMore(): void {
     const inX = this.d.inXMode()
     const inline = this.more && !inX
     this.d.view.classList.toggle('more-active', inline)
@@ -302,10 +292,6 @@ export class MessageLog {
     if (!mark) return
     mark.textContent = '_'
     mark.classList.add(kind)
-  }
-
-  append(text: string, html = false): void {
-    this.pushRow(this.row(text, html))
   }
 
   showTextInput(prefill: string, maxlen: number, tag?: string): void {
@@ -347,14 +333,19 @@ export class MessageLog {
     this.element.querySelector('.game-text-input-row')?.remove()
   }
 
-  xdescReset(): void {
+  // X mode entered or left: a pending --more-- swaps presentation, and
+  // leaving drops the strip and its peak.
+  syncXMode(): void {
+    this.syncMore()
+    if (this.d.inXMode()) return
+    this.xdescReset()
+    this.setXdescPeak(0)
+  }
+
+  private xdescReset(): void {
     this.xdescLines.textContent = ''
     this.xdescActions.style.display = 'none'
     this.xdescStrip.style.display = 'none'
-  }
-
-  resetXdescPeak(): void {
-    this.setXdescPeak(0)
   }
 
   // A tappable key button, for prompt rows and the X-describe strip.
@@ -401,15 +392,10 @@ export class MessageLog {
   }
 
   private promptRow(text: string): HTMLElement {
-    const row = document.createElement('p')
-    row.className = 'game-msg game-prompt'
-    // Carry a prefix-glyph slot like other .game-msg rows so markLast
-    // can land turn/cmd markers here too (matches reference, where every
+    // A prefix-glyph slot like other .game-msg rows, so markLast can land
+    // turn/cmd markers here too (matches reference, where every
     // .game_message has a .prefix_glyph).
-    const mark = document.createElement('span')
-    mark.className = 'msg-turn-mark'
-    mark.textContent = ' '
-    row.appendChild(mark)
+    const row = this.markedRow('game-msg game-prompt')
     const parsed = parsePromptText(text)
     if (parsed.color) row.style.color = parsed.color
     // Trigger gate is wider than the per-token matcher, so a message can
@@ -450,7 +436,7 @@ export class MessageLog {
   // swallowed the touchend and runaway key repeat queued sheets until the
   // page died — the sheet may only ever follow a deliberate tap.
   private dumpRow(text: string, stem: string): HTMLElement {
-    const row = this.row(text, true)
+    const row = this.row(text)
     void this.d.readMorgue?.(stem).then((data) => {
       if (!data) return // engine gone or file unreadable — stays a plain line
       this.armDumpTap(row, () => {
@@ -493,17 +479,22 @@ export class MessageLog {
     if (prune) while (log.children.length > 50) log.lastChild?.remove()
   }
 
-  private row(text: string, html = false): HTMLElement {
+  private row(text: string): HTMLElement {
+    const p = this.markedRow('game-msg')
+    const content = document.createElement('span')
+    content.innerHTML = dcssToHtml(text)
+    p.appendChild(content)
+    return p
+  }
+
+  // A log row with its (blank) turn/cmd mark slot.
+  private markedRow(className: string): HTMLElement {
     const p = document.createElement('p')
-    p.className = 'game-msg'
+    p.className = className
     const mark = document.createElement('span')
     mark.className = 'msg-turn-mark'
     mark.textContent = ' '
     p.appendChild(mark)
-    const content = document.createElement('span')
-    if (html) content.innerHTML = dcssToHtml(text)
-    else content.textContent = text
-    p.appendChild(content)
     return p
   }
 }

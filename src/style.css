@@ -2104,7 +2104,7 @@ html.map-hold, html.map-hold * {
 
 /* X-mode describe strip: mirrors trunk's under-cursor describe messages in
    the floating log's position while the real log is hidden (see xdescStrip
-   in game-view.ts). Same scrim/typography as #game-messages, but
+   in message-log.ts). Same scrim/typography as #game-messages, but
    content-sized — a describe batch is 1–4 short lines, rebuilt wholesale per
    cursor move, so no fixed height, scroll, or column-reverse machinery.
    Anchored bottom in BOTH orientations (X mode hides the landscape sidebar
@@ -2148,7 +2148,7 @@ html.map-hold, html.map-hold * {
 
 /* --more-- (reference: webtiles' #more is an unstyled line directly
    below #messages; console prints it as the message window's last line).
-   The row (#msg-more, game-view.ts syncMoreDisplay) rides inside the log as
+   The row (#msg-more, message-log.ts syncMore) rides inside the log as
    the visual-bottom line, and the WHOLE log becomes the pause indicator and
    dismiss target: a frame plus one extra line of height, grown on the map
    side since the anchored edge is pinned (portrait bottom sits above the
@@ -2546,7 +2546,8 @@ html.map-hold, html.map-hold * {
 
 /* X-mode-only --more-- fallback: normal play inlines --more-- into the log
    (see the .more-active block), but X mode hides the log, so a pending pager
-   there still needs a visible, tappable target (syncMoreDisplay picks). */
+   there still needs a visible, tappable target (message-log.ts syncMore
+   picks). */
 #more-btn {
   grid-area: map;
   position: absolute;
@@ -5068,7 +5069,7 @@ html.map-hold, html.map-hold * {
 
   /* The X minimap slot floats where the d-pad does, stacked on the describe
      strip via --xdesc-h (its peak height this X session — a grow-only
-     ResizeObserver in game-view). Translucent, no box: unexplored cells
+     ResizeObserver in message-log.ts). Translucent, no box: unexplored cells
      stay clear, so the level's silhouette floats over the map (a dark-scrim
      variant of the old corner inset was A/B'd on phone and lost). Passive:
      taps fall through to the map (tap-walk / drag-pan). */

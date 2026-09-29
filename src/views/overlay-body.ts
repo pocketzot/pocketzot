@@ -3,7 +3,7 @@
 // 80-column terminal; these helpers undo just enough of that (hanging-indent
 // unwrap, stat-chip rows, per-line color balancing) to reflow prose at phone
 // width while leaving genuinely tabular lines column-aligned. Pure string/DOM
-// builders with no game-view state — game-view.ts (showUiPush) and
+// builders with no game-view state — layout-view.ts (LayoutView.show) and
 // menu-view.ts call them, and the sweep tests exercise the exported parsers
 // directly.
 import { dcssToHtml, uiColor, stripDcss, DCSS_COLOR_MAP } from '../game/dcss-colors'

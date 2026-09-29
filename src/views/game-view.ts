@@ -23,7 +23,7 @@ import { attachCornerSwipe } from '../game/input/corner-swipe'
 import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { cursorInView, keepLocalCenter } from '../game/input/map-pan'
 import { escHtml } from '../game/dcss-colors'
-import { exportScreenPng, type DcssRun } from './screen-export'
+import { exportScreenPng } from './screen-export'
 import { getTileLoader, type TileLoader } from '../game/tiles/tile-loader'
 import { activeEnumsModule, setEnumsModule } from '../game/map/flag-decode'
 import { primeFingerprint } from '../game/tiles/atlas-dedup'
@@ -32,7 +32,7 @@ import { CharacterRecord } from '../game/character-record'
 import { PopupStack, type PopupFrame } from '../game/popup-stack'
 import { MenuBar, menuTagHasBar } from './menu-bar'
 import { MenuView } from './menu-view'
-import { LayoutView } from './layout-view'
+import { LayoutView, type ExportSource } from './layout-view'
 import { CrtView } from './crt-view'
 import { VersionAdvisory } from './version-advisory'
 import { MessageLog } from './message-log'
@@ -488,8 +488,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     },
     readMorgue,
   })
-  const msgLog = messageLog.element
-  const xdescStrip = messageLog.xdescStrip
 
   const mapWrap = document.createElement('div')
   mapWrap.id = 'map-wrap'
@@ -678,12 +676,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // first stats payload the HUD would otherwise show empty HP/MP bars and
   // floating AC/EV/SH/… captions with no values. applyLayout shows it only
   // once hudRevealed flips on that first message.
-  hud.style.display = 'none'
   let hudRevealed = false
   hud.appendChild(hudTop)
   hud.appendChild(statusView.element)
-
-  const moreBtn = messageLog.moreButton
 
   const numpad = new NumpadInput({ send: (m) => conn.send(m), focusView })
 
@@ -770,8 +765,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   //   menuBarOn: the menu-controls bar is up.
   // Derived: X mode hides the log and HUD (the map goes full-bleed), and the
   // stash-search preview — X mode with the stash results menu on top of the
-  // stack — shows the map and d-pad in place of that menu and its bar,
-  // unless a client panel or server dialog took the overlay meanwhile (the
+  // stack — shows the map and d-pad in place of that menu and its bar (so
+  // the player can see where they'd travel and confirm with Enter; leaving
+  // X mode brings the menu back, and close_menu / hideOverlay clean up if
+  // they Enter to travel instead), unless a client panel or server dialog took the overlay meanwhile (the
   // monster list stays tappable in the preview; its panel must show).
   let overlayMode: 'none' | 'full' | 'float' = 'none'
   let touchHidden = false
@@ -784,7 +781,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     const playfield = overlayMode !== 'full' && !inXMode
     uiOverlay.style.display = overlayShown ? '' : 'none'
     mapView.element.style.display = overlayMode === 'full' && !stashPreview ? 'none' : ''
-    msgLog.style.display = playfield ? '' : 'none'
+    messageLog.element.style.display = playfield ? '' : 'none'
     // Hidden until the first `player` message (hudRevealed).
     hud.style.display = playfield && hudRevealed ? '' : 'none'
     touchControls.element.style.display = touchHidden && !stashPreview ? 'none' : ''
@@ -880,7 +877,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   })
 
   // Share chip for exportable fixed-width screens (screen-export.ts): the `%`
-  // overview and the end screen (the allowlist in showUiPush). A sibling of
+  // overview and the end screen (the allowlist in LayoutView.show). A sibling of
   // the overlay (not a child — enterOverlayLayout wipes uiOverlay.innerHTML
   // on every render), absolutely positioned over the map area, visible only
   // while an exportable screen is up, reachable regardless of how far the
@@ -890,7 +887,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   exportBtn.hidden = true
   exportBtn.setAttribute('aria-label', 'Share as image')
   exportBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>'
-  let exportSource: { runs: () => DcssRun[][]; slug: string } | null = null
+  let exportSource: ExportSource | null = null
   let exportBusy = false
   exportBtn.addEventListener('click', () => {
     const src = exportSource
@@ -915,10 +912,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // sidebar between HUD and spell rail.
   view.appendChild(monsterListView.element)
   view.appendChild(minimaps.sidebarSlot)
-  view.appendChild(msgLog)
-  view.appendChild(xdescStrip)
+  view.appendChild(messageLog.element)
+  view.appendChild(messageLog.xdescStrip)
   view.appendChild(spellRail.element)
-  view.appendChild(moreBtn)
+  view.appendChild(messageLog.moreButton)
   view.appendChild(hud)
   view.appendChild(numpad.element)
   view.appendChild(chatView.sheet)
@@ -1810,16 +1807,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (!spectating) minimaps.closeLens()
     inXMode = true
     view.classList.add('x-mode')  // drops the map's log-strip padding (style.css)
-    // Log and HUD hide. Stash-search activation opens an X-mode preview
-    // with the destination cursor: the results menu swaps out for the full
-    // map + d-pad so the player can see where they'd travel and confirm
-    // with Enter (see applyLayout); exitXMode brings the menu back, and
-    // close_menu / hideOverlay clean up if they Enter to travel instead.
-    applyLayout()
+    applyLayout()  // log and HUD hide; a stash preview swaps its menu out
     // The chip's overlay veto keys off uiOverlay's display — every toggle
     // of it needs a resync or the chip lags until the next chat event.
     chatView.syncChip()
-    messageLog.syncMore()  // a pending --more-- swaps to the floating button
+    messageLog.syncXMode()
     spellRail.render()  // drop the rail row (and the log's map overlay) for the examine map
     touchControls.enterXMode()
     minimaps.mountXSlot()  // first painted by scheduleFit's re-fit below
@@ -1842,10 +1834,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // vgrdc; a real exit's redraw then re-centers on the player.
     if (serverCenter && mapView.setViewCenter(serverCenter)) mapView.fullRender()
     view.classList.remove('x-mode')
-    messageLog.syncMore()  // a pending --more-- returns to the inline log row
-    messageLog.xdescReset()
+    messageLog.syncXMode()
     minimaps.unmountXSlot()
-    messageLog.resetXdescPeak()
     touchControls.exitXMode()
     mapView.setFontScale(1.0)
     scheduleFit()
@@ -2054,7 +2044,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     minimaps.closeLens({ suspend: true })
     chatView.hidePill()
     // Whatever renders next isn't (yet) exportable; the exportable show
-    // (showUiPush) re-sets this after it has laid content down.
+    // (LayoutView.show) re-sets this after it has laid content down.
     setExportSource(null)
     newgameFocus = null
     retireOverlay()

@@ -7,9 +7,8 @@
 // dcssToHtml first — called on the whole body in ONE pass, so the engine's
 // opens-only colour switches (formatted_string::to_colour_string; see the
 // propagateDarkgreyColor note in overlay-body.ts) persist across newlines, as
-// a terminal would have painted them. game-view.ts owns the trigger chip and
-// the exportable-screen allowlist (see the setExportSource site in
-// showUiPush).
+// a terminal would have painted them. game-view.ts owns the trigger chip;
+// the exportable-screen allowlist is LayoutView.show's (layout-view.ts).
 import { DCSS_COLOR_MAP } from '../game/dcss-colors'
 import { sharePack } from '../offline/save-transfer'
 

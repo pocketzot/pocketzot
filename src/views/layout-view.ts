@@ -51,12 +51,9 @@ export interface LayoutViewDeps {
 // body locally, the new position is debounced back to the server as
 // `formatted_scroller_scroll`, and server-pushed scrolls with
 // `from_webtiles=true` are skipped by the player (they're the server
-// echoing its own request) but followed by spectators.
-// `ui-scroller-scroll` messages are ignored entirely when the top popup
-// is a formatted-scroller — the server emits them with a
-// hardcoded `from_webtiles: false` (ui.cc:1501-1503 says "always false,
-// since we do not yet synchronize webtiles client-side scrolls"), so the
-// ui-state pair is the sole valid sync channel here.
+// echoing its own request) but followed by spectators. The ui-state pair
+// is the sole valid sync channel: `ui-scroller-scroll` is ignored while a
+// formatted-scroller is up (onScrollerScroll has why).
 //
 // We follow this model. Passing End/Home/PgUp/PgDn through as raw
 // keycodes doesn't work on phone widths because we wrap differently from
@@ -86,9 +83,10 @@ export class LayoutView {
   }
   private disposed = false
 
-  get scrollerActive(): boolean {
-    return this.d.topLayout()?.type === 'formatted-scroller'
-      && !!this.d.content().querySelector('.overlay-body')
+  // The showing formatted-scroller's body, if one is up.
+  private scrollerBody(): HTMLElement | null {
+    if (this.d.topLayout()?.type !== 'formatted-scroller') return null
+    return this.d.content().querySelector<HTMLElement>('.overlay-body')
   }
 
   show(msg: UiPushMsg): void {
@@ -319,14 +317,15 @@ export class LayoutView {
     if (scroll !== undefined && (!fromWebtiles || this.d.spectating)) this.scrollBody(scroll)
   }
 
-  onScrollerScroll(m: ScrollerScrollMsg): void {
+  private onScrollerScroll(m: ScrollerScrollMsg): void {
     // The reference client skips this entirely when the top popup is a
     // formatted-scroller (ui-layouts.js:1066-1073: "formatted scrollers
     // send their own synchronization messages"). The server emits these
     // with a hardcoded from_webtiles=false (ui.cc:1501-1503), so without
     // the popup-type guard we'd ricochet our own scroll position back
-    // through this channel.
-    if (this.scrollerActive) return
+    // through this channel. ui.cc:1501-1503: "always false, since we do not
+    // yet synchronize webtiles client-side scrolls".
+    if (this.scrollerBody()) return
     if (m.scroll !== undefined && (!m.from_webtiles || this.d.spectating)) this.scrollBody(m.scroll)
   }
 
@@ -338,7 +337,7 @@ export class LayoutView {
   //   "seed"         — seed-selection seed entry
   //   "pregenerate"  — seed-selection checkbox
   //   "btn-*"        — buttons; presence-only, no state to apply
-  onStateSync(m: UiStateSyncMsg): void {
+  private onStateSync(m: UiStateSyncMsg): void {
     if (m.from_webtiles && !this.d.spectating) return
     const overlay = this.d.content()
     if (m.widget_id === 'input') {
@@ -365,10 +364,9 @@ export class LayoutView {
   // The router's scroller layer: client-side scrolling of a formatted
   // scroller (see the class comment). True when it scrolled.
   scrollerNav(nav: NavKey | null, pageDir: -1 | 1 | null): boolean {
-    if (!this.scrollerActive) return false
-    const el = this.d.content().querySelector<HTMLElement>('.overlay-body')
+    const el = this.scrollerBody()
     if (!el) return false
-    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
+    const lineH = lineHeightOf(el)
     const page = Math.max(lineH, el.clientHeight - 2 * lineH)
     switch (nav) {
       case 'up': el.scrollTop -= lineH; return true
@@ -390,16 +388,14 @@ export class LayoutView {
 
   private flushScrollerSync(): void {
     this.scrollerSyncTimer = undefined
-    if (!this.scrollerActive) return
-    const el = this.d.content().querySelector<HTMLElement>('.overlay-body')
+    const el = this.scrollerBody()
     if (!el) return
     // Reference client: `Math.round(scrollTop / line_height)`. The value the
     // server stores is opaque to it (m_scroll is just a saved position; see
     // scroller.cc:166); a wrap-induced drift of a few rows on the server's
     // side is harmless because we never read it back — from_webtiles=true
     // skips the echo.
-    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
-    const line = Math.max(0, Math.round(el.scrollTop / lineH))
+    const line = Math.max(0, Math.round(el.scrollTop / lineHeightOf(el)))
     this.d.send({ msg: 'formatted_scroller_scroll', scroll: line })
   }
 
@@ -433,8 +429,7 @@ export class LayoutView {
       el.scrollTop = target.offsetTop - el.offsetTop
       return
     }
-    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 19
-    el.scrollTop = Math.round(line * lineH)
+    el.scrollTop = Math.round(line * lineHeightOf(el))
   }
 
   private actionsBar(actionsText: string): HTMLElement {
@@ -466,6 +461,8 @@ export class LayoutView {
     return bar
   }
 }
+
+const lineHeightOf = (el: HTMLElement): number => parseFloat(getComputedStyle(el).lineHeight) || 19
 
 // Map each ui-push variant's tile-bearing fields onto a uniform tile list
 // for the title icon. Returns undefined when the popup carries no tile.

@@ -1,14 +1,14 @@
-// Standalone full-screen overlay renderers, split out of game-view.ts:
-// seed-selection plus the msgwin-get-line input dialog, and the shared
+// Standalone overlay renderers: seed-selection (full screen) plus the
+// msgwin-get-line input dialog (a layered popup), and the shared
 // OverlayScreenCtx. The newgame-choice grid and newgame-random-combo
 // confirm live in newgame-view.ts, their wire types in newgame-model.ts
 // (spec: dev-material/newgame-redesign.md). Each screen owns one ui-push type
 // wholesale — none of them share the title/body/actions frame the
-// describe-*/menu overlays get from showUiPush. They build their DOM
-// into ctx.overlay (#ui-overlay) after ctx.enterLayout()/ctx.renderOverlay()
-// swaps the screen from map/HUD/log to overlay layout, and reach everything
-// stateful (WS sends, virtual keyboard, focus) through OverlayScreenCtx so
-// no game-view closure state leaks in here.
+// describe-*/menu overlays get from LayoutView.show. They build their DOM
+// into ctx.overlay (#ui-overlay) after ctx.enterLayout()/ctx.renderOverlay(),
+// or into the root ctx.enterPopup() returns, and reach everything stateful
+// (WS sends, virtual keyboard, focus) through OverlayScreenCtx so no
+// game-view closure state leaks in here.
 import type { ClientMsg } from '../ws/types'
 import type { TileLoader } from '../game/tiles/tile-loader'
 import { dcssToHtml } from '../game/dcss-colors'
@@ -121,8 +121,8 @@ export interface OverlayScreenCtx {
 // use the in-log init_input path, and G's branch picker is a tag:"travel"
 // menu. The server drives the field via
 // ui-state-sync (widget_id "input") and we echo each edit back, so
-// generation_id must match. game-view's ui-state-sync handler finds the
-// field by its .input-dialog-field class.
+// generation_id must match. LayoutView.onStateSync finds the field by its
+// .input-dialog-field class.
 export function showInputDialog(ctx: OverlayScreenCtx, msg: UiPushMsg): void {
   const genId = msg.generation_id
   // Touch controls stay visible (enterLayout default) — the kbd-overlay is a
