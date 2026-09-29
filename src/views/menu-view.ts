@@ -158,11 +158,14 @@ export class MenuView {
     this.updateFooter()
   }
 
-  // Callers must only capture while the DOM list belongs to the active menu.
-  // The one path where they diverge is close_menu — the active menu is
-  // reassigned to the outer menu while the popped inner one is still in the
-  // DOM — which show sidesteps by skipping capture when re-showing the
-  // active menu itself (the covering overlay there is never a menu list).
+  // Callers must only capture while the DOM list belongs to the active menu:
+  // on a push (a new frame about to cover it) or a cutoff change, never on a
+  // repaint. After close_menu the active menu is already the outer one while
+  // the popped inner menu's list is still in the DOM, so a capture in the
+  // repaint that follows would save the inner menu's offset under the outer
+  // menu (a menu closing above a describe layout reopened the inventory
+  // beneath at the top). show sidesteps it by skipping capture when
+  // re-showing the active menu itself.
   captureScroll(): void {
     const el = this.listEl()
     const active = this.model.active

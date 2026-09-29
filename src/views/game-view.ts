@@ -1549,6 +1549,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // minimap lens; clear/close so subsequent map updates don't rewrite
     // the overlay body or repaint a stale lens.
     closeClientOverlays()
+    menuView.captureScroll()
     popups.pushUi(msg)
     showUiPush(msg)
   }
@@ -1844,7 +1845,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // --- ui-push handler ---
 
   function showUiPush(msg: UiPushMsg): void {
-    menuView.captureScroll()
     // Standalone screens (game-overlays.ts) own their ui-push type wholesale;
     // everything after this block shares the title/body/actions frame below.
     if (msg.type === 'newgame-choice') {
@@ -1879,6 +1879,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   function showTxtPage(text: string): void {
     const synthetic: UiPushMsg = { type: 'txt-page', text }
+    menuView.captureScroll()
     popups.pushUi(synthetic)
     showUiPush(synthetic)
   }

@@ -1688,6 +1688,23 @@ describe('menu handler', () => {
     expect(overlay(h).querySelector<HTMLElement>('.overlay-list')!.scrollTop).toBe(77)
   })
 
+  it('a menu closing above a layout leaves the menu under the layout at its scroll', () => {
+    const h = setup()
+    h.dispatch({ msg: 'menu', tag: 'inventory', title: { text: 'Inventory' }, items: [
+      { level: 2, text: 'a - a +0 short sword', hotkeys: [97] },
+    ] })
+    overlay(h).querySelector<HTMLElement>('.overlay-list')!.scrollTop = 120
+    h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'a buckler', body: 'A small shield.' })
+    h.dispatch({ msg: 'menu', tag: 'macro_mapping', title: { text: 'Which one?' }, items: [
+      { level: 2, text: 'x - this one', hotkeys: [120] },
+    ] })
+    // The repaint of the describe layout must not save this menu's offset
+    // under the inventory.
+    h.dispatch({ msg: 'close_menu' })
+    h.dispatch({ msg: 'ui-pop' })
+    expect(overlay(h).querySelector<HTMLElement>('.overlay-list')!.scrollTop).toBe(120)
+  })
+
   it('update_menu_items patches the chunk in place, leaving items outside it intact', () => {
     const h = setup()
     h.dispatch({ msg: 'menu', tag: 'inventory', title: { text: 'Inventory' }, items: [
