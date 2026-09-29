@@ -85,9 +85,6 @@ export {
   CK_CTRL_BKSP,
 }
 
-// Export for keyboard overlay
-export { CAPTURED_CTRL }
-
 // F-key wire codes are sequential from F1 = -265 (cio.h; see CODE_CONV
 // below). Shared with the control-set special-key table.
 export function fnKeycode(n: number): number {
@@ -232,6 +229,23 @@ const CAPTURED_CTRL = new Set([
   '1','2','3','4','5','6','7','8','9','0',
 ])
 
+// Ctrl + a typed character: crawl's control code for a captured key, else
+// nothing. Upstream's captured_control_keys (static/scripts/
+// key_conversion.js) is the same set, so the official client can't send
+// the others either — and must not: ^Z is CMD_SUSPEND_GAME, kill(0,
+// SIGTSTP) on non-local builds (main.cc:2445).
+function ctrlCharMsg(ch: string): ClientMsg | null {
+  const upper = ch.toUpperCase()
+  return CAPTURED_CTRL.has(upper) ? { msg: 'key', keycode: ctrlKeycode(upper) } : null
+}
+
+// A character typed on the touch strip or the on-screen keyboard, under its
+// armed Ctrl, by the physical keyboard's rule (keyToMsg): null for a Ctrl
+// combo crawl doesn't capture. `ch` is already shifted by the caller.
+export function typedCharToMsg(ch: string, ctrl: boolean): ClientMsg | null {
+  return ctrl ? ctrlCharMsg(ch) : { msg: 'input', text: ch }
+}
+
 // The wire message a physical key means, or null for a key with none (browser
 // shortcuts, bare modifiers, uncaptured Ctrl keys). Pure: the caller decides
 // whether the key is consumed (see handleKeydown and the game view's router).
@@ -250,8 +264,8 @@ export function keyToMsg(e: KeyboardEvent): ClientMsg | null {
 
   // Ctrl+letter → control character
   if (ctrlKey && !shiftKey) {
-    const upper = e.key.toUpperCase()
-    if (CAPTURED_CTRL.has(upper)) return { msg: 'key', keycode: ctrlKeycode(upper) }
+    const msg = ctrlCharMsg(e.key)
+    if (msg) return msg
   }
 
   // Modifier + navigation key

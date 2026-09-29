@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { handleKeydown } from './keyboard'
+import { handleKeydown, typedCharToMsg } from './keyboard'
 import type { ClientMsg } from '../../ws/types'
 
 // Constructs a duck-typed KeyboardEvent — avoids the jsdom dep for these
@@ -94,6 +94,18 @@ describe('handleKeydown — Ctrl+letter as control characters', () => {
     const send = vi.fn<(msg: ClientMsg) => void>()
     handleKeydown(makeEvent({ key: 'z', ctrlKey: true }), send)
     expect(send).not.toHaveBeenCalled()
+  })
+})
+
+// The touch surfaces' characters follow the physical keyboard's Ctrl rule.
+describe('typedCharToMsg', () => {
+  it('sends a character as typed, and Ctrl + a captured key as its control code', () => {
+    expect(typedCharToMsg('q', false)).toEqual({ msg: 'input', text: 'q' })
+    expect(typedCharToMsg('f', true)).toEqual({ msg: 'key', keycode: 6 })
+  })
+
+  it('sends nothing for Ctrl + a key crawl does not capture (r, v, z)', () => {
+    for (const ch of ['r', 'v', 'z']) expect(typedCharToMsg(ch, true)).toBeNull()
   })
 })
 

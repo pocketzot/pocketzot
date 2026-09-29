@@ -537,6 +537,21 @@ describe('strip with a text field showing', () => {
     expect(sent).toHaveLength(2)
   })
 
+  it('Ctrl on our keyboard and the strip sends a captured key’s code and nothing for r/v/z', () => {
+    const { tc, sent } = setup()
+    const kbdKey = (label: string) =>
+      [...tc.element.querySelectorAll<HTMLElement>('#kbd-overlay .kbd-key')].find(b => b.textContent === label)!
+    tc.openKbd()
+    kbdKey('⌃').click(); kbdKey('r').click()
+    kbdKey('⌃').click(); kbdKey('f').click()
+    tc.closeKbd()
+    const slot = (label: string) => tabButtons(tc.element).find(b => b.textContent === label)!
+    const ctrl = tc.element.querySelector<HTMLElement>('.tc-ctrl')!
+    ctrl.click(); slot('v').click()
+    ctrl.click(); slot('f').click()
+    expect(sent).toEqual([{ msg: 'key', keycode: 6 }, { msg: 'key', keycode: 6 }])
+  })
+
   it('our keyboard types with inputmode none, and closing it hands the field back', () => {
     const { tc } = setup()
     const { input } = field('game-text-input')

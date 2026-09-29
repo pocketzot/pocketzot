@@ -4,19 +4,12 @@
 // strip (touch.ts) mounts it and supplies the tap binding.
 
 import type { ClientMsg } from '../../ws/types'
-import { CK_CTRL_BKSP, CAPTURED_CTRL, ctrlKeycode } from './keyboard'
+import { CK_CTRL_BKSP, typedCharToMsg } from './keyboard'
 import { createShiftToggle } from './shift-state'
 
-type SendFn = (msg: ClientMsg) => void
+import type { BindTap } from './touch'
 
-// Binds one control's engagement (see bindTap in buildTouchControls).
-// `repeat` opts a control into hold-to-repeat on the touch path. `onHold`
-// runs once at the hold threshold, before any repeat starts: returning true
-// claims the hold (no repeat interval follows), false falls through to
-// `repeat`. The d-pad's run-on-hold lives behind it.
-export type BindTap = (
-  btn: HTMLElement, fire: () => void, opts?: { repeat?: boolean; onHold?: () => boolean },
-) => void
+type SendFn = (msg: ClientMsg) => void
 
 // The text field on screen, if any. Not a field in the inert copy of a
 // covered frame (game-view frameDom).
@@ -140,19 +133,9 @@ export function buildKeyboardOverlay(
       clearOneshot()
       return
     }
-    if (shiftOn) {
-      const out = shifted !== undefined ? shifted : ch.toUpperCase()
-      send({ msg: 'input', text: out })
-    } else if (ctrlActive) {
-      const upper = ch.toUpperCase()
-      if (CAPTURED_CTRL.has(upper)) {
-        send({ msg: 'key', keycode: ctrlKeycode(upper) })
-      } else {
-        send({ msg: 'input', text: ch })
-      }
-    } else {
-      send({ msg: 'input', text: ch })
-    }
+    const out = shiftOn ? (shifted !== undefined ? shifted : ch.toUpperCase()) : ch
+    const msg = typedCharToMsg(out, ctrlActive)
+    if (msg) send(msg)
     clearOneshot()
   }
 

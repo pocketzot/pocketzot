@@ -6,12 +6,10 @@ import {
   CK_SHIFT_HOME, CK_SHIFT_END, CK_SHIFT_PGUP, CK_SHIFT_PGDN,
   CK_CTRL_UP, CK_CTRL_DOWN, CK_CTRL_LEFT, CK_CTRL_RIGHT,
   CK_CTRL_HOME, CK_CTRL_END, CK_CTRL_PGUP, CK_CTRL_PGDN,
-  CAPTURED_CTRL, ctrlKeycode,
+  typedCharToMsg,
 } from './keyboard'
 import { createShiftToggle } from './shift-state'
-import {
-  activeTextInput, buildKeyboardOverlay, dispatchSpecialToInput, type BindTap,
-} from './virtual-keyboard'
+import { activeTextInput, buildKeyboardOverlay, dispatchSpecialToInput } from './virtual-keyboard'
 import { LONG_PRESS_MS } from './map-tap'
 import {
   CONTROLS_CHANGED_EVENT, GRID_ROWS, getActiveControlSet, slotLabel, slotTitle,
@@ -36,6 +34,16 @@ export const ENABLE_SPELL_TAB = false
 type DpadDef =
   | { label: string; plain: number; shifted: number; ctrled: number }
   | { label: string; text: string }
+
+// Binds one control's engagement (see bindTap in buildTouchControls; the
+// on-screen keyboard takes it too). `repeat` opts a control into
+// hold-to-repeat on the touch path. `onHold` runs once at the hold
+// threshold, before any repeat starts: returning true claims the hold (no
+// repeat interval follows), false falls through to `repeat`. The d-pad's
+// run-on-hold lives behind it.
+export type BindTap = (
+  btn: HTMLElement, fire: () => void, opts?: { repeat?: boolean; onHold?: () => boolean },
+) => void
 
 // Press feedback for controls that fire on a preventDefault()ed touchstart.
 // CSS :active alone is not enough there: WebKit sets :active from the touch
@@ -307,15 +315,10 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
     if (def.text !== undefined) {
       let text = def.text
       if (shift.isOn && text.length === 1) text = text.toUpperCase()
-      if (ctrlActive && text.length === 1) {
-        const upper = text.toUpperCase()
-        if (CAPTURED_CTRL.has(upper)) {
-          send({ msg: 'key', keycode: ctrlKeycode(upper) })
-          clearOneshot()
-          return
-        }
-      }
-      send({ msg: 'input', text })
+      // Modifiers apply to a single key; a multi-character slot is a macro
+      // sent as typed.
+      const msg: ClientMsg | null = text.length === 1 ? typedCharToMsg(text, ctrlActive) : { msg: 'input', text }
+      if (msg) send(msg)
     } else if (def.key !== undefined) {
       send({ msg: 'key', keycode: def.key })
     }
