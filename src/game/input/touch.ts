@@ -211,9 +211,9 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
   // alone fixed the observed bug. Don't re-add one without an observed
   // adjustment-path phantom.
   //
-  // The menu-ctrl bar, numpad, and prompt-row buttons (game-view.ts) share
-  // the raw touchstart+click pattern and the same scrollable-content-above-
-  // buttons geometry, but are deliberately unguarded: no phantom has been
+  // The menu-ctrl bar and numpad buttons (menu-bar.ts, numpad-input.ts)
+  // share the raw touchstart+click pattern and the same scrollable-content-
+  // above-buttons geometry, but are deliberately unguarded: no phantom has been
   // observed there, and the guard is a behavior change we don't apply on
   // speculation. If one shows up, lift this into a shared module — those call
   // sites need an onMouseClick hook for their mouse-only focusView().

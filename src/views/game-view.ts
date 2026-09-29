@@ -12,7 +12,7 @@ import { MonsterListView } from '../game/hud/monster-list'
 import { MonsterPanelView } from '../game/hud/monster-panel'
 import { MinimapHosts } from './minimap-hosts'
 import { InventoryStore } from '../game/inventory-store'
-import { buildTouchControls, bindPressedClass } from '../game/input/touch'
+import { buildTouchControls } from '../game/input/touch'
 import type { TouchControls } from '../game/input/touch'
 import { openSettings } from './settings-view'
 import { isOverlayOpen, closeTopOverlay } from './overlay'
@@ -23,7 +23,7 @@ import { attachMapGestures, canDescribe, canHover, canOpenLevelMap } from '../ga
 import { attachCornerSwipe } from '../game/input/corner-swipe'
 import { MapJumper, clampToBox } from '../game/input/map-jump'
 import { cursorInView, keepLocalCenter } from '../game/input/map-pan'
-import { escHtml, dcssToHtml } from '../game/dcss-colors'
+import { escHtml } from '../game/dcss-colors'
 import { exportScreenPng, type DcssRun } from './screen-export'
 import { extractSkillHotkeys } from './skill-hotkeys'
 import { reflowSkillCrt, plainText } from './skill-reflow'
@@ -44,6 +44,7 @@ import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_
 import { stripDcss } from './overlay-body'
 import { SpellHarvester, type SpellEntry } from '../game/spell-harvest'
 import { SpellRail } from './spell-rail'
+import { NumpadInput } from './numpad-input'
 import { ChatView } from './chat-view'
 import {
   showInputDialog, showSeedSelection,
@@ -749,9 +750,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   const moreBtn = messageLog.moreButton
 
-  // The d-pad calls this send directly (it doesn't dispatch a keydown), so
-  // the menu-nav redirect has to happen here too — otherwise phone users get
-  // the raw-arrow / dead-keypress behaviour the keyboard path now avoids.
+  const numpad = new NumpadInput({ send: (m) => conn.send(m), focusView })
+
   // Post-dispatch hook for outbound user keystrokes (from touch and physical
   // keyboard). X-mode 'R' (CMD_MAP_EXCLUDE_RADIUS, viewmap.cc) blocks
   // on getchm() for one digit char with no `init_input` / `text_cursor` to
@@ -763,14 +763,13 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // (typically a digit / nav key from the physical keyboard) has just
   // resolved the server's getchm() — close the now-stale numpad. Without
   // this, kbd users see a phantom numpad after pressing R+digit on hardware.
-  let radiusNumpadActive = false
   function afterUserSend(msg: ClientMsg): void {
-    if (radiusNumpadActive) {
-      removeNumpadInput()
+    if (numpad.closesAfterDigit) {
+      numpad.remove()
       return
     }
     if (inXMode && msg.msg === 'input' && msg.text === 'R') {
-      showNumpadInput('Exclusion radius (0–9):', { closeAfterDigit: true })
+      numpad.show('Exclusion radius (0–9):', { closeAfterDigit: true })
     }
   }
 
@@ -963,10 +962,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     exportBtn.hidden = !src
   }
 
-  const numpadInput = document.createElement('div')
-  numpadInput.id = 'numpad-input'
-  numpadInput.style.display = 'none'
-
   view.appendChild(uiOverlay)
   view.appendChild(mapWrap)
   // Direct grid child (not inside #map-wrap) so each orientation can place
@@ -980,7 +975,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   view.appendChild(spellRail.element)
   view.appendChild(moreBtn)
   view.appendChild(hud)
-  view.appendChild(numpadInput)
+  view.appendChild(numpad.element)
   view.appendChild(chatView.sheet)
   view.appendChild(chatView.pill)
   if (spectating) {
@@ -1760,10 +1755,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       messageLog.showTextInput(msg.prefill ?? '', msg.maxlen ?? 99, msg.tag)
     } else if (msg.type === 'generic' && msg.tag === 'skill_target') {
       // `type:"generic"` fires only for prompts inside a CRT menu, and
-      // the only such prompt in DCSS 0.34 is the skill target editor.
-      // The numpad sends each keystroke directly to the server, whose
-      // line_reader echoes it into the highlighted target cell.
-      showNumpadInput(msg.prompt ?? '')
+      // the only such prompt in DCSS 0.34 is the skill target editor
+      // (NumpadInput: the server echoes each key into the target cell).
+      numpad.show(msg.prompt ?? '')
     }
     // Other `type:"generic"` tags are dropped — none are known to fire
     // in normal play. `type:"seed-selection"` uses ui-state-sync widgets,
@@ -1794,7 +1788,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   function onCloseInput(): void {
     if (menuView.filterOpen) return
     messageLog.removeTextInput()
-    removeNumpadInput()
+    numpad.remove()
     if (exitedXModeForInput) { exitedXModeForInput = false; enterXMode() }
   }
 
@@ -2098,7 +2092,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     return commandChannelIdle()
       && !monsterPanelOpen && !minimaps.lensOpen
       && !messageLog.textInputOpen
-      && numpadInput.style.display === 'none'
+      && !numpad.isOpen
   }
 
   // --- Monster panel (client-side overlay) ---
@@ -2327,95 +2321,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       fitNow()
       focusView()
     })
-  }
-
-  function removeNumpadInput(): void {
-    if (numpadInput.style.display === 'none') return
-    numpadInput.style.display = 'none'
-    numpadInput.innerHTML = ''
-    radiusNumpadActive = false
-  }
-
-  // On-screen numpad for numeric `init_input` prompts (e.g. skill targets).
-  // Each digit/dot tap sends a printable keystroke to the server, which
-  // echoes back via `txt` directly into the highlighted cell — no local
-  // input buffer needed. The server's line_reader sits in OVERWRITE mode
-  // with the prefill selected, so the first keypress replaces it.
-  //
-  // `closeAfterDigit` mode services X-mode 'R' (exclusion radius), where
-  // the server's getchm() reads exactly one digit and resumes immediately.
-  // No prompt is sent for this — we open it client-side after seeing the
-  // outbound 'R' (see afterUserSend).
-  function showNumpadInput(prompt: string, opts?: { closeAfterDigit?: boolean }): void {
-    removeNumpadInput()
-    numpadInput.style.display = ''
-    radiusNumpadActive = opts?.closeAfterDigit ?? false
-
-    if (prompt) {
-      const header = document.createElement('div')
-      header.className = 'numpad-prompt'
-      header.innerHTML = dcssToHtml(prompt)
-      numpadInput.appendChild(header)
-    }
-
-    const grid = document.createElement('div')
-    grid.className = 'numpad-grid'
-
-    // When radiusNumpadActive, the server is blocked in a getchm()
-    // (CMD_MAP_EXCLUDE_RADIUS, viewmap.cc:1101) reading exactly one keystroke.
-    // Whatever we send is computed as `key - '0'` and passed to set_exclude();
-    // for any non-digit key the resulting negative radius is visibly
-    // equivalent to 0 (single cell), because add_exclude_points'
-    // radius_iterator gives up for r < 1 while the root cell still gets
-    // PD_EXCLUDED. So we just close on any tap and dispatch the button's
-    // native message — matches upstream wire behavior exactly.
-    function sendChar(ch: string): void {
-      conn.send({ msg: 'input', text: ch })
-      if (radiusNumpadActive) removeNumpadInput()
-    }
-    function sendKey(keycode: number): void {
-      conn.send({ msg: 'key', keycode })
-      if (radiusNumpadActive) removeNumpadInput()
-    }
-
-    type Btn = { label: string; kind: 'digit' | 'action' | 'primary'; onTap: () => void }
-    // iPhone Numbers-style layout: 7-8-9 across the top, action keys in the
-    // right column. Enter spans two rows at the bottom-right (matches the
-    // tall return key on iOS); digits/`.`/`−` live on the "key" tier, action
-    // keys (⌫, ⎋, ⏎) on a recessed darker tier.
-    const btns: Btn[] = [
-      { label: '7', kind: 'digit', onTap: () => sendChar('7') },
-      { label: '8', kind: 'digit', onTap: () => sendChar('8') },
-      { label: '9', kind: 'digit', onTap: () => sendChar('9') },
-      { label: '⌫', kind: 'action', onTap: () => sendKey(8) },
-      { label: '4', kind: 'digit', onTap: () => sendChar('4') },
-      { label: '5', kind: 'digit', onTap: () => sendChar('5') },
-      { label: '6', kind: 'digit', onTap: () => sendChar('6') },
-      { label: '⎋', kind: 'action', onTap: () => sendKey(27) },
-      { label: '1', kind: 'digit', onTap: () => sendChar('1') },
-      { label: '2', kind: 'digit', onTap: () => sendChar('2') },
-      { label: '3', kind: 'digit', onTap: () => sendChar('3') },
-      { label: '⏎', kind: 'primary', onTap: () => sendKey(13) },
-      { label: '−', kind: 'digit', onTap: () => sendChar('-') },
-      { label: '0', kind: 'digit', onTap: () => sendChar('0') },
-      { label: '.', kind: 'digit', onTap: () => sendChar('.') },
-    ]
-    for (const b of btns) {
-      const btn = document.createElement('button')
-      btn.className = `numpad-btn numpad-${b.kind}`
-      btn.textContent = b.label
-      btn.addEventListener('click', () => {
-        b.onTap()
-        focusView()
-      })
-      btn.addEventListener('touchstart', (e) => {
-        e.preventDefault()
-        b.onTap()
-      }, { passive: false })
-      bindPressedClass(btn)
-      grid.appendChild(btn)
-    }
-    numpadInput.appendChild(grid)
   }
 
   // Everything this view installed outside its own subtree. Idempotent: the
