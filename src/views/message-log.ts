@@ -214,6 +214,12 @@ export class MessageLog {
     else if (this.more) this.syncMore()  // reattach as the bottom row
   }
 
+  // `msgs` stays with the game view, which follows it with a spell
+  // re-harvest.
+  readonly handlers: Handlers = {
+    dump: (m) => this.onDump(m),
+  }
+
   // Mid-game '#' dump announcement. Offline the mini-server sends the
   // stem; the engine's own "Char dumped to '<path>'." line follows in
   // the same flush (verified: the starred dump precedes the msgs
@@ -222,12 +228,6 @@ export class MessageLog {
   // decorate the log line the same way, but order-tolerantly — if the line
   // already landed as the newest row, link it in place; else arm for a
   // coming flush.
-  // `msgs` stays with the game view, which follows it with a spell
-  // re-harvest.
-  readonly handlers: Handlers = {
-    dump: (m) => this.onDump(m),
-  }
-
   onDump(msg: { filename?: string; url?: string }): void {
     if (msg.filename && this.d.readMorgue) this.pendingDumpFile = msg.filename
     else if (msg.url) {

@@ -3020,3 +3020,35 @@ describe('game_ending: the offline flush-time outcome', () => {
     expect(deadEach()).toHaveLength(0)
   })
 })
+
+// The handler table's module-owned entries that no golden capture carries:
+// each must reach its view through the whole game view.
+describe('messages routed to the views that own them', () => {
+  it('chat, update_spectators and super_hide_chat reach the chat view', () => {
+    const h = setup()
+    h.dispatch({ msg: 'update_spectators', count: 1, names: 'spec_one' })
+    expect(h.view.querySelector('.chat-names')?.textContent).toBe('◉ spec_one')
+    h.dispatch({ msg: 'chat', content: "<span class='chat_sender'>spec_one</span>: <span class='chat_msg'>hello</span>" })
+    expect(h.view.querySelector('.chat-history')?.textContent).toContain('hello')
+    h.dispatch({ msg: 'super_hide_chat' })
+    expect(isHidden(h.view.querySelector<HTMLElement>('#chat-chip')!)).toBe(true)
+  })
+
+  it('options reach the stats view (stat_colour thresholds)', () => {
+    const h = setup()
+    h.dispatch({ msg: 'player', str: 8, str_max: 8, int: 8, int_max: 8, dex: 8, dex_max: 8 })
+    const str = () => h.view.querySelector<HTMLElement>('#hud-str')!
+    expect(str().style.color).toBe('')
+    h.dispatch({ msg: 'options', options: { stat_colour: [{ value: 10, colour: 'red' }] } })
+    expect(str().style.color).not.toBe('')
+  })
+
+  it('ui-scroller-scroll reaches the layout view', () => {
+    const h = setup()
+    h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'a wand of flame', body: 'A magical device.' })
+    const body = overlay(h).querySelector<HTMLElement>('.overlay-body')!
+    Object.defineProperty(body, 'scrollHeight', { value: 500 })
+    h.dispatch({ msg: 'ui-scroller-scroll', scroll: 2147483647 })
+    expect(body.scrollTop).toBe(500)
+  })
+})

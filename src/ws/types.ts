@@ -229,9 +229,11 @@ export type ServerMsg =
 // may carry more). MenuMsg and UiPushMsg are documented where they're
 // parsed (game/menu-model.ts, views/game-overlays.ts).
 
-// Two shapes share the name: a CRT screen's rows (`id` + `lines`, an
-// object keyed by row number; `clear` marks a forced redraw that omits
-// blank rows, tileweb-text.cc:177) and a one-off text page (`text`).
+// A CRT screen's rows: `id` + `lines`, an object keyed by row number;
+// `clear` marks a forced redraw that omits blank rows (tileweb-text.cc:177,
+// the only emitter; reference text.js handle_text_update). `text` has no
+// emitter in trunk or 0.34.1 — the game view's text-page fallback for it
+// dates from the first client.
 export interface TxtMsg {
   id?: string | number
   lines?: Record<string, string>
