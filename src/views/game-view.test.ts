@@ -791,9 +791,9 @@ describe('overlay-stack cross-reads', () => {
     expect(actionsText()).toContain('details')
   })
 
-  it('a txt page (no id) shows until close_all_menus', () => {
+  it('a text page (ui-state text, no layout open) shows until close_all_menus', () => {
     const h = setup()
-    h.dispatch({ msg: 'txt', text: 'line one\nline two' })
+    h.dispatch({ msg: 'ui-state', type: 'formatted-scroller', text: 'line one\nline two' })
     expect(isHidden(overlay(h))).toBe(false)
     h.dispatch({ msg: 'close_all_menus' })
     expect(isHidden(overlay(h))).toBe(true)

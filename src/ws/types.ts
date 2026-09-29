@@ -230,15 +230,14 @@ export type ServerMsg =
 // parsed (game/menu-model.ts, views/game-overlays.ts).
 
 // A CRT screen's rows: `id` + `lines`, an object keyed by row number;
-// `clear` marks a forced redraw that omits blank rows (tileweb-text.cc:177,
-// the only emitter; reference text.js handle_text_update). `text` has no
-// emitter in trunk or 0.34.1 — the game view's text-page fallback for it
-// dates from the first client.
+// `clear` marks a forced redraw that omits blank rows. WebTextArea::send
+// (tileweb-text.cc:177) is the only emitter and writes no other field,
+// in 0.24.0 as in trunk; reference text.js handle_text_update reads the
+// same three.
 export interface TxtMsg {
   id?: string | number
   lines?: Record<string, string>
   clear?: boolean
-  text?: string
 }
 
 export interface UpdateMenuMsg {

@@ -1610,18 +1610,14 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   }
 
   function onTxt(msg: MsgOf<'txt'>): void {
-    // Renders a CRT screen / txt page / message — visible content, so the
-    // old-version creation guard's "nothing rendered" case can't apply
-    // (0.23 char creation arrives as a CRT text screen, driveable from
-    // the virtual keyboard).
+    // Renders a CRT screen's rows — visible content, so the old-version
+    // creation guard's "nothing rendered" case can't apply (0.23 char
+    // creation arrives as a CRT text screen, driveable from the virtual
+    // keyboard).
     disarmCreationGuard()
     const lines = msg.lines
     if (msg.id && lines && typeof lines === 'object' && !Array.isArray(lines)) {
       updateCrtLines(lines, msg.clear === true)
-    } else {
-      const text = String(msg.text ?? '')
-      if (text.includes('\n')) showTxtPage(text)
-      else messageLog.append(text)
     }
   }
 
