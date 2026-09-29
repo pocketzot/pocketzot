@@ -143,10 +143,14 @@
   --z-numpad: 40;       /* on-screen numpad over the touch strip */
   --z-exit-dialog: 50;  /* lobby post-game dialog */
   --z-crypt: 60;        /* the crypt shell (mountCryptShell): crypt, offline Past games and its morgue, card gallery */
-  --z-reconnect: 70;    /* auto-resume card over the frozen game view */
   --z-game-panel: 200;  /* virtual keyboard, size palette: panels over the live game */
   --z-settings: 210;    /* over the keyboard: the HUD ⚙ stays tappable while the keyboard is open */
   --z-doc: 220;         /* leaf modals, nothing opens on them — docs, RC editor, crypt card; over settings, whose Help opens docs */
+  /* Auto-resume card: over every layer a socket drop can catch open — its
+     force-terminate question needs an answer. Its backdrop blocks every
+     opener, so nothing mounts above it. At 70 (under the 200s) it hid
+     behind in-game settings (screenshot-verified 2026-09-29). */
+  --z-reconnect: 230;
   --z-status-strip: 1000; /* status-blur.ts strip */
   touch-action: manipulation;
 }
@@ -5271,8 +5275,7 @@ html.map-hold, html.map-hold * {
 
 /* ── Reconnect overlay (src/reconnect.ts) ───────────── */
 /* Floats over the frozen game view while auto-resume replays login + play
-   after an unexpected socket drop (iOS app-swap). Above the doc modal —
-   nothing should obscure connection status. */
+   after an unexpected socket drop (iOS app-swap). */
 .reconnect-backdrop {
   position: fixed;
   inset: 0;
