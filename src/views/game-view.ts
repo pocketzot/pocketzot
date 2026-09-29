@@ -1342,8 +1342,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       close_input: onCloseInput,
       close_menu: onCloseMenu,
       close_all_menus: onCloseAllMenus,
-      go_lobby: onLeave,
-      close: onLeave,
+      go_lobby: () => exitToLobby(),
+      close: () => exitToLobby(),
       game_ending: (msg) => record.recordEnding(msg.reason, msg.message),
       game_ended: onGameEnded,
     },
@@ -1767,13 +1767,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (!gameOverSeen) hideOverlay()
   }
 
-  // go_lobby / close. Also re-arms the once-per-game auto-harvest and
-  // drops any pending re-harvest so neither carries into the next game.
-  function onLeave(): void {
-    harvester.resetForNewGame()
-    exitToLobby()
-  }
-
   function onGameEnded(msg: MsgOf<'game_ended'>): void {
     record.recordEnding(msg.reason, msg.message, msg.dump)
     // Forward exit details so the lobby renders the exit dialog after the
@@ -2186,6 +2179,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     layoutView.dispose()
     cancelTileGesture()
     advisory.disarm()
+    // Its give-up timer would otherwise repaint this view's spell surfaces.
+    harvester.reset()
   }
   registerViewDispose(view, dispose)
   return view

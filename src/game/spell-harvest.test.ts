@@ -197,19 +197,6 @@ describe('timing ladder (base → late-base → give-up)', () => {
     expect(sentI()).toBe(4)
   })
 
-  it('go_lobby re-arms the retry for the next game', () => {
-    const { h, sentI } = makeHarvester()
-    h.harvest()
-    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
-    h.retryOnCommandEntry()
-    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)  // retry spent
-    h.resetForNewGame()
-    h.harvest()
-    vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
-    h.retryOnCommandEntry()
-    expect(sentI()).toBe(4)
-  })
-
   it('reset() disarms the pending timers so a torn-down probe cannot fire later', () => {
     const { h, changed } = makeHarvester()
     h.setSpells([{ letter: 'a', title: 'Freeze', tile: 42 }])
@@ -266,16 +253,13 @@ describe('no-spells terminator and dirty tracking (onMsgLine)', () => {
 })
 
 describe('auto-harvest and spectating', () => {
-  it('auto-harvests once per game; resetForNewGame re-arms it', () => {
+  it('auto-harvests once per game', () => {
     const { h, sentI } = makeHarvester()
     h.maybeAutoHarvest()
     expect(sentI()).toBe(1)
     h.onMenu('spell', DESCRIBE_TITLE, [row('a', 'Freeze')])
     h.maybeAutoHarvest()        // later COMMAND transitions: no re-probe
     expect(sentI()).toBe(1)
-    h.resetForNewGame()
-    h.maybeAutoHarvest()
-    expect(sentI()).toBe(2)
   })
 
   it('spectators never probe, and dirty flags are dropped rather than acted on', () => {

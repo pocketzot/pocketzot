@@ -76,7 +76,7 @@ export class SpellHarvester {
   // stack — is swallowed instead of popping/clearing real overlay state.
   private pendingClose = false
   // Auto-harvest fires once per game (so the rail is populated without the
-  // player opening the tray); re-armed by resetForNewGame on go_lobby.
+  // player opening the tray). One harvester per game view, so per game.
   private autoHarvested = false
   // Set when the letter→spell map changes (memorise / forget / `=`
   // reassign) so the rail isn't left mapping a stale letter — which would
@@ -85,7 +85,7 @@ export class SpellHarvester {
   private dirty = false
   // The give-up's one retry (armTimeout). `retryPending` waits for
   // retryOnCommandEntry; `retried` spends the retry until any reply
-  // (capture or no-spells terminator) or go_lobby re-arms it. A retry cut
+  // (capture or no-spells terminator) re-arms it. A retry cut
   // short by an abort (foreign menu, close_all_menus) stays
   // spent: re-arming there could loop. Never retry unbounded — each probe
   // costs the player 1.5s of suppressed input, so a failure that repeats
@@ -141,7 +141,7 @@ export class SpellHarvester {
   // path routes through here so the timer/phase/latch lifecycle lives in
   // one place: the successful menu capture (which re-latches pendingClose
   // right after), the foreign-menu abort, the no-spells terminator, and the
-  // full-state teardowns (close_all_menus, go_lobby). The
+  // full-state teardowns (close_all_menus, the game view's dispose). The
   // teardown calls are what keep a bulk menu close or game transition
   // mid-harvest from leaving input suppressed (phase stuck) or pendingClose
   // latched — the latter would otherwise swallow the NEXT genuine
@@ -150,16 +150,6 @@ export class SpellHarvester {
     clearTimeout(this.timer)
     this.phase = 'idle'
     this.pendingClose = false
-  }
-
-  // go_lobby teardown: also re-arm the once-per-game auto-harvest and drop
-  // any pending re-harvest, so neither carries into the next game.
-  resetForNewGame(): void {
-    this.reset()
-    this.autoHarvested = false
-    this.dirty = false
-    this.retryPending = false
-    this.retried = false
   }
 
   // Fire a silent `I` to (re)populate the cache. Only from a clean game
