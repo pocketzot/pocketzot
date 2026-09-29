@@ -2774,6 +2774,20 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
       expect(sent(h)).toEqual([])
     })
 
+    // The monster panel is client-only (no input_mode change), so the guard
+    // gates it itself — in landscape the rail stays tappable beside it.
+    it('spell casts and the spell-list button are inert while the monster panel is open', () => {
+      const h = setup()
+      ready(h)
+      h.dispatch({ msg: 'map', cells: [{ x: 5, y: 5, g: 'o', col: 7, mon: { id: 1, name: 'orc', att: 1, type: 1 } }] })
+      h.view.querySelector<HTMLElement>('#monster-list')!.click()
+      expect(h.view.querySelector('.mp-row')).not.toBeNull()
+      h.send.mockClear()
+      railBtn(h, 'a').click()
+      bookBtn(h).click()
+      expect(sent(h)).toEqual([])
+    })
+
     it('the spell list it opens renders instead of being harvested', () => {
       const h = setup()
       ready(h)

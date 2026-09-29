@@ -45,6 +45,7 @@ import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_
 import { stripDcss } from './overlay-body'
 import { SpellHarvester, type SpellEntry } from '../game/spell-harvest'
 import { peekGap } from './rail-peek'
+import { tabIconGeometry } from './tab-icon'
 import { ChatView } from './chat-view'
 import {
   showInputDialog, showSeedSelection,
@@ -2261,21 +2262,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   // The spell-list button's icon: TAB_SPELL, upstream's "your spells" symbol
   // (local tiles' Spells tab, tilesdl.cc push_tab_region). Looked up by name
-  // in the served tileinfo — ids shift between versions. Scaled from the
-  // tile's own authored size to the spell icons' CELL. Tab tiles are
-  // authored 20×20 with the tab's state bar baked into the background layer
-  // (dc-gui.txt %compose tab_unselected: a 1px bar at column 18; identical
-  // in 0.34.1 and trunk), so for that layout the clip keeps columns 0–17,
-  // exactly the label. The label's own pixels span columns 0–16, flush left
-  // (tab_label_spell.png), so that layout is also centred in the box, with
-  // the badge on its corner the way the spell badges sit on theirs. The
-  // layout is recognised from the served crop too — the bar is the
-  // rightmost opaque column. Anything else is a re-authored tile whose bar
-  // we can't place: draw it whole rather than guess a cut. No TAB_SPELL (or
+  // in the served tileinfo — ids shift between versions — and fitted to the
+  // spell icons' CELL, clip and centring per tab-icon.ts. No TAB_SPELL (or
   // no loader yet) leaves the badge alone — the button still works.
-  const TAB_TILE_PX = 20
-  const TAB_BAR_COL = 18
-  const TAB_LABEL_COLS = 17
   let railBookLoader: TileLoader | null = null
   function paintRailBook(): void {
     railBookLoader = loader
@@ -2288,14 +2277,13 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       if (railBookLoader !== l || typeof id !== 'number') return
       const s = await l.getAsync(TEX.GUI, id)
       if (railBookLoader !== l) return
-      const scale = CELL / Math.max(s.aw, s.ah)
-      const icon = renderTiles(l, [{ t: id, tex: TEX.GUI }], scale)
+      const g = tabIconGeometry(s, CELL)
+      const icon = renderTiles(l, [{ t: id, tex: TEX.GUI }], g.scale)
       icon.style.width = icon.style.height = `${CELL}px`
-      if (s.aw === TAB_TILE_PX && s.ah === TAB_TILE_PX && s.ox + s.w === TAB_BAR_COL + 1) {
-        icon.style.clipPath = `inset(0 ${((TAB_TILE_PX - TAB_BAR_COL) / TAB_TILE_PX) * 100}% 0 0)`
-        const inset = (CELL - TAB_LABEL_COLS * scale) / 2
-        icon.style.left = `${inset}px`
-        railBookLbl.style.right = `${inset}px`
+      if (g.clipRightPct !== null) {
+        icon.style.clipPath = `inset(0 ${g.clipRightPct}% 0 0)`
+        icon.style.left = `${g.inset}px`
+        railBookLbl.style.right = `${g.inset}px`
       }
       railBookBtn.querySelector('.tile-stack')?.remove()  // a same-loader paint that also resolved
       railBookBtn.prepend(icon)
