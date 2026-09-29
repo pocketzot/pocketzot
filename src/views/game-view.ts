@@ -224,8 +224,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // The frame under the top one, when a popup can layer over it: on screen,
   // not under a server dialog, and its DOM kept or still showing.
   function layerTarget(): object | undefined {
-    const below = popups.below()
-    if (!below || dialogActive || popups.covers(popups.depth - 1)) return undefined
+    const below = popups.visibleBelow()
+    if (!below || dialogActive) return undefined
     return frameDom.has(below) || shownFrame === below ? below : undefined
   }
 
@@ -320,7 +320,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // its DOM tree and item map — doesn't outlive the screen.
   let newgameFocus: NewgameFocusHandler | null = null
   // The active menu and its hover state (../game/menu-model.ts): the stack's
-  // topmost menu frame, adopted through adoptMenu (which resets that state
+  // topmost menu frame, adopted through MenuView.adopt (which resets that state
   // when it changes hands) and kept even while a push or the cutoff covers
   // it, since update_menu & co. still address it.
   const menus = new MenuModel()
@@ -749,7 +749,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const menuBar = new MenuBar({
     send: (msg) => conn.send(msg),
     focusView,
-    shift: () => menuShift,
+    shift: menuShift,
     yesno: () => currentInputMode === MOUSE_MODE_YESNO,
   })
   const menuControls = menuBar.element
@@ -832,7 +832,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // A server dialog keeps the full-screen treatment.
     placement: (msg) => {
       if (!isPromptFamily(msg) || dialogActive) return 'full'
-      if (!popups.below() || popups.covers(popups.depth - 1)) return 'float'
+      if (!popups.visibleBelow()) return 'float'
       return layerTarget() ? 'layered' : 'full'
     },
     navBlocked: () => popups.has('crt') || inXMode,

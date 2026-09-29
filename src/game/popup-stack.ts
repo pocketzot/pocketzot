@@ -40,13 +40,14 @@ export class PopupStack<M, U> {
     return (this.frames as object[]).includes(frame)
   }
 
-  // The top frame, or undefined when the cutoff hides the whole stack.
-  visibleTop(): PopupFrame<M, U> | undefined {
-    return this.hidesAll() ? undefined : this.top()
+  // The frame under the top one, or undefined when there is none or the
+  // cutoff covers it.
+  visibleBelow(): PopupFrame<M, U> | undefined {
+    return this.covers(this.frames.length - 1) ? undefined : this.below()
   }
 
   // Whether a frame at this depth (1-based) is under the cutoff.
-  covers(depth: number): boolean {
+  private covers(depth: number): boolean {
     return this.cutoff >= 0 && depth <= this.cutoff
   }
 

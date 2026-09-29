@@ -202,7 +202,7 @@ export class MenuView {
     title_prompt: (m) => { if (m.close || m.raw) this.closeFilter(); else this.openFilter(m.prompt ?? '') },
   }
 
-  onUpdateMenu(m: UpdateMenuMsg): void {
+  private onUpdateMenu(m: UpdateMenuMsg): void {
     const active = this.model.active
     if (!active) return
     if (m.more !== undefined) {
@@ -244,7 +244,7 @@ export class MenuView {
     this.updateFooter()
   }
 
-  onMenuScroll(m: MenuScrollMsg): void {
+  private onMenuScroll(m: MenuScrollMsg): void {
     // Reference server_menu_scroll (menu.js:848): ignored entirely unless
     // forced, or we're spectating and following the player's own pager.
     // The engine force-sends its scroll position where it moved the cursor
@@ -267,7 +267,7 @@ export class MenuView {
     this.updateFooter()
   }
 
-  onUpdateItems(m: UpdateMenuItemsMsg): void {
+  private onUpdateItems(m: UpdateMenuItemsMsg): void {
     const active = this.model.active
     if (!active || !m.items) return
     const flip = this.model.patchItems(m.chunk_start ?? 0, m.items)
@@ -290,7 +290,7 @@ export class MenuView {
   // Matching that here means we don't have to ferry per-key updates back to
   // the server's resumable_line_reader (whose init_input/close_input pair
   // the game view also suppresses while filterOpen).
-  openFilter(prompt: string): void {
+  private openFilter(prompt: string): void {
     const titleEl = this.d.content().querySelector<HTMLElement>('.overlay-title')
     if (!titleEl) return
     titleEl.innerHTML = ''
@@ -319,7 +319,7 @@ export class MenuView {
     requestAnimationFrame(() => this.d.guardedFocus(input))
   }
 
-  closeFilter(): void {
+  private closeFilter(): void {
     if (!this.filterInput) return
     this.filterInput = null
     const titleEl = this.d.content().querySelector<HTMLElement>('.overlay-title')
@@ -524,7 +524,6 @@ export class MenuView {
     this.listResize?.observe(listEl)
     const footer = this.d.content().querySelector('.menu-footer')
     this.d.content().insertBefore(listEl, footer)
-    this.d.bar.syncShiftLabels()
   }
 
   private itemButton(labelHtml: string, onClick: () => void, colour?: number): HTMLButtonElement {

@@ -31,12 +31,12 @@ describe('PopupStack', () => {
     const s = stack()
     s.pushMenu('inventory')
     s.cutoff = 1
-    expect(s.visibleTop()).toBeUndefined()
+    expect(s.hidesAll()).toBe(true)
     s.pushMenu('prompt')
-    expect(s.visibleTop()).toMatchObject({ menu: 'prompt' })
-    s.pop()
+    expect(s.hidesAll()).toBe(false)
+    expect(s.visibleBelow()).toBeUndefined()
     s.cutoff = -1
-    expect(s.visibleTop()).toMatchObject({ menu: 'inventory' })
+    expect(s.visibleBelow()).toMatchObject({ menu: 'inventory' })
   })
 
   it('replace swaps the top menu; clear drops frames and cutoff', () => {

@@ -3419,8 +3419,8 @@ html.map-hold, html.map-hold * {
   touch-action: manipulation;
 }
 
-/* The engine's menu cursor (last_hovered), shown only when game-view reveals
-   it (see adoptMenu); values are the reference's `.menu_contents li.hovered`
+/* The engine's menu cursor (last_hovered), shown only once revealed (see
+   MenuModel's adopt / hoverFromUser); values are the reference's `.menu_contents li.hovered`
    (game_data/static/style.css). Multiselect " + " rows get no styling — the
    marker in the text carries it, as in the reference. */
 .overlay-item.item-hovered {

@@ -288,13 +288,7 @@ export function buildLobbyView(
     const transition = classifyTransition(msg)
     if (transition) {
       if (transition.type === 'capture-loader') {
-        // game_client is sent on `watch` *before* watching_started (and before
-        // game_started on CPO-ordered servers), so it lands while the lobby is
-        // still the active handler. Resolve this game's per-version loader now
-        // and hand it over at the transition — the server won't resend the
-        // version once the game view has mounted. Stays null when game_client
-        // only arrives after the transition (e.g. CDI), where the game view's
-        // own handler resolves the loader instead.
+        // See activeLoader.
         activeLoader = getTileLoader(conn.httpBase, transition.version)
       } else {
         // playedGameId is only set by the play button (makeGameBtn); a watch
@@ -349,8 +343,8 @@ export function buildLobbyView(
       reason: msg.reason,
       message: msg.message,
       dump: msg.dump,
-      spectated: start?.kind === 'watch',
-      spectatedName: start?.kind === 'watch' ? start.username : undefined,
+      spectated: start.kind === 'watch',
+      spectatedName: start.kind === 'watch' ? start.username : undefined,
     })
   }
 

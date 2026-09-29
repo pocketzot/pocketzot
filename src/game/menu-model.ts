@@ -1,6 +1,6 @@
 // The active menu's state, headless: the counterpart of the reference's
-// menu.js state (items, hover, more) without its DOM. The game view renders
-// it and turns the decisions returned here into wire sends and repaints.
+// menu.js state (items, hover, more) without its DOM. MenuView renders it
+// and turns the decisions returned here into wire sends and repaints.
 // One menu is "active" at a time — the popup stack's topmost menu frame,
 // adopted when it changes hands (adopt).
 

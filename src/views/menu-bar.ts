@@ -28,7 +28,7 @@ function glyphHtml(label: string): string {
 export interface MenuBarDeps {
   send(msg: ClientMsg): void
   focusView(): void
-  shift(): ShiftToggle
+  shift: ShiftToggle
   // A (y/N) prompt is reading inside the open menu (input_mode YESNO).
   yesno(): boolean
 }
@@ -78,8 +78,8 @@ export class MenuBar {
       ]
     } else if (tag === 'stash') {
       // Stash-search results (Ctrl-F). Tap a row to open the X-mode preview;
-      // the game view's enterXMode/exitXMode hide/restore this menu around
-      // the preview. The three letter-keys mirror the cues the server prints
+      // the game view's applyLayout hides/restores this menu around the
+      // preview. The three letter-keys mirror the cues the server prints
       // in the menu title:
       //   !  toggle travel/examine target mode
       //   =  hide useless & duplicates
@@ -139,7 +139,7 @@ export class MenuBar {
     }
     for (const def of btns) {
       const fire = def.shift
-        ? () => this.deps.shift().tap()
+        ? () => this.deps.shift.tap()
         : () => {
             if (def.key) this.deps.send({ msg: 'input', text: def.key })
             else if (def.keycode) this.deps.send({ msg: 'key', keycode: def.keycode })
@@ -199,11 +199,10 @@ export class MenuBar {
       this.element.insertBefore(row, this.element.firstChild)
     }
     row.innerHTML = ''
-    const shiftOn = this.deps.shift().isOn
+    const shift = this.deps.shift
     for (const letter of letters) {
-      const shown = shiftOn && /[a-z]/.test(letter) ? letter.toUpperCase() : letter
+      const shown = shift.isOn && /[a-z]/.test(letter) ? letter.toUpperCase() : letter
       const btn = this.button(shown, () => {
-        const shift = this.deps.shift()
         const out = shift.isOn && /[a-z]/.test(letter) ? letter.toUpperCase() : letter
         this.deps.send({ msg: 'input', text: out })
         shift.consume()
@@ -221,12 +220,10 @@ export class MenuBar {
   }
 
   // Skill-letter buttons echo the shift state so what the user sees matches
-  // what tapping will send. (Shop rows used to toggle an inline hotkey chip
-  // here too, but rows now render their text verbatim — the hotkey lives
-  // inside item.text — so the ⇧ control's own active/locked styling is the
-  // shift indicator there.)
-  syncShiftLabels(): void {
-    const shiftOn = this.deps.shift().isOn
+  // what tapping will send. In shops the ⇧ control's own active/locked
+  // styling is the shift indicator.
+  private syncShiftLabels(): void {
+    const shiftOn = this.deps.shift.isOn
     this.element.querySelectorAll<HTMLElement>('.skill-letter-btn').forEach(el => {
       const t = el.textContent ?? ''
       if (t.length === 1 && /[a-zA-Z]/.test(t)) {
@@ -236,7 +233,7 @@ export class MenuBar {
   }
 
   private applyShiftBtnState(btn: HTMLElement): void {
-    const state = this.deps.shift().state
+    const state = this.deps.shift.state
     btn.classList.toggle('active', state === 'once')
     btn.classList.toggle('locked', state === 'lock')
   }
