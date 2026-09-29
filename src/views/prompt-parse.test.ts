@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parsePromptText, PROMPT_TRIGGER_RE, type PromptSegment } from './prompt-parse'
+import { isKeyHintsLine, parsePromptText, PROMPT_TRIGGER_RE, type PromptSegment } from './prompt-parse'
 
 function buttons(segments: PromptSegment[]): Array<{ label: string; key: string }> {
   return segments
@@ -134,6 +134,56 @@ describe('parsePromptText — non-prompts and false-positive guards', () => {
   it('"Really save and exit (y/N)?" extracts no buttons', () => {
     const r = parsePromptText('<cyan>Really save and exit (y/N)?')
     expect(r.hasButton).toBe(false)
+  })
+})
+
+describe('parsePromptText — chooser key-hints line', () => {
+  it('buttons every single-char key of the x-examine line, "." and letters included', () => {
+    const r = parsePromptText('<cyan>Press: ? - help, v - describe, . - travel, g - get item<lightgrey>')
+    expect(buttons(r.segments).map(b => b.key)).toEqual(['?', 'v', '.', 'g'])
+    expect(r.segments[0]).toEqual({ kind: 'text', value: 'Press: ' })
+    expect(isKeyHintsLine('<cyan>Press: ? - help, v - describe, . - travel<lightgrey>')).toBe(true)
+  })
+
+  it('keys through <w> markup; multi-char keys and "( or ) - cycle" stay text', () => {
+    // directn.cc print_key_hints in targeting, with action_cycler's
+    // fire_key_hints (quiver.cc) and the "\n"-joined direction hint.
+    const r = parsePromptText(
+      '<cyan>Press: ? - help, <w>=</w> - select action, <w>(</w> or <w>)</w> - cycle\nDir - move target')
+    expect(buttons(r.segments)).toEqual([
+      { label: '? - help', key: '?' },
+      { label: '<w>=</w> - select action', key: '=' },
+    ])
+    const texts = r.segments.filter(s => s.kind === 'text').map(s => s.value)
+    expect(texts).toContain('<w>(</w> or <w>)</w> - cycle')
+    expect(texts).toContain('Dir - move target')
+  })
+
+  it('a targeting line with only multi-char keys past "?" still buttons "?"', () => {
+    const r = parsePromptText('<cyan>Press: ? - help, Shift-Dir - straight line')
+    expect(buttons(r.segments)).toEqual([{ label: '? - help', key: '?' }])
+  })
+
+  // Every other crawl string opening "Press" (trunk + 0.34.1) is a
+  // sentence without the colon; none may take the key-hints shape.
+  it.each([
+    'Press <w>?</w> for a list of commands and other information.',
+    'Press } to see all the runes you have collected.',
+    'Press } and ! to see all the gems you have collected.',
+    "Press 'a' to toggle all layers. Press any other key to exit.",
+    'Press <w>_</w> or <w>p</w> to pray at altars.',
+  ])('not a key-hints line: %s', (text) => {
+    expect(isKeyHintsLine(text)).toBe(false)
+  })
+
+  it('"Press:" with no single-char key token is not a key-hints line', () => {
+    expect(isKeyHintsLine('<cyan>Press: Dir - move target')).toBe(false)
+  })
+
+  it('" - " item lines without the intro stay out of the shape', () => {
+    // Inventory-letter lines ("a - a +0 dagger") read like hint tokens.
+    expect(isKeyHintsLine('a - a +0 dagger (weapon)')).toBe(false)
+    expect(isKeyHintsLine('You have: a - a +0 dagger, b - 3 darts')).toBe(false)
   })
 })
 

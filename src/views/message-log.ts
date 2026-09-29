@@ -8,8 +8,7 @@
 import type { ClientMsg } from '../ws/types'
 import type { Handlers } from '../ws/dispatcher'
 import { dcssToHtml } from '../game/dcss-colors'
-import { stripDcss } from './overlay-body'
-import { parsePromptText, PROMPT_TRIGGER_RE } from './prompt-parse'
+import { isKeyHintsLine, parsePromptText, PROMPT_TRIGGER_RE, type PromptSegment } from './prompt-parse'
 import { systemKeyboardField } from './text-field'
 import { downloadPackFile } from '../offline/save-transfer'
 
@@ -195,7 +194,8 @@ export class MessageLog {
         this.decorateDumpUrlRow(row, this.pendingDumpUrl)
         this.pendingDumpUrl = null
         this.pushRow(row)
-      } else if (!inX && m.channel === 2 && PROMPT_TRIGGER_RE.test(m.text)) {
+      } else if (!inX && m.channel === 2
+          && (PROMPT_TRIGGER_RE.test(m.text) || isKeyHintsLine(m.text))) {
         const row = this.promptRow(m.text)
         this.livePrompt.push(row)
         this.pushRow(row)
@@ -378,48 +378,23 @@ export class MessageLog {
     this.d.view.style.setProperty('--xdesc-h', `${h}px`)
   }
 
-  // Rebuild the actions row from the wire prompt ("Press: ? - help,
-  // v - describe, . - travel"): the intro stays plain text and each
-  // "key - label" token becomes a button whose face IS that token, so the
-  // row reads like the reference line. Parsing the text (instead of a
-  // hardcoded row) keeps it honest against trunk rewording — an unparsable
-  // token stays text, and no buttons at all → false, so the caller renders
-  // the whole line as a plain one.
-  private xdescPromptRow(text: string): boolean {
+  // Rebuild the actions row from the key-hints prompt: the same segments as
+  // a log prompt row, minus the comma separators — the strip is a flex row
+  // whose gap spaces the buttons.
+  private xdescPromptRow(text: string): void {
     const parsed = parsePromptText(text)
-    const intro = /^[^,<]*?:\s*/.exec(parsed.body)?.[0] ?? ''
-    const tokens = parsed.body.slice(intro.length).split(/,\s*/).map((tok) => {
-      const plain = stripDcss(tok).trim()
-      return { tok: tok.trim(), key: /^(\S)\s*-\s+\S/.exec(plain)?.[1] }
-    })
-    if (!tokens.some((t) => t.key)) return false
     const actions = this.xdescActions
     actions.textContent = ''
     actions.style.color = parsed.color ?? ''
-    if (intro) {
-      const span = document.createElement('span')
-      span.textContent = intro
-      actions.appendChild(span)
-    }
-    for (const t of tokens) {
-      if (t.key) actions.appendChild(this.keyButton(t.tok, t.key))
-      else {
-        const span = document.createElement('span')
-        span.innerHTML = dcssToHtml(t.tok)
-        actions.appendChild(span)
-      }
-    }
+    this.appendSegments(actions, parsed.segments.filter(
+      (s) => s.kind === 'button' || !/^[,\s]*$/.test(s.value)))
     actions.style.display = ''
-    return true
   }
 
   private xdescAdd(text: string, channel?: number): void {
-    // The keyboard-hint prompt becomes the tappable row; match a substring
-    // of the wire text (same-turn messages can arrive glued onto one line),
-    // with markup stripped in case a future trunk decorates the hotkeys.
-    const isPrompt = channel === 2
-      && stripDcss(text).includes('v - describe')
-    if (!isPrompt || !this.xdescPromptRow(text)) {
+    if (channel === 2 && isKeyHintsLine(text)) {
+      this.xdescPromptRow(text)
+    } else {
       const line = document.createElement('div')
       line.className = 'xdesc-line'
       line.innerHTML = dcssToHtml(text)
@@ -452,16 +427,20 @@ export class MessageLog {
       row.appendChild(body)
       return row
     }
-    for (const seg of parsed.segments) {
+    this.appendSegments(row, parsed.segments)
+    return row
+  }
+
+  private appendSegments(host: HTMLElement, segments: PromptSegment[]): void {
+    for (const seg of segments) {
       if (seg.kind === 'text') {
         const span = document.createElement('span')
         span.innerHTML = dcssToHtml(seg.value)
-        row.appendChild(span)
+        host.appendChild(span)
       } else {
-        row.appendChild(this.keyButton(seg.label, seg.key))
+        host.appendChild(this.keyButton(seg.label, seg.key))
       }
     }
-    return row
   }
 
   // The '#' dump log line ("Char dumped to '<path>'." — chardump.cc:1932),

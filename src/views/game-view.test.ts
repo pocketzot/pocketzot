@@ -110,6 +110,18 @@ describe('message log (msgs)', () => {
     expect(sent(h)).toContainEqual({ msg: 'input', text: 'S' })
   })
 
+  // Wire text from 14-cast-then-examine (x examine's print_key_hints).
+  it('renders the x-examine key-hints line as one button per key, "." included', () => {
+    const h = setup()
+    h.dispatch({ msg: 'msgs', messages: [
+      { text: '<cyan>Press: ? - help, v - describe, . - travel<lightgrey>', channel: 2 },
+    ] })
+    const btns = [...msgLog(h).querySelectorAll<HTMLButtonElement>('.game-prompt .action-btn')]
+    expect(btns.map(b => b.textContent)).toEqual(['? - help', 'v - describe', '. - travel'])
+    btns[2].click()
+    expect(sent(h)).toContainEqual({ msg: 'input', text: '.' })
+  })
+
   // Wire text from 10-adjust-under-cutoff: the follow-up prompt's hint is
   // <white>-marked, so it renders plain — the earlier row must still retire.
   it('a later prompt-channel line retires live buttons, even with none of its own', () => {

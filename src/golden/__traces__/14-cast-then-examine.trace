@@ -8,9 +8,13 @@ start | overlay:none | shows:map,log,touch
   = overlay:none | shows:map,log,hud,touch
 #15 cursor id=0
   = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@16,10
+#16 msgs
+  = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@16,10 | prompt[3]="Press: ? - help, v - describe, . - travel"
 #18 cursor id=0
-  = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@17,10
+  = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@17,10 | prompt[3]="Press: ? - help, v - describe, . - travel"
 #21 cursor id=0
-  = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@18,10
+  = overlay:none | shows:map,log,hud,touch | touch:cursor-mode | cursor@18,10 | prompt[3]="Press: ? - help, v - describe, . - travel"
 #25 cursor id=0
+  = overlay:none | shows:map,log,hud,touch | prompt[3]="Press: ? - help, v - describe, . - travel"
+#29 input_mode mode=1
   = overlay:none | shows:map,log,hud,touch
