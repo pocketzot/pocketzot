@@ -186,8 +186,7 @@ export interface ResumeSuccess {
   exit?: GameExit
   // Replays messages that arrived after (or batched with) the transition
   // trigger into the *current* conn.onMessage. Call after the destination
-  // view has been mounted and owns onMessage — same buffering contract as
-  // login.ts:listenOnce.
+  // view has been mounted and owns onMessage (ws/message-hold.ts).
   flush: () => void
 }
 

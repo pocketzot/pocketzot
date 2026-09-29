@@ -1,7 +1,7 @@
 // The free-text fields (msgwin-get-line, the in-log line input, the menu
 // filter) type through the system keyboard: ours has no space bar, and the
 // system one brings dictation and VoiceOver. These fields never auto-open
-// ours (the abc▴ toggle still does, typing via touch.ts typeIntoInput).
+// ours (the abc▴ toggle still does, typing via virtual-keyboard.ts typeIntoInput).
 //
 // iOS raises the system keyboard, and draws a caret, only for a focus that
 // comes from a tap; the focus() these fields get when the server opens them

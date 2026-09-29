@@ -1427,6 +1427,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   function handleMsg(msg: ServerMsg): void {
     if (abandoningResume && msg.msg !== 'go_lobby' && msg.msg !== 'close') return
+    // Unhandled types are dropped: the lobby's messages reach the game view
+    // in the same batch as its exit (game_ended, go_lobby, lobby list).
     dispatch(handlers, msg)
   }
 

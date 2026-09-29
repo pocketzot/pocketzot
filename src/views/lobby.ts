@@ -314,9 +314,9 @@ export function buildLobbyView(
     // trigger — on a spectate join, update_spectators (and any join-time
     // chat) land between game_client and watching_started, while this
     // lobby still owns conn.onMessage. Hold everything unhandled for the
-    // game view and replay it at handover (the transition branch above),
-    // the same contract as the auto-resume handler (reconnect.ts); without
-    // this the initial spectator count and join-time chat are silently lost.
+    // game view and replay it at handover (the transition branch above);
+    // without this the initial spectator count and join-time chat are
+    // silently lost.
     preGame.hold(msg)
   }
 

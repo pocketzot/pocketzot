@@ -1,11 +1,6 @@
 // Messages that arrive while the view meant to handle them isn't mounted
 // yet, replayed into whichever handler owns conn.onMessage once one does.
-// The hand-overs that hold this way: password and token login (the lobby
-// snapshot the server pushes before login_success; login.ts listenOnce,
-// auth/token-login.ts), the lobby (game state that precedes the
-// game_started / watching_started trigger, e.g. update_spectators on a
-// spectate join) and the auto-resume (everything batched with or after
-// the transition trigger, before the destination view mounts).
+// Each hand-over that holds says what it holds and why.
 
 import type { ServerMsg } from './types'
 
@@ -14,8 +9,7 @@ type Handler = (msg: ServerMsg) => void
 export class MessageHold {
   private held: ServerMsg[] = []
 
-  // `cap` guards a holder that could otherwise grow without bound against
-  // a nonconforming server.
+  // Past `cap` held messages, later ones are dropped.
   constructor(private readonly cap = Infinity) {}
 
   hold(msg: ServerMsg): void {

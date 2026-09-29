@@ -23,10 +23,8 @@ export function combineHandlers(...parts: Handlers[]): Handlers {
   return out as Handlers
 }
 
-// Returns whether a handler took the message; the caller decides what an
-// unhandled one means (the game view drops the lobby's messages that trail
-// its exit in the same batch; the lobby holds game messages for the game
-// view it's about to mount).
+// Returns whether a handler took the message; what an unhandled one means
+// is the caller's call.
 export function dispatch(handlers: Handlers, msg: ServerMsg): boolean {
   const handler = handlers[msg.msg] as ((m: ServerMsg) => void) | undefined
   if (!handler) return false
