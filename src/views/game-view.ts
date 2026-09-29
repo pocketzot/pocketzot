@@ -682,8 +682,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   const hud = document.createElement('div')
   hud.id = 'game-hud'
-  // Hidden until the first `player` message — between layer:"game" and the
-  // first stats payload the HUD would otherwise show empty HP/MP bars and
+  // Hidden until the first `player` message — between the game view's mount
+  // and the first stats payload the HUD would otherwise show empty HP/MP bars and
   // floating AC/EV/SH/… captions with no values. applyLayout shows it only
   // once hudRevealed flips on that first message.
   let hudRevealed = false
@@ -1310,8 +1310,13 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const handlers = combineHandlers(
     chatView.handlers, menuView.handlers, layoutView.handlers, messageLog.handlers,
     {
-      layer: onLayer,
-      set_layer: onLayer,
+      // `layer` / `set_layer` stay unhandled in-game: the reference's
+      // do_set_layer only shows one of its page sections (client.js
+      // set_layer: crt, normal, lobby, loader — no "game") and never touches
+      // menus, and no upstream server sends it. The one sender seen, CDI's
+      // `layer:"crt"` ahead of its save-transfer show_dialog (wire capture
+      // 2026-09-27), needs nothing here. The lobby still takes it as a
+      // transition trigger (../ws/transition.ts).
       show_dialog: onShowDialog,
       hide_dialog: () => { if (dialogActive) { dialogActive = false; hideOverlay() } },
       game_client: onGameClient,
@@ -1351,15 +1356,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Unhandled types are dropped: the lobby's messages reach the game view
     // in the same batch as its exit (game_ended, go_lobby, lobby list).
     dispatch(handlers, msg)
-  }
-
-  // No upstream emitter: trunk and 0.34.1 only receive it (client.js
-  // "layer": do_set_layer). The one sender seen is CDI's `layer:"crt"`
-  // ahead of its save-transfer show_dialog (wire capture 2026-09-27), a
-  // no-op here. The `game` reset is defensive; nothing sent it in that
-  // capture (stable + trunk start, exit, spectate) or in any recording.
-  function onLayer(msg: MsgOf<'layer'> | MsgOf<'set_layer'>): void {
-    if (msg.layer === 'game') { popups.clear(); dialogActive = false; menus.active = null; closeClientOverlays(); harvester.reset(); hideOverlay() }
   }
 
   // Raw-HTML modal. No emitter in upstream trunk or 0.34.1 (the reference

@@ -105,7 +105,7 @@ export class PopupStack<M, U> {
     return this.frames.pop()
   }
 
-  // close_all_menus, a ui-stack snapshot's reset, layer:"game".
+  // close_all_menus, a ui-stack snapshot's reset.
   clear(): void {
     this.frames.length = 0
     this.cutoff = -1

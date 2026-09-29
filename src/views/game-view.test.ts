@@ -2135,11 +2135,14 @@ describe('show_dialog / hide_dialog', () => {
     expect(isHidden(overlay(h))).toBe(true)
   })
 
-  it('layer:game resets overlay/dialog state and hides the overlay', () => {
+  // The reference's do_set_layer only swaps page sections; it never
+  // touches menus or layouts.
+  it('layer messages leave the overlay alone', () => {
     const h = setup()
     h.dispatch({ msg: 'ui-push', type: 'describe-item', title: 'A', body: 'a' })
     h.dispatch({ msg: 'layer', layer: 'game' })
-    expect(isHidden(overlay(h))).toBe(true)
+    h.dispatch({ msg: 'layer', layer: 'crt' })
+    expect(isHidden(overlay(h))).toBe(false)
   })
 })
 
@@ -2336,7 +2339,6 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
   // if the prior phase was cleared (harvestSpells() bails while non-idle).
   for (const { name, reset } of [
     { name: 'close_all_menus', reset: { msg: 'close_all_menus' } },
-    { name: 'layer:game', reset: { msg: 'layer', layer: 'game' } },
     { name: 'go_lobby', reset: { msg: 'go_lobby' } },
   ]) {
     it(`${name} aborts an in-flight harvest so a new harvest can start`, () => {

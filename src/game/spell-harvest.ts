@@ -86,7 +86,7 @@ export class SpellHarvester {
   // The give-up's one retry (armTimeout). `retryPending` waits for
   // retryOnCommandEntry; `retried` spends the retry until any reply
   // (capture or no-spells terminator) or go_lobby re-arms it. A retry cut
-  // short by an abort (foreign menu, close_all_menus, layer:"game") stays
+  // short by an abort (foreign menu, close_all_menus) stays
   // spent: re-arming there could loop. Never retry unbounded — each probe
   // costs the player 1.5s of suppressed input, so a failure that repeats
   // (e.g. an RC keymap rebinding `I`) would cost that every turn.
@@ -141,7 +141,7 @@ export class SpellHarvester {
   // path routes through here so the timer/phase/latch lifecycle lives in
   // one place: the successful menu capture (which re-latches pendingClose
   // right after), the foreign-menu abort, the no-spells terminator, and the
-  // full-state teardowns (layer:"game", close_all_menus, go_lobby). The
+  // full-state teardowns (close_all_menus, go_lobby). The
   // teardown calls are what keep a bulk menu close or game transition
   // mid-harvest from leaving input suppressed (phase stuck) or pendingClose
   // latched — the latter would otherwise swallow the NEXT genuine

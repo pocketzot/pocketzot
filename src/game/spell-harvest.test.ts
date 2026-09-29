@@ -215,7 +215,7 @@ describe('timing ladder (base → late-base → give-up)', () => {
     h.setSpells([{ letter: 'a', title: 'Freeze', tile: 42 }])
     const seeded = changed()
     h.harvest()
-    h.reset()  // e.g. layer:"game" / close_all_menus teardown
+    h.reset()  // e.g. the close_all_menus teardown
     vi.advanceTimersByTime(HARVEST_SUPPRESS_MS + HARVEST_LATE_MS)
     // Neither ladder step ran: the cache survived and nothing re-notified.
     expect(h.spells).toHaveLength(1)
