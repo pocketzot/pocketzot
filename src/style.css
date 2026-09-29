@@ -70,6 +70,12 @@
   --accent-line: rgba(245, 158, 11, 0.35);
   --accent-tint: rgba(245, 158, 11, 0.12);  /* selected-state fill */
   --border-card: rgba(245, 158, 11, 0.22);  /* modal card outline, a step above --border */
+  --danger-line: rgba(239, 68, 68, 0.35);   /* a destructive button's border: --danger at the --accent-line alpha */
+  /* Modal chrome of the app's own dialogs (exit, docs/settings, reconnect,
+     crypt card), so they read as one family. The in-game prompt card
+     follows the reference client instead (.overlay-float). */
+  --modal-scrim:  rgba(0, 0, 0, 0.6);
+  --modal-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 
   --font-mono: ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --font-ui:   system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -416,7 +422,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
    the spectrum → white(15). */
 .tier-ornate      { color: var(--text-dim); }
 .tier-magnificent { color: #936bcb; }
-.tier-artifact    { color: #eeeeec; }
+.tier-artifact    { color: var(--color-15); }
 /* Prismatic: one hue per letter, in spectrum order — the extrusion's six
    steps plus CRT lightcyan(11), lightblue(9) and lightmagenta(13) to fill nine
    letters. A continuous gradient washed its tail into the lavender step. */
@@ -424,11 +430,11 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
 .tier-prismatic > :nth-child(2) { color: #f57900; }
 .tier-prismatic > :nth-child(3) { color: #fce94f; }
 .tier-prismatic > :nth-child(4) { color: #8ae234; }
-.tier-prismatic > :nth-child(5) { color: #34e2e2; }
+.tier-prismatic > :nth-child(5) { color: var(--color-11); }
 .tier-prismatic > :nth-child(6) { color: #729fcf; }
-.tier-prismatic > :nth-child(7) { color: #5e78ff; }
+.tier-prismatic > :nth-child(7) { color: var(--color-9); }
 .tier-prismatic > :nth-child(8) { color: #ad7fa8; }
-.tier-prismatic > :nth-child(9) { color: #fd59fa; }
+.tier-prismatic > :nth-child(9) { color: var(--color-13); }
 
 /* Rarity decoration (setTierDecor in src/logo.ts): one extrusion, coloured per
    tier — six hard steps down-right (--d1 nearest the letter, --d6 farthest)
@@ -556,7 +562,7 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
      off the top. */
   max-height: 100%;
   overflow-y: auto;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--modal-shadow);
   outline: none; /* programmatic focus (dismissal focus-parking), no ring */
 }
 
@@ -1482,7 +1488,7 @@ button.lobby-account-chip:active { background: var(--press); }
   border-radius: 6px;
   cursor: pointer;
 }
-.offline-slot-confirm-del { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
+.offline-slot-confirm-del { color: var(--danger); border-color: var(--danger-line); }
 .offline-slot-confirm-del:disabled { opacity: 0.5; cursor: default; }
 .offline-slot-confirm-del:active,
 .offline-slot-confirm-cancel:active { background: var(--press); }
@@ -1663,7 +1669,7 @@ button.lobby-account-chip:active { background: var(--press); }
   align-items: center;
   justify-content: center;
   padding: var(--safe-frame-pad);
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--modal-scrim);
 }
 .lobby-exit-card {
   width: 100%;
@@ -1675,7 +1681,7 @@ button.lobby-account-chip:active { background: var(--press); }
      dimmed lobby behind it. */
   border: 1px solid var(--border-card);
   border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--modal-shadow);
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
@@ -1738,7 +1744,7 @@ button.lobby-account-chip:active { background: var(--press); }
   align-items: center;
   justify-content: center;
   padding: var(--safe-frame-pad);
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--modal-scrim);
 }
 .doc-card {
   width: 100%;
@@ -1749,7 +1755,7 @@ button.lobby-account-chip:active { background: var(--press); }
   background: var(--surface);
   border: 1px solid var(--border-card);
   border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--modal-shadow);
   font-family: var(--font-mono);
   overflow: hidden;
 }
@@ -4648,7 +4654,10 @@ html.map-hold, html.map-hold * {
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 3px;
-  color: var(--text);
+  /* Half-dim. The persistent touch strip dims further (--tc-label, set in
+     the #touch-controls block) — the keyboard is transient and summoned
+     deliberately, so it can afford to stay more readable. */
+  color: #c9c4be;
   font-family: var(--font-mono);
   font-size: 1em;
   cursor: pointer;
@@ -4737,11 +4746,6 @@ html.map-hold, html.map-hold * {
 
 #kbd-overlay.shift-on .kbd-key.letter { text-transform: uppercase; }
 #kbd-overlay.ctrl-on .kbd-key.letter::before { content: "^"; }
-
-/* Half-dim the QWERTY overlay keys. The persistent touch strip dims further
-   (--tc-label, set in the #touch-controls block) — the keyboard is transient
-   and summoned deliberately, so it can afford to stay more readable. */
-.kbd-key { color: #c9c4be; }
 
 /* CRT terminal color classes (fg0–fg15, bg0–bg15) */
 .fg0{color:var(--color-0)}.fg1{color:var(--color-1)}.fg2{color:var(--color-2)}
@@ -5284,7 +5288,7 @@ html.map-hold, html.map-hold * {
   align-items: center;
   justify-content: center;
   padding: var(--safe-frame-pad);
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--modal-scrim);
 }
 .reconnect-card {
   display: flex;
@@ -5295,7 +5299,7 @@ html.map-hold, html.map-hold * {
   background: var(--surface);
   border: 1px solid var(--border-card);
   border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--modal-shadow);
   padding: 1.5rem 1.75rem;
   font-family: var(--font-mono);
 }
@@ -5332,7 +5336,7 @@ html.map-hold, html.map-hold * {
   cursor: pointer;
 }
 .reconnect-btn:active { background: var(--press); }
-.reconnect-force-yes { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
+.reconnect-force-yes { color: var(--danger); border-color: var(--danger-line); }
 
 /* Yes/no row inside the lobby notice (force_terminate? on the manual path). */
 .lobby-notice-actions {
@@ -5436,7 +5440,7 @@ html.map-hold, html.map-hold * {
   cursor: pointer;
 }
 .set-action:active { background: var(--press); }
-.set-action-danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
+.set-action-danger { color: var(--danger); border-color: var(--danger-line); }
 /* Export's transient "Copied ✓" morph */
 .set-action.flash { color: var(--accent); border-color: var(--accent); }
 
