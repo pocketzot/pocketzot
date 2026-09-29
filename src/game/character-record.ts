@@ -12,6 +12,7 @@ import type { PlayerMsg } from '../ws/types'
 import type { Cell } from './map/map-store'
 import type { TileLoader } from './tiles/tile-loader'
 import { mergeRunes, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
+import { OFFLINE_GAME_ID } from '../offline/offline-state'
 import { count, countEach } from '../counter'
 import { looksLikeWelcome, parseWelcome } from './char-label'
 import { hasOrbLight, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from './rune-messages'
@@ -97,7 +98,7 @@ export class CharacterRecord {
   }
 
   private get offlineSuffix(): '-offline' | '' {
-    return this.opts.gameId === 'offline' ? '-offline' : ''
+    return this.opts.gameId === OFFLINE_GAME_ID ? '-offline' : ''
   }
 
   onPlayer(msg: PlayerMsg): void {

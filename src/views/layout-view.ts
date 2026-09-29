@@ -90,6 +90,15 @@ export class LayoutView {
   }
 
   show(msg: UiPushMsg): void {
+    // describe-* overlays hint "(press '!' for details)" inside the body,
+    // not in the actions footer — promote it to a tappable button so it's
+    // reachable on mobile. Mutating the frame's actions persists across
+    // ui-state body swaps, so the button stays put while the user toggles
+    // in/out.
+    if (/press '!' for details/.test(msg.body ?? '') && !/\(!\)/.test(msg.actions ?? '')) {
+      const trimmed = (msg.actions ?? '').replace(/\.\s*$/, '')
+      msg.actions = trimmed ? `${trimmed}, (!)details.` : '(!)details.'
+    }
     const loader = this.d.loader()
     let titleSrc = msg.title ?? msg.prompt ?? ''
     let rawBody = msg.text ?? msg.body ?? msg.desc ?? ''

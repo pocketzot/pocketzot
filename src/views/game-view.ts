@@ -103,6 +103,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     conn, onLobby, spectating, initialLoader, readMorgue,
     username = '', gameId = '', guest = false, resumed = false,
   } = opts
+  // conn.send is a method: this keeps its receiver.
+  const send =(m: ClientMsg): void => conn.send(m)
   const store = new MapStore()
   if (import.meta.env.DEV) (window as unknown as { __dcssStore: MapStore }).__dcssStore = store
   // Map render mode. Starts in ASCII regardless of the saved preference; tile
@@ -124,28 +126,13 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // version, there's no shared mutable state to clear and no way to read a
   // previous game's atlas under this game's tileinfo — the
   // black-tile-after-version-switch class is gone by construction. Tile views
-  // only paint once they're handed this loader.
-  let loader: TileLoader | null = initialLoader ?? null
-  // Dev hook: the live per-version TileLoader, for console tile-id lookups
-  // (e.g. loader.getModule('player') → demon part ids when fabricating pan
-  // lord cells via __dcssSimulateIn). Also re-set on game_client, which is
-  // where the loader lands when it wasn't forwarded from the lobby.
-  if (import.meta.env.DEV && loader) (window as unknown as { __dcssLoader: TileLoader }).__dcssLoader = loader
+  // only paint once they're handed this loader (adoptLoader).
+  let loader: TileLoader | null = null
   let mapView: MapView | TileMapView = new MapView(store)
   // Live view for console poking (it's swapped by setRenderMode, hence a getter).
   if (import.meta.env.DEV) {
     Object.defineProperty(window, '__dcssMapView', { configurable: true, get: () => mapView })
   }
-  // Map rendering is synchronous per message, mirroring the reference client
-  // (display.js handle_map_message): the view center moves ONLY on map.vgrdc
-  // — never on player.pos — and the pan-blit + dirty repaint happen right in
-  // the map handler, before the next message dispatches. That ordering is
-  // what makes later same-batch paints (cursor, player HP stamp) safe by
-  // construction: nothing ever paints against a canvas whose origin is about
-  // to move. The earlier microtask-coalescing flush existed only to absorb
-  // the double paint caused by panning on player.pos; with vgrdc-only
-  // panning there is nothing to coalesce (multi-map batches are ~1% of
-  // traffic, and per-paint cost is sub-millisecond on the blit path).
   // Running HP/MP snapshot (merged across player deltas) for the tile view's
   // under-tile mini-bars. Kept here so a render-mode swap can seed the freshly
   // created view, which otherwise starts at zero until the next player message.
@@ -276,14 +263,19 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // state, and this view (not app.ts) is the only place that knows game
   // lifecycle, so reset-at-mount stands in for clear-at-exit.
   setEnumsModule(null)
-  // When the loader is already known at mount (handed up from the lobby as
-  // initialLoader), wire it to the panels now so the persisted-pref tile swap
-  // below paints sprites immediately. Otherwise the game_client handler does it.
-  if (loader) {
-    monsterListView.setLoader(loader)
-    monsterPanel.setLoader(loader)
-    adoptEnums(loader)
+  function adoptLoader(l: TileLoader): void {
+    loader = l
+    // Dev hook: the live per-version TileLoader, for console tile-id lookups
+    // (e.g. loader.getModule('player') → demon part ids when fabricating pan
+    // lord cells via __dcssSimulateIn).
+    if (import.meta.env.DEV) (window as unknown as { __dcssLoader: TileLoader }).__dcssLoader = l
+    monsterListView.setLoader(l)
+    monsterPanel.setLoader(l)
+    adoptEnums(l)
   }
+  // Adopted now when the lobby handed it up, so the persisted-pref tile swap
+  // below paints sprites immediately; otherwise the game_client handler does.
+  if (initialLoader) adoptLoader(initialLoader)
 
   // The engine's popup stack — menus, CRT screens and ui-push layouts in one
   // order, plus the ui_cutoff (../game/popup-stack.ts). What the overlay
@@ -368,7 +360,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // here is safe; the harvester fires no hook while constructing, so
   // spellRail (built below) is ready.
   const harvester = new SpellHarvester({
-    send: (m) => conn.send(m),
+    send,
     uiQuiet: () => uiQuiet(),
     onSpellsChanged: () => exposeSpellCache(),
   }, !!spectating)
@@ -439,7 +431,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // Always visible during play once spells are harvested (hidden in X mode).
   const spellRail = new SpellRail({
     view,
-    send: (m) => conn.send(m),
+    send,
     spells: () => harvester.spells,
     loader: () => loader,
     spectating: !!spectating,
@@ -467,13 +459,13 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // button's game_id, e.g. "dcss-0.23") and the lobby-resolved loader; the
   // game_client handler re-checks with the server's gamedata version for
   // servers where neither is known yet at mount.
-  advisory.check(gameId, loader?.version)
+  advisory.check(gameId, initialLoader?.version)
 
   // The message log, --more--, prompt rows and the X-describe strip
   // (./message-log.ts).
   const messageLog = new MessageLog({
     view,
-    send: (msg) => conn.send(msg),
+    send,
     focusView,
     guardedFocus,
     harvesting: () => harvester.isHarvesting(),
@@ -680,7 +672,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   hud.appendChild(hudTop)
   hud.appendChild(statusView.element)
 
-  const numpad = new NumpadInput({ send: (m) => conn.send(m), focusView })
+  const numpad = new NumpadInput({ send, focusView })
 
   // Post-dispatch hook for outbound user keystrokes (from touch and physical
   // keyboard). X-mode 'R' (CMD_MAP_EXCLUDE_RADIUS, viewmap.cc) blocks
@@ -747,7 +739,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   })
 
   const menuBar = new MenuBar({
-    send: (msg) => conn.send(msg),
+    send,
     focusView,
     shift: menuShift,
     yesno: () => currentInputMode === MOUSE_MODE_YESNO,
@@ -837,7 +829,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     },
     navBlocked: () => popups.has('crt') || inXMode,
     showBar: showMenuBarForStrip,
-    send: (msg) => conn.send(msg),
+    send,
     focusView,
     guardedFocus,
     loader: () => loader,
@@ -848,7 +840,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const layoutView = new LayoutView({
     content: () => overlayContent,
     renderOverlay: (title, build) => renderOverlay(title, build),
-    send: (msg) => conn.send(msg),
+    send,
     focusView,
     guardedFocus,
     loader: () => loader,
@@ -1254,8 +1246,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // font-scale observer, and monster-list view are all wired up. Routed
   // through setRenderMode, which swaps in the tile view immediately (before
   // first paint, so no ASCII flash). The atlas preload waits until we hold the
-  // loader: on a played game that's the game_client handler; on a spectated
-  // game it's already set (from the lobby handoff) here.
+  // loader (see `loader`).
   if (getPref('mapRenderMode') === 'tiles') setRenderMode('tiles')
 
   const docKeyHandler = (e: KeyboardEvent) => {
@@ -1392,13 +1383,12 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // URLs for tile atlases (gui.png, main.png, ...) served at
     // /gamedata/<version>/.
     if (!msg.version) return
-    // Resolve this game's per-version loader. getTileLoader memoizes by
-    // version, so a same-version resume reuses the warm cache while a
-    // different version gets a fully isolated instance — no shared state
-    // to clear, no stale-atlas race. This is the moment a persisted
-    // tile-mode view (built before game_client) or a pre-game_client
-    // gesture toggle gets its loader and starts painting.
-    loader = getTileLoader(conn.httpBase, msg.version)
+    // getTileLoader memoizes by version, so a same-version resume reuses the
+    // warm cache. This is the moment a persisted tile-mode view (built before
+    // game_client) or a pre-game_client gesture toggle gets its loader and
+    // starts painting.
+    const l = getTileLoader(conn.httpBase, msg.version)
+    adoptLoader(l)
     // Offline games only (httpBase '' → the same-origin pack): refresh
     // the pack's layout fingerprint so record.captureAvatar can stamp it on
     // captures synchronously and eager-bake against it. Forced because
@@ -1408,14 +1398,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // version dirs are immutable and never need this (their fingerprint
     // fills lazily on the first login-shelf resolve).
     if (conn.httpBase === '') void primeFingerprint('', msg.version, true)
-    // Dev hook — see the initialLoader assignment near the top.
-    if (import.meta.env.DEV) (window as unknown as { __dcssLoader: TileLoader }).__dcssLoader = loader
-    monsterListView.setLoader(loader)
-    monsterPanel.setLoader(loader)
-    adoptEnums(loader)
     advisory.check(gameId, msg.version)
     if (renderMode === 'tiles') {
-      void (mapView as TileMapView).preloadAtlases(loader)
+      void (mapView as TileMapView).preloadAtlases(l)
       monsterListView.update(store.getMonsters())
     }
   }
@@ -1436,8 +1421,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       // refuse this map's vgrdc, and the late cursor retires the hold
       // without re-panning (MapJumper.onCursor) while no further vgrdc
       // follows — the held view then showed the new level around the old
-      // level's stair. The spectator-join clear (above) drops a hold
-      // too; that only re-centers on the cursor.
+      // level's stair. The spectator-join clear (a cell-less clear map, see
+      // character-record.ts welcomeLine) drops a hold too; that only
+      // re-centers on the cursor.
       mapJumper.reset()
     }
     // vgrdc is the server's complete view-centering signal (present on a
@@ -1458,9 +1444,15 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (msg.invis_mon_desc !== undefined) store.invisMonDesc = msg.invis_mon_desc
     if (msg.player_on_level !== undefined) store.playerOnLevel = msg.player_on_level
     const dirty = store.merge(msg.cells ?? [])
-    // Render now, synchronously (reference display.js order, except we
-    // merge before panning so the blit's exposed strips paint this turn's
-    // cells instead of last turn's — panRender dedups strip∪dirty).
+    // Render now, synchronously, mirroring the reference client (display.js
+    // handle_map_message) — except we merge before panning so the blit's
+    // exposed strips paint this turn's cells instead of last turn's
+    // (panRender dedups strip∪dirty). Painting before the next message
+    // dispatches is what makes later same-batch paints (cursor, player HP
+    // stamp) safe by construction: nothing ever paints against a canvas
+    // whose origin is about to move. With vgrdc-only panning there is
+    // nothing to coalesce: multi-map batches are ~1% of traffic, and
+    // per-paint cost is sub-millisecond on the blit path.
     if (msg.clear) mapView.fullRender()          // store wiped — hard
     else if (panned) mapView.panRender(dirty)    // origin moved — blit
     else mapView.render(dirty)
@@ -1483,14 +1475,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (msg.pos) {
       store.playerPos = { x: msg.pos.x, y: msg.pos.y }
       // Deliberately NO view-center change here: the view pans only on
-      // map.vgrdc, like the reference client (its player.js never touches
-      // the center). vgrdc arrives on the same turn's map message, whose
-      // handler pans and repaints synchronously before anything else runs.
+      // map.vgrdc (onMap).
       minimaps.scheduleRepaint()
     }
-    // Feed HP/MP to the renderer (tile mode draws under-tile mini-bars).
-    // Runs before the scheduled flush, so a full render picks up the fresh
-    // values; merged into playerStats so a later tile-mode swap can seed.
+    // Feed HP/MP to the renderer (tile mode draws under-tile mini-bars),
+    // merged into playerStats so a later tile-mode swap can seed.
     if (msg.hp !== undefined) playerStats.hp = msg.hp
     if (msg.hp_max !== undefined) playerStats.hp_max = msg.hp_max
     if (msg.mp !== undefined) playerStats.mp = msg.mp
@@ -1531,28 +1520,19 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   function onUiPush(msg: MsgOf<'ui-push'>): void {
     advisory.disarm()  // an overlay rendered (version-advisory.ts)
-    const pushMsg: UiPushMsg = msg
-    if (resumed && !spectating && CREATION_PUSHES.has(pushMsg.type)) {
+    if (resumed && !spectating && CREATION_PUSHES.has(msg.type)) {
       abandoningResume = true
       conn.send({ msg: 'go_lobby' })
       return
     }
-    if (pushMsg.type === 'game-over') gameOverSeen = true
-    record.onUiPush(pushMsg)
+    if (msg.type === 'game-over') gameOverSeen = true
+    record.onUiPush(msg)
     // A server overlay supersedes our client-side monster panel and
     // minimap lens; clear/close so subsequent map updates don't rewrite
     // the overlay body or repaint a stale lens.
     closeClientOverlays()
-    // describe-* overlays hint "(press '!' for details)" inside the body,
-    // not in the actions footer — promote it to a tappable button so it's
-    // reachable on mobile. Mutating actions persists across ui-state body
-    // swaps, so the button stays put while the user toggles in/out.
-    if (/press '!' for details/.test(pushMsg.body ?? '') && !/\(!\)/.test(pushMsg.actions ?? '')) {
-      const trimmed = (pushMsg.actions ?? '').replace(/\.\s*$/, '')
-      pushMsg.actions = trimmed ? `${trimmed}, (!)details.` : '(!)details.'
-    }
-    popups.pushUi(pushMsg)
-    showUiPush(pushMsg)
+    popups.pushUi(msg)
+    showUiPush(msg)
   }
 
   function onUiStack(msg: MsgOf<'ui-stack'>): void {
@@ -1622,11 +1602,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   function onMenu(msg: MsgOf<'menu'>): void {
     advisory.disarm()  // a menu rendered (version-advisory.ts)
-    const m: MenuMsg = msg
-    const titlePlain = stripDcss(m.title?.text ?? '')
+    const titlePlain = stripDcss(msg.title?.text ?? '')
     // The harvest probe's own spell menu is swallowed, never rendered
     // (../game/spell-harvest onMenu).
-    if (harvester.onMenu(m.tag, titlePlain, m.items)) return
+    if (harvester.onMenu(msg.tag, titlePlain, msg.items)) return
     // Like onUiPush, a server menu supersedes the client panel. A
     // panel-row tap sends a describe click_cell; on a multi-occupant tile
     // the server answers with a selection menu, not a describe ui-push.
@@ -1634,10 +1613,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // else the first Esc closes the panel locally (never reaching the
     // server) and the live menu blocks re-opening the list until a 2nd Esc.
     closeClientOverlays()
-    if (m.type === 'crt') showCrt(m.tag)
+    if (msg.type === 'crt') showCrt(msg.tag)
     else {
-      popups.pushMenu(m, !!m.replace)
-      menuView.show(m)
+      popups.pushMenu(msg, !!msg.replace)
+      menuView.show(msg)
     }
   }
 
@@ -1777,12 +1756,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // drops any pending re-harvest so neither carries into the next game.
   function onLeave(): void {
     harvester.resetForNewGame()
-    advisory.disarm()
     exitToLobby()
   }
 
   function onGameEnded(msg: MsgOf<'game_ended'>): void {
-    advisory.disarm()
     record.recordEnding(msg.reason, msg.message, msg.dump)
     // Forward exit details so the lobby renders the exit dialog after the
     // layer switch. The trailing go_lobby + lobby list (often batched with
@@ -2043,16 +2020,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // false) — hideOverlay's resync brings it back with the map.
     minimaps.closeLens({ suspend: true })
     chatView.hidePill()
-    // Whatever renders next isn't (yet) exportable; the exportable show
-    // (LayoutView.show) re-sets this after it has laid content down.
-    setExportSource(null)
-    newgameFocus = null
-    retireOverlay()
+    clearOverlayContent()
+    // After the clear: retireOverlay may have just kept this very frame.
     const covered = opts?.over ? frameDom.get(opts.over) : undefined
-    uiOverlay.innerHTML = ''
-    uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert')
     uiOverlay.classList.toggle('overlay-float', !!opts?.float)
-    backdropPress = false
     // Set per render, not latched: the creation screens re-enter here for
     // every step, and the first in-game overlay (or hideOverlay) drops it.
     view.classList.toggle('newgame', opts?.screen === 'newgame')
@@ -2096,8 +2067,22 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // screen — not a client panel's, a server dialog's, or a prompt card's.
     shownFrame = monsterPanelOpen || dialogActive || covered || opts?.float
       ? null : popups.top() ?? null
-    menuBar.clear()
     minimaps.scheduleRepaint()  // the sidebar minimap follows the map's display
+  }
+
+  // Retires what the overlay shows and empties it: the shared first step of
+  // enterOverlayLayout and hideOverlay, run before either resets the layout
+  // state retireOverlay reads.
+  function clearOverlayContent(): void {
+    // Whatever renders next isn't (yet) exportable; the exportable show
+    // (LayoutView.show) re-sets this after it has laid content down.
+    setExportSource(null)
+    newgameFocus = null
+    retireOverlay()
+    uiOverlay.innerHTML = ''
+    uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert')
+    backdropPress = false
+    menuBar.clear()
   }
 
   // The game-view surface handed to the extracted overlay screens
@@ -2105,7 +2090,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // screens stay free of this closure.
   const overlayCtx: OverlayScreenCtx = {
     overlay: uiOverlay,
-    send: (msg) => conn.send(msg),
+    send,
     enterLayout: enterOverlayLayout,
     enterPopup: () => {
       enterOverlayLayout({ over: layerTarget() })
@@ -2144,21 +2129,16 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   function hideOverlay(): void {
     autoCloseKbdIfOurs()
-    setExportSource(null)
-    newgameFocus = null
-    retireOverlay()  // before the layout state it reads resets
+    clearOverlayContent()
     overlayMode = 'none'
     touchHidden = false
     menuBarOn = false
     applyLayout()
-    uiOverlay.innerHTML = ''
-    uiOverlay.classList.remove('prompt-menu', 'prompt-menu-alert', 'overlay-float')
-    backdropPress = false
+    uiOverlay.classList.remove('overlay-float')
     view.classList.remove('newgame')
     overlayContent = uiOverlay
     promptHost = uiOverlay
     chatView.syncChip()  // chip retracts while an overlay is up; map's back
-    menuBar.clear()
     minimaps.reopenSuspendedLens()
     requestAnimationFrame(() => {
       // The restore above painted the lens against the pre-fit viewport;
