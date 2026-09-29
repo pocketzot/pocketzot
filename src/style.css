@@ -1815,8 +1815,8 @@ button.lobby-account-chip:active { background: var(--press); }
      .tiles-mode override lightens it (set by setRenderMode in game-view.ts,
      which is also what swaps in TileMapView). */
   --msglog-bg: color-mix(in srgb, var(--bg) 30%, transparent);
-  /* Spell-rail button band: 32px tile + 2×2px button padding + own 0.25rem
-     padding. Shared so the rail's height and the log float that sits just
+  /* Spell-rail button band: 32px tile + 2×2px button padding + the track's
+     0.25rem padding (.spell-rail-track). Shared so the rail's height and the log float that sits just
      above it stay locked together. */
   --spell-rail-h: calc(36px + 0.5rem);
   /* The log's rendered box height: --msglog-h plus the inline --more-- row's
@@ -3569,25 +3569,36 @@ html.map-hold, html.map-hold * {
 #spell-rail {
   /* grid-area is overridden per orientation (portrait floats it over the map,
      landscape uses the sidebar row); this default just keeps it in the map
-     area. Fixed at one button-row tall: overflow spells wrap onto a clipped
-     second line, so the row shows the first N that fit and the z tab carries
-     the full list. */
+     area. Fixed at one button-row tall; spells past the width scroll
+     sideways in the track below. */
   grid-area: map;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  padding: 0.25rem;
+  padding: 0 0.25rem;
   background: var(--bg);
   /* No border-top: the translucent log overlay sits directly above, and a
      hard line under it reads as stray chrome — the opaque icon band is its
      own separator (and the HUD's hairline is non-caster-only, so the whole
      caster stack below the map is borderless). */
   height: var(--spell-rail-h);
-  overflow: hidden;
 }
+/* The scroller carries the vertical padding (not the band): overflow clips
+   at the padding box, and .spell-letter hangs 2px below its button. The gap
+   is a floor: game-view widens it inline so the edge button peeks
+   (rail-peek.ts). */
+.spell-rail-track {
+  display: flex;
+  gap: 0.25rem;
+  height: 100%;
+  padding: 0.25rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.spell-rail-track::-webkit-scrollbar { display: none; }
 .spell-rail-btn {
   position: relative;
   display: block;
+  flex: none;
   padding: 2px;
   line-height: 0;
   background: color-mix(in srgb, var(--bg) 70%, transparent);
@@ -4143,6 +4154,9 @@ html.map-hold, html.map-hold * {
      fallback. 3.3rem was the audited strip minimum
      (dev-material/vertical-space-savings.md). */
   --tc-dpad: var(--pz-dpad, 3.5rem);
+  /* Control-grid button floor (.tc-btn); the z spell grid derives its
+     height from it (.tc-spell-grid). */
+  --tc-btn-min-h: 2rem;
   /* Resting palette one step darker than the app-wide tokens: at night the
      map is sparse dim glyphs on near-black, so --text/--surface2 buttons
      outshine the play area. Presses brighten to the app-wide --press fill
@@ -4429,7 +4443,7 @@ html.map-hold, html.map-hold * {
   color: var(--tc-label);
   font-family: var(--font-mono);
   font-size: 0.95rem;
-  min-height: 2rem;
+  min-height: var(--tc-btn-min-h);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -4457,9 +4471,17 @@ html.map-hold, html.map-hold * {
    covering the map. Buttons get the rail's treatment: just the tile with a
    corner letter, no button box (justify-items:center keeps each content-sized
    icon centered in its column). A border frames the whole area so the boxless
-   icons read as one grouped region. */
+   icons read as one grouped region.
+   Sized as the control grid it replaces (3 = GRID_ROWS rows of
+   --tc-btn-min-h, 2px gaps), growing only into space the panel already
+   has. Never let its content size the panel: 3 icon rows (126px) outgrow
+   the control grid, and switching tabs grew the strip 2.8px in portrait
+   and the landscape panel 26px (squeezing the minimap), measured
+   2026-09-29. */
 .tc-spell-grid {
-  flex: 1;
+  flex: 1 1 auto;
+  height: calc(3 * var(--tc-btn-min-h) + 2 * 2px);
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   grid-auto-rows: min-content;
@@ -5064,13 +5086,11 @@ html.map-hold, html.map-hold * {
   #game-view.menu-bar .tc-panel { display: none; }
 
   /* Spell rail: in-flow sidebar row directly above the touch panel. Base
-     styling applies — including the fixed one-row height, so the rail
-     shows the first row of 36px buttons that fit the --sidebar-w column
-     (zero horizontal padding; seven at the 16rem phone width) and the
-     wrapped line beyond is clipped (same clip behavior as portrait). */
+     styling applies — the fixed one-row height and the sideways-scrolling
+     track — with no horizontal band padding, flush to the sidebar column. */
   #spell-rail {
     grid-area: spells;
-    padding: 0.25rem 0.0rem;
+    padding: 0;
   }
 
   /* QWERTY overlay: the base key height scales with viewport WIDTH

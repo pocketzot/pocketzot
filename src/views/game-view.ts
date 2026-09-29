@@ -44,6 +44,7 @@ import { compactPlace } from '../game/char-label'
 import { getPref, setPref, MONSTER_LIST_MODE_CHANGED_EVENT, RENDER_MODE_CHANGED_EVENT } from '../prefs'
 import { stripDcss } from './overlay-body'
 import { SpellHarvester, type SpellEntry } from '../game/spell-harvest'
+import { peekGap } from './rail-peek'
 import { ChatView } from './chat-view'
 import {
   showInputDialog, showSeedSelection,
@@ -430,6 +431,31 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const spellRail = document.createElement('div')
   spellRail.id = 'spell-rail'
   spellRail.style.display = 'none'
+  // The rail's buttons scroll sideways inside its opaque band, spaced so the
+  // edge button always peeks (rail-peek.ts). The CSS gap is the floor: the
+  // inline override is cleared first so the stylesheet value is what's read.
+  const railTrack = document.createElement('div')
+  railTrack.className = 'spell-rail-track'
+  spellRail.appendChild(railTrack)
+  const applyRailGap = (): void => {
+    const btn = railTrack.firstElementChild
+    // Never recompute while hidden: the observer fires on display:none with
+    // a 0 width, and a floor gap left in place would shift every button
+    // under the scroll offset restored on show (renderSpellRail).
+    const trackW = railTrack.clientWidth
+    if (!btn || trackW === 0) return
+    // Measure before clearing the override: a layout read with the floor
+    // gap in place clamps scrollLeft to the narrower row (measured: a rail
+    // scrolled to the end came back one button short after X mode).
+    const btnW = btn.getBoundingClientRect().width
+    railTrack.style.columnGap = ''
+    const cssGap = parseFloat(getComputedStyle(railTrack).columnGap) || 0
+    railTrack.style.columnGap = `${peekGap(trackW, btnW, cssGap)}px`
+  }
+  new ResizeObserver(applyRailGap).observe(railTrack)
+  // A display:none box loses its scroll offset, and the rail hides for
+  // every X-mode visit; renderSpellRail carries the offset across.
+  let railScrollLeft = 0
   let inXMode = false
   let exitedXModeForInput = false
   // The server's last vgrdc. In X mode the view center may deliberately
@@ -2200,13 +2226,18 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     const spells = harvester.spells
     const visible = !spectating && !inXMode && spells.length > 0
     view.classList.toggle('spell-row', visible)
+    const shown = spellRail.style.display !== 'none'
+    if (shown) railScrollLeft = railTrack.scrollLeft
     if (!visible) { spellRail.style.display = 'none'; return }
     if (railBuiltFrom !== spells) {
-      spellRail.innerHTML = ''
-      for (const s of spells) spellRail.appendChild(makeSpellButton(s, 'spell-rail-btn'))
+      railTrack.innerHTML = ''
+      for (const s of spells) railTrack.appendChild(makeSpellButton(s, 'spell-rail-btn'))
       railBuiltFrom = spells
     }
-    spellRail.style.display = ''
+    if (!shown) {
+      spellRail.style.display = ''
+      railTrack.scrollLeft = railScrollLeft
+    }
   }
 
   // The view's half of the harvester's keystroke-injection guard (see
