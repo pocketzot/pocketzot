@@ -1,3 +1,21 @@
+// The in-game screen for one game (played or spectated): built at the
+// lobby→game transition, torn down on exit (dispose). A hub, not a renderer:
+// the screen's parts are their own modules — menus (menu-view, menu-bar),
+// ui-push layouts (layout-view, game-overlays, newgame-view), CRT screens
+// (crt-view), the message log, spell rail, minimap hosts, numpad, chat and
+// the HUD views — and this file composes them:
+//   - the server-message table (handlers): the messages that move the
+//     engine's popup stack (../game/popup-stack) or the map frame, or touch
+//     several modules at once; each module owns the rest through its own
+//     `handlers`.
+//   - the overlay harness: what shows (restoreTopLayer), how
+//     (enterOverlayLayout / hideOverlay, a prompt card over a covered
+//     frame's copy) and the screen layout, derived in one place
+//     (applyLayout).
+//   - input: the targets behind the one precedence chain
+//     (../game/input/input-router), the touch strip, map gestures, X mode.
+//   - the game's lifecycle: tile-loader adoption (adoptLoader), render-mode
+//     swaps, the auto-resume abandon, exits to the lobby.
 import type { GameConnection } from '../ws/connection'
 import type { ClientMsg, ServerMsg, GameExit } from '../ws/types'
 import { combineHandlers, dispatch, type MsgOf } from '../ws/dispatcher'
