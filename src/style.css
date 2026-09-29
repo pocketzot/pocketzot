@@ -2822,7 +2822,7 @@ html.map-hold, html.map-hold * {
 #game-view.spell-row .minimap-lens {
   padding-bottom: calc(var(--msglog-box-h) + var(--spell-rail-h) + 0.25rem);
 }
-/* Landscape sidebar minimap (game-view sidebarMinimap): portrait has no
+/* Landscape sidebar minimap (minimap-hosts.ts): portrait has no
    slot for it; the landscape block gives it the `mini` grid area. */
 .minimap-sidebar-slot { display: none; }
 .minimap-canvas {
@@ -4405,7 +4405,7 @@ html.map-hold, html.map-hold * {
    header) and abc▴ stay on their normal-play pixels — every X visit ends on
    one of them. The tab grid shows the X key grid (touch.ts
    renderXModeContent), the tabs give way to the viewed level's name, and
-   the d-pad's slot holds the minimap (game-view xmodeMinimap). ⇧ ⌃ stay
+   the d-pad's slot holds the minimap (minimap-hosts.ts). ⇧ ⌃ stay
    hidden but keep their slots: Ctrl-E/F/U/C must never be one stray tap
    away (x-mode-keys.ts). */
 #touch-controls.x-mode .tc-shift,

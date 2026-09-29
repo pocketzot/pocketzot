@@ -356,7 +356,7 @@ export function buildTouchControls(wireSend: SendFn, opts: TouchControlsOpts = {
   root.appendChild(dpadEl)
 
   // The d-pad's slot in the X level map (style.css shows one or the other):
-  // game-view mounts the minimap here.
+  // MinimapHosts (views/minimap-hosts) mounts the minimap here.
   const xSlotEl = document.createElement('div')
   xSlotEl.className = 'tc-xslot'
   root.appendChild(xSlotEl)

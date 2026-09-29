@@ -10,7 +10,7 @@ import { StatsView } from '../game/hud/stats-view'
 import { StatusView } from '../game/hud/status-view'
 import { MonsterListView } from '../game/hud/monster-list'
 import { MonsterPanelView } from '../game/hud/monster-panel'
-import { MinimapView } from '../game/map/minimap-view'
+import { MinimapHosts } from './minimap-hosts'
 import { InventoryStore } from '../game/inventory-store'
 import { buildTouchControls, bindPressedClass } from '../game/input/touch'
 import type { TouchControls } from '../game/input/touch'
@@ -163,51 +163,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   const monsterListView = new MonsterListView(store)
   const monsterPanel = new MonsterPanelView(store)
   let monsterPanelOpen = false
-  const minimap = new MinimapView(store)
-  let minimapOpen = false
-  // While spectating, an overlay evicting the lens is the watched player's
-  // doing, not the spectator's — remember the eviction here so hideOverlay
-  // brings the lens back when the screen returns to the map. The spectator's
-  // own closes (lens tap, chip re-tap, Esc) end the session instead.
-  let minimapSuspended = false
-  // Tap anywhere on the lens dismisses it (Esc and the place-chip toggle
-  // are the other exits — no × needed). A future pan gesture will claim
-  // drags on the canvas and leave taps as the dismissal.
-  minimap.element.addEventListener('click', () => closeMinimap())
-  // The place chip toggles the minimap. StatsView owns the chip's DOM and
-  // tap detection (see its constructor); we only supply the behavior.
-  statsView.setOnPlaceTap(() => minimapOpen ? closeMinimap() : openMinimap())
-  // X-mode minimap: the same renderer in the touch strip's d-pad slot
-  // (touchControls.xModeSlot), passive. Mounted for the life of X mode by
-  // enterXMode/exitXMode; repaints ride scheduleMinimapRepaint. xslotBox is
-  // the slot's content box, kept by an observer next to touchControls, so
-  // repaints never read layout.
-  const xmodeMinimap = new MinimapView(store, {
-    className: 'minimap-xslot', maxCellCss: 3, growToView: false,
-  })
-  let xslotBox = { w: 0, h: 0 }
-  // Landscape sidebar minimap: always-on in the sidebar's 1fr spacer row
-  // (style.css `mini` area; display:none in portrait), shown only when that
-  // row has room — a tablet's tall sidebar, rarely a phone's. The slot is
-  // the grid item; the minimap sits absolutely inside it (see style.css),
-  // and the observer keeps its content box current, so repaints never read
-  // layout. `.empty` hides just the canvas: the element keeps its box, so
-  // the observer still sees room come back.
-  const sidebarMinimap = new MinimapView(store, {
-    className: 'minimap-sidebar empty', maxCellCss: 5, growToView: false,
-  })
-  const sidebarMinimapSlot = document.createElement('div')
-  sidebarMinimapSlot.className = 'minimap-sidebar-slot'
-  sidebarMinimapSlot.appendChild(sidebarMinimap.element)
-  let sidebarBox = { w: 0, h: 0 }
-  let sidebarMinimapShown = false
-  // Below this the spacer row is a sliver: a minimap squeezed into it reads
-  // as noise, and it would flicker in and out as the HUD/monster list grow.
-  const SIDEBAR_MINIMAP_MIN_H = 80
-  new ResizeObserver(([entry]) => {
-    sidebarBox = { w: entry.contentRect.width, h: entry.contentRect.height }
-    scheduleMinimapRepaint()
-  }).observe(sidebarMinimap.element)
+  // The place chip toggles the minimap lens (minimaps, built with the touch
+  // controls below). StatsView owns the chip's DOM and tap detection (see
+  // its constructor); we only supply the behavior.
+  statsView.setOnPlaceTap(() => minimaps.toggleLens())
   statsView.setOnSettingsTap(() => openSettings())
   // Declared ahead of ChatView (not with its map/log siblings below): the
   // chipAllowed veto reads its display, and the ChatView constructor runs an
@@ -674,7 +633,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       const dest = mapJumper.destination()
       if (dest && !cursorInView(dest, mapView.viewRect()) && mapView.setViewCenter(dest)) {
         mapView.panRender()
-        scheduleMinimapRepaint()
+        minimaps.scheduleRepaint()
       }
     },
     // X level map only: drag pans the view locally (wire-silent, so
@@ -687,7 +646,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       const next = clampToBox({ x: c.x + delta.x, y: c.y + delta.y }, store.mfBounds())
       if (!mapView.setViewCenter(next)) return
       mapView.panRender()
-      scheduleMinimapRepaint()
+      minimaps.scheduleRepaint()
     },
     // Normal play: a drag has no wire meaning (hover is gated off above),
     // so it opens the `X` level map, where the same drag pans. The pan
@@ -747,7 +706,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // chip clickable, and a re-open would rebuild the overlay and reset the
   // panel's scroll position.
   monsterListView.element.addEventListener('click', (e) => {
-    // (Not gated on minimapOpen: openMonsterPanel's enterOverlayLayout
+    // (Not gated on minimaps.lensOpen: openMonsterPanel's enterOverlayLayout
     // closes the lens, so the tap cleanly swaps lens → panel.)
     if (serverPromptActive() || monsterPanelOpen) return
     if (monsterListView.element.childElementCount === 0) return
@@ -825,8 +784,8 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     leave: () => leaveToLobby(),
     monsterPanelOpen: () => monsterPanelOpen,
     closeMonsterPanel: () => closeMonsterPanel(),
-    minimapOpen: () => minimapOpen,
-    closeMinimap: () => closeMinimap(),
+    minimapOpen: () => minimaps.lensOpen,
+    closeMinimap: () => minimaps.closeLens(),
     menuNav: (nav) => menuView.nav(nav),
     scrollerNav: (nav, page) => layoutView.scrollerNav(nav, page),
     send: (msg) => { conn.send(msg); afterUserSend(msg) },
@@ -846,10 +805,19 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // badges to their force-cast form ("za" → "Za") while it's engaged.
     onShiftChange: on => view.classList.toggle('shift-on', on),
   })
-  new ResizeObserver(([entry]) => {
-    xslotBox = { w: entry.contentRect.width, h: entry.contentRect.height }
-    scheduleMinimapRepaint()
-  }).observe(touchControls.xModeSlot)
+  const minimaps = new MinimapHosts({
+    store,
+    spectating: !!spectating,
+    lensHost: mapWrap,
+    xSlot: touchControls.xModeSlot,
+    viewRect: () => mapView.viewRect(),
+    mapShown: () => mapView.element.style.display !== 'none',
+    inXMode: () => inXMode,
+    xCursor: () => cursors[2] ?? null,
+    // Same refusal set as the monster panel: don't cover a server prompt.
+    lensAllowed: () => !serverPromptActive() && !monsterPanelOpen,
+    focusView,
+  })
 
   const menuBar = new MenuBar({
     send: (msg) => conn.send(msg),
@@ -1006,7 +974,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // containing-block trick as #more-btn), landscape slots it into the
   // sidebar between HUD and spell rail.
   view.appendChild(monsterListView.element)
-  view.appendChild(sidebarMinimapSlot)
+  view.appendChild(minimaps.sidebarSlot)
   view.appendChild(msgLog)
   view.appendChild(xdescStrip)
   view.appendChild(spellRail.element)
@@ -1072,7 +1040,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // explicitly (fitNow). That's redundant with the observer
   // but resolves the layout one frame earlier — without it there'd be a
   // brief flash at the old size before the observer's callback runs.
-  // Coalesced "re-fit next frame", modelled on scheduleMinimapRepaint below.
+  // Coalesced "re-fit next frame", modelled on MinimapHosts.scheduleRepaint.
   // Several triggers inside one frame (log growth + HUD change + keyboard,
   // or an X-mode toggle landing on the same frame as an observer fire) used
   // to schedule that many rAF re-fits, and fitToContainer is the most
@@ -1093,7 +1061,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // the rect stale until the next move.
   function fitNow(): void {
     mapView.fitToContainer()
-    scheduleMinimapRepaint()
+    minimaps.scheduleRepaint()
   }
   const fontScaleObserver = new ResizeObserver(() => {
     if (!hudRevealed) return
@@ -1131,7 +1099,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     oldEl.replaceWith(next.element)
     mapView = next
     // Carry the overlay layouts' hide: "map element displayed" is the
-    // sidebar minimap's map-on-screen test (repaintSidebarMinimap).
+    // sidebar minimap's map-on-screen test (MinimapHosts mapShown).
     applyLayout()
     fontScaleObserver.observe(mapView.element)
     // Only preload once we hold this game's loader. If we're switching to tiles
@@ -1304,7 +1272,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // __dcssMinimap() — open the level minimap overlay (same as tapping the
     // HUD place chip), for driving with __dcssSimulateIn'd map frames.
     ;(window as unknown as { __dcssMinimap: () => void }).__dcssMinimap =
-      () => openMinimap()
+      () => minimaps.openLens()
     // __dcssChat() — toggle the chat sheet; drive content with
     // __dcssSimulateIn({msg:'chat',...} / {msg:'update_spectators',...}).
     ;(window as unknown as { __dcssChat: () => void }).__dcssChat =
@@ -1566,7 +1534,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     else mapView.render(dirty)
     monsterListView.update(store.getMonsters())
     if (monsterPanelOpen) monsterPanel.update(store.getMonsters())
-    scheduleMinimapRepaint()
+    minimaps.scheduleRepaint()
     record.captureAvatar(store.get(store.playerPos.x, store.playerPos.y), loader)
   }
 
@@ -1586,7 +1554,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       // map.vgrdc, like the reference client (its player.js never touches
       // the center). vgrdc arrives on the same turn's map message, whose
       // handler pans and repaints synchronously before anything else runs.
-      scheduleMinimapRepaint()
+      minimaps.scheduleRepaint()
     }
     // Feed HP/MP to the renderer (tile mode draws under-tile mini-bars).
     // Runs before the scheduled flush, so a full render picks up the fresh
@@ -1819,7 +1787,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       if (msg.loc && !inXMode && !exitedXModeForInput) enterXMode()
       else if (!msg.loc && inXMode) exitXMode()
       if (!msg.loc) exitedXModeForInput = false
-      scheduleMinimapRepaint()  // the X minimap's cursor ring
+      minimaps.scheduleRepaint()  // the X minimap's cursor ring
     }
   }
 
@@ -1912,7 +1880,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // (keys pass through the lens, so X/x reach the server under it). A
     // *spectator's* lens stays put: the watched player's examine pans vgrdc,
     // which just glides the you-are-here rect across the minimap.
-    if (!spectating) closeMinimap()
+    if (!spectating) minimaps.closeLens()
     inXMode = true
     view.classList.add('x-mode')  // drops the map's log-strip padding (style.css)
     // Log and HUD hide. Stash-search activation opens an X-mode preview
@@ -1927,10 +1895,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     messageLog.syncMore()  // a pending --more-- swaps to the floating button
     spellRail.render()  // drop the rail row (and the log's map overlay) for the examine map
     touchControls.enterXMode()
-    // Hidden until its first paint (scheduleFit below schedules it) — a
-    // fresh canvas would flash its 300×150 default.
-    xmodeMinimap.element.hidden = true
-    touchControls.xModeSlot.appendChild(xmodeMinimap.element)
+    minimaps.mountXSlot()  // first painted by scheduleFit's re-fit below
     mapView.setFontScale(X_MODE_SCALE)
     // Zoom mode is left untouched: tiles already had zoom-on (forced at
     // construction by setRenderMode), and the scale shrinks each cell by
@@ -1952,7 +1917,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     view.classList.remove('x-mode')
     messageLog.syncMore()  // a pending --more-- returns to the inline log row
     messageLog.xdescReset()
-    xmodeMinimap.element.remove()
+    minimaps.unmountXSlot()
     messageLog.resetXdescPeak()
     touchControls.exitXMode()
     mapView.setFontScale(1.0)
@@ -2131,7 +2096,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // which is what removes the input rows client-side.
   function idleAtCommandPrompt(): boolean {
     return commandChannelIdle()
-      && !monsterPanelOpen && !minimapOpen
+      && !monsterPanelOpen && !minimaps.lensOpen
       && !messageLog.textInputOpen
       && numpadInput.style.display === 'none'
   }
@@ -2193,80 +2158,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     hideOverlay()  // restores map/hud/msglog/touch via standard restore path
   }
 
-  // --- Level minimap (map-area lens, opened from the HUD place chip) ---
-  //
-  // Deliberately NOT a renderOverlay screen: the lens occludes only
-  // #map-wrap, leaving the HUD, floating log, and touch controls live.
-  // Movement input passes straight through (see the minimapOpen branches in
-  // the touch handler and docKeyHandler), and the map/player repaints below
-  // keep the lens current — so the user can walk by the level overview.
-  // Tap, ×, Esc, or re-tapping the place chip dismisses; any server overlay
-  // closes it via enterOverlayLayout. While spectating, an overlay eviction
-  // only *suspends* the lens (the watched player caused it, not the
-  // spectator) and hideOverlay reopens it when the map layout returns.
-
-  function repaintMinimap(): void {
-    const el = minimap.element
-    const cs = getComputedStyle(el)
-    minimap.paint(
-      mapView.viewRect(),
-      Math.max(0, el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)),
-      Math.max(0, el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)),
-    )
-  }
-
-  // Size box: the d-pad slot. Shown even when the whole explored level is
-  // already on screen — the slot is the strip's own space, and an empty one
-  // reads as broken. A landscape sidebar minimap, when shown, carries the
-  // cursor ring and stands in for it.
-  function repaintXmodeMinimap(): void {
-    xmodeMinimap.element.hidden = sidebarMinimapShown || !xmodeMinimap.paint(
-      mapView.viewRect(), xslotBox.w, xslotBox.h, cursors[2] ?? null)
-  }
-
-  // Off while a full overlay hides the map (landscape overlays leave the
-  // sidebar column up) — enterOverlayLayout/hideOverlay reschedule.
-  function repaintSidebarMinimap(): void {
-    sidebarMinimapShown = sidebarBox.h >= SIDEBAR_MINIMAP_MIN_H
-      && mapView.element.style.display !== 'none'
-      && sidebarMinimap.paint(mapView.viewRect(), sidebarBox.w, sidebarBox.h,
-                              inXMode ? cursors[2] ?? null : null)
-    sidebarMinimap.element.classList.toggle('empty', !sidebarMinimapShown)
-  }
-
-  // Message-driven repaints coalesce through rAF: a movement turn delivers
-  // player + map in one batch, and without this each message would repaint
-  // (and restyle) the lens separately. Serves all three hosts; the sidebar
-  // goes before the X minimap, which reads sidebarMinimapShown.
-  let minimapRepaintQueued = false
-  function scheduleMinimapRepaint(): void {
-    const sidebarLive = sidebarBox.h >= SIDEBAR_MINIMAP_MIN_H || sidebarMinimapShown
-    if ((!minimapOpen && !inXMode && !sidebarLive) || minimapRepaintQueued) return
-    minimapRepaintQueued = true
-    requestAnimationFrame(() => {
-      minimapRepaintQueued = false
-      if (minimapOpen) repaintMinimap()
-      repaintSidebarMinimap()
-      if (inXMode) repaintXmodeMinimap()
-    })
-  }
-
-  function openMinimap(): void {
-    // Same refusal set as the monster panel: don't cover a server prompt.
-    if (serverPromptActive() || monsterPanelOpen || minimapOpen) return
-    minimapOpen = true
-    mapWrap.appendChild(minimap.element)
-    repaintMinimap()
-    focusView()
-  }
-
-  function closeMinimap(opts?: { suspend?: boolean }): void {
-    if (!minimapOpen) return
-    minimapOpen = false
-    minimapSuspended = !!(opts?.suspend && spectating)
-    minimap.element.remove()
-  }
-
   // A server-driven prompt/menu owns the screen — no client-side map overlay
   // (monster panel, minimap) may open over it. Shared by the open guards so
   // the two can't drift apart.
@@ -2286,10 +2177,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
 
   // Dismiss both client-side map overlays. Called wherever a server overlay
   // takes the screen (the reset handlers below); each close is idempotent, so
-  // the redundant call under enterOverlayLayout's own closeMinimap is a no-op.
+  // the redundant call under enterOverlayLayout's own closeLens is a no-op.
   function closeClientOverlays(): void {
     monsterPanelOpen = false
-    closeMinimap({ suspend: true })
+    minimaps.closeLens({ suspend: true })
   }
 
   // --- shared overlay helpers ---
@@ -2309,7 +2200,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // can't retract one in flight). The floating chat chip retracts too
     // (syncChip below, once the overlay is visible and chipAllowed reads
     // false) — hideOverlay's resync brings it back with the map.
-    closeMinimap({ suspend: true })
+    minimaps.closeLens({ suspend: true })
     chatView.hidePill()
     // Whatever renders next isn't (yet) exportable; the exportable show
     // (showUiPush) re-sets this after it has laid content down.
@@ -2366,7 +2257,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     shownFrame = monsterPanelOpen || dialogActive || covered || opts?.float
       ? null : popups.top() ?? null
     menuBar.clear()
-    scheduleMinimapRepaint()  // the sidebar minimap follows the map's display
+    minimaps.scheduleRepaint()  // the sidebar minimap follows the map's display
   }
 
   // The game-view surface handed to the extracted overlay screens
@@ -2429,17 +2320,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     chatView.syncChip()  // chip retracts while an overlay is up; map's back
     menuBar.clear()
     touchControls.setOverlayMode(false)
-    // Spectator lens restore. Cleared only on a successful reopen: overlay
-    // teardown can interleave (hide_dialog fires under a still-stacked
-    // ui-push; close_menu doesn't clear dialogActive), so a refused attempt
-    // must keep the flag for the hideOverlay that actually returns the
-    // screen to the map. A set flag can't fire anywhere else — only this
-    // restore reads it — and every success means the map is back, which is
-    // exactly when the lens should return.
-    if (minimapSuspended) {
-      openMinimap()
-      if (minimapOpen) minimapSuspended = false
-    }
+    minimaps.reopenSuspendedLens()
     requestAnimationFrame(() => {
       // The restore above painted the lens against the pre-fit viewport;
       // fitNow's repaint refreshes it and brings the sidebar minimap back.
