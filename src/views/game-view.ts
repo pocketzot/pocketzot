@@ -543,6 +543,16 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     lastTap = { t: now, x: e.clientX, y: e.clientY }
   })
 
+  // X level map local pan: wire-silent, so spectators too. The center is
+  // clamped to the known-cell box so the map can't be moved out of sight;
+  // the map handler decides whether the pan survives the server's
+  // re-centering (map-pan.ts).
+  function panXMapTo(center: { x: number; y: number }): void {
+    if (!mapView.setViewCenter(clampToBox(center, store.mfBounds()))) return
+    mapView.panRender()
+    minimaps.scheduleRepaint()
+  }
+
   // One-finger map gestures, reference mouse-control on touch: tap/drag =
   // hover (target_cursor — aims while targeting, moves the `x` examine
   // cursor), still long-press = right-click (click_cell 3 — describe).
@@ -579,17 +589,11 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
         minimaps.scheduleRepaint()
       }
     },
-    // X level map only: drag pans the view locally (wire-silent, so
-    // spectators too). The center is clamped to the known-cell box so the
-    // map can't be dragged out of sight; the map handler decides whether
-    // the pan survives the server's re-centering (map-pan.ts).
+    // X level map only: drag pans the view locally (panXMapTo).
     onPan: (delta) => {
       if (!inXMode) return
       const c = mapView.getViewCenter()
-      const next = clampToBox({ x: c.x + delta.x, y: c.y + delta.y }, store.mfBounds())
-      if (!mapView.setViewCenter(next)) return
-      mapView.panRender()
-      minimaps.scheduleRepaint()
+      panXMapTo({ x: c.x + delta.x, y: c.y + delta.y })
     },
     // Normal play: a drag has no wire meaning (hover is gated off above),
     // so it opens the `X` level map, where the same drag pans. The pan
@@ -753,6 +757,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Same refusal set as the monster panel: don't cover a server prompt.
     lensAllowed: () => !serverPromptActive() && !monsterPanelOpen,
     focusView,
+    panTo: panXMapTo,
   })
 
   const menuBar = new MenuBar({

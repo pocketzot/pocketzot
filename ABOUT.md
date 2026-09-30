@@ -41,6 +41,7 @@ Obligatory virtual keyboard also available.
 - Tap or drag on map while targeting or examining (`x`) to move the cursor
 - Drag map to open level map (`X`)
 - Drag level map (`X`) to pan it
+- Tap or drag the minimap in level map (`X`) to pan there
 - Tap level map (`X`) to place the cursor
 - Double tap on map to toggle zoom level
 - Two-finger long press on map to toggle ASCII/tiles

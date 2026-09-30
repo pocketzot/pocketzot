@@ -104,8 +104,8 @@ export class MinimapView {
   private readonly maxCellCss: number
   private readonly growToView: boolean
 
-  // Crop/scale state, kept as first-class fields (not paint() locals) so a
-  // future pan gesture can run the pixel↔dungeon transform in reverse:
+  // Crop/scale state, kept as first-class fields (not paint() locals) so
+  // cellAtPoint can run the pixel↔dungeon transform in reverse:
   // dungeon (x,y) ↔ canvas device px ((x-originX)*cellPx, (y-originY)*cellPx).
   originX = 0
   originY = 0
@@ -119,6 +119,27 @@ export class MinimapView {
     this.canvas = document.createElement('canvas')
     this.canvas.className = 'minimap-canvas'
     this.element.appendChild(this.canvas)
+  }
+
+  // The dungeon cell under a client-coordinate point, or null before a
+  // first paint. Off the canvas: null, or with `clamp` the nearest edge
+  // cell (a scrub that slides off the minimap keeps tracking along it).
+  cellAtPoint(clientX: number, clientY: number, clamp = false): { x: number; y: number } | null {
+    if (this.cellPx <= 0) return null
+    const r = this.canvas.getBoundingClientRect()
+    if (r.width <= 0 || r.height <= 0) return null
+    let fx = (clientX - r.left) / r.width
+    let fy = (clientY - r.top) / r.height
+    if (fx < 0 || fx >= 1 || fy < 0 || fy >= 1) {
+      if (!clamp) return null
+      const inside = 1 - Number.EPSILON
+      fx = Math.min(Math.max(fx, 0), inside)
+      fy = Math.min(Math.max(fy, 0), inside)
+    }
+    return {
+      x: this.originX + Math.floor(fx * this.canvas.width / this.cellPx),
+      y: this.originY + Math.floor(fy * this.canvas.height / this.cellPx),
+    }
   }
 
   // Repaint from the store. maxCssW/maxCssH bound the canvas CSS size;

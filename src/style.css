@@ -4452,7 +4452,7 @@ html.map-hold, html.map-hold * {
   font-size: 0.8rem;
 }
 /* The d-pad's footprint (.tc-dpad: 3 cells + 2 gaps), so the strip keeps
-   its height. Passive: the minimap is a picture, not a control. */
+   its height. */
 #touch-controls.x-mode .tc-xslot {
   display: flex;
   align-items: center;
@@ -4464,9 +4464,19 @@ html.map-hold, html.map-hold * {
   padding: 2px;
   border: 1px solid var(--tc-border);
   border-radius: 3px;
-  pointer-events: none;
 }
 .minimap-xslot { line-height: 0; }  /* no descender gap under the inline canvas */
+/* Scrub-to-pan (X mode) owns one-finger drags on these minimaps; why
+   `manipulation` breaks it: #map-grid's rule. A pause mid-scrub is a
+   long-press, so the WebKit selection/callout pair too (#monster-list's
+   rule). Nothing here scrolls, so it stays unscoped outside X mode. */
+.minimap-xslot,
+.minimap-sidebar {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 .minimap-xslot .minimap-canvas { background: transparent; }
 
 /* Content area: tab-specific buttons */
@@ -5081,6 +5091,7 @@ html.map-hold, html.map-hold * {
     z-index: var(--z-map-float);
     border: 0;
     margin: 0 0 var(--xdesc-h, 0px) var(--safe-left);
+    pointer-events: none;
   }
   .minimap-xslot .minimap-canvas { opacity: 0.75; }
 

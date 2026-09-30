@@ -1,9 +1,11 @@
 // The level minimap's three hosts (one MinimapView each, ../game/map/
 // minimap-view): the place-chip lens over #map-wrap, the X-mode one in the
 // touch strip's d-pad slot, and the landscape sidebar's. This owns their
-// DOM, their size boxes, the lens's open/suspended state and the one
-// coalesced repaint; the game view decides when the lens may open and when
-// the other screens close it (MinimapHostsDeps, closeLens callers).
+// DOM, their size boxes, the lens's open/suspended state, the one
+// coalesced repaint and X mode's tap/scrub-to-pan input (bindScrub; the
+// pan itself is the game view's); the game view decides when the lens may
+// open and when the other screens close it (MinimapHostsDeps, closeLens
+// callers).
 //
 // The lens is deliberately NOT a renderOverlay screen: it occludes only
 // #map-wrap, leaving the HUD, floating log, and touch controls live.
@@ -35,6 +37,9 @@ export interface MinimapHostsDeps {
   // A client-side map overlay may open over the screen now.
   lensAllowed(): boolean
   focusView(): void
+  // X mode: a tap or scrub on the X-slot or sidebar minimap centers the
+  // level map on that cell (a local pan, as a drag on the map is).
+  panTo(cell: { x: number; y: number }): void
 }
 
 // Below this the spacer row is a sliver: a minimap squeezed into it reads
@@ -52,9 +57,9 @@ export class MinimapHosts {
   readonly sidebarSlot = document.createElement('div')
   private readonly d: MinimapHostsDeps
   private readonly lens: MinimapView
-  // X-mode minimap: the same renderer in the d-pad slot, passive. Mounted
-  // for the life of X mode (mountXSlot/unmountXSlot); xslotBox is the
-  // slot's content box, kept by an observer, so repaints never read layout.
+  // X-mode minimap: the same renderer in the d-pad slot. Mounted for the
+  // life of X mode (mountXSlot/unmountXSlot); xslotBox is the slot's
+  // content box, kept by an observer, so repaints never read layout.
   private readonly xmode: MinimapView
   private readonly sidebar: MinimapView
   private open = false
@@ -87,10 +92,47 @@ export class MinimapHosts {
     })
     this.sidebarSlot.className = 'minimap-sidebar-slot'
     this.sidebarSlot.appendChild(this.sidebar.element)
+    this.bindScrub(this.xmode, () => !this.xmode.element.hidden)
+    this.bindScrub(this.sidebar, () => this.sidebarShown)
     new ResizeObserver(([entry]) => {
       this.sidebarBox = { w: entry.contentRect.width, h: entry.contentRect.height }
       this.scheduleRepaint()
     }).observe(this.sidebar.element)
+  }
+
+  // Tap-or-scrub to pan, X mode only. (The landscape X slot is
+  // pointer-events: none — style.css.)
+  // `shown`: the host is painted now. A hidden one (the X slot before its
+  // first paint, the sidebar's `.empty`) keeps a laid-out canvas and its
+  // last crop, so cellAtPoint would map a touch into a stale frame — after a
+  // level change, another level's coordinates.
+  private bindScrub(mm: MinimapView, shown: () => boolean): void {
+    const el = mm.element
+    let active: number | null = null
+    el.addEventListener('pointerdown', (e) => {
+      active = null
+      if (!this.d.inXMode() || !shown() || e.isPrimary === false || e.button !== 0) return
+      const cell = mm.cellAtPoint(e.clientX, e.clientY)
+      if (!cell) return  // slot padding, not the map
+      active = e.pointerId
+      // A mouse gets no implicit capture (map-tap.ts pointerdown has the
+      // desktop WebKit trace); capture keeps the scrub alive off the canvas.
+      try { el.setPointerCapture(e.pointerId) } catch { /* detached */ }
+      this.d.panTo(cell)
+    })
+    el.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== active) return
+      // buttons === 0: the press ended where `el` never heard it — X mode
+      // exiting mid-press unmounts the slot, and a removed capture target's
+      // pointerup/lostpointercapture go to the document. A mouse keeps its
+      // pointerId, so without this its next hover would pan.
+      if (!this.d.inXMode() || !shown() || e.buttons === 0) { active = null; return }
+      const cell = mm.cellAtPoint(e.clientX, e.clientY, true)
+      if (cell) this.d.panTo(cell)
+    })
+    const end = (e: PointerEvent): void => { if (e.pointerId === active) active = null }
+    el.addEventListener('pointerup', end)
+    el.addEventListener('pointercancel', end)
   }
 
   get lensOpen(): boolean { return this.open }

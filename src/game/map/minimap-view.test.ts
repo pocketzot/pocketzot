@@ -102,3 +102,29 @@ describe('MinimapView.paint', () => {
     expect(mm.element.querySelector('canvas')!.height).toBe(18 * 3)
   })
 })
+
+describe('MinimapView.cellAtPoint', () => {
+  it('inverts the paint transform through the rendered rect', () => {
+    const store = new MapStore()
+    store.merge([
+      { x: 10, y: 5, g: '.', mf: 1 },
+      { x: 30, y: 20, g: '#', mf: 2 },
+    ])
+    const mm = new MinimapView(store, { maxCellCss: 3, growToView: false })
+    expect(mm.cellAtPoint(0, 0)).toBeNull()  // before any paint
+    mm.paint(null, 400, 600)  // origin (9,4), 3px/cell, 69×54 canvas
+    const canvas = mm.element.querySelector('canvas')!
+    // Rendered at 2× its bitmap size (a CSS scale), offset on the page.
+    canvas.getBoundingClientRect = () =>
+      ({ left: 100, top: 50, width: 138, height: 108 }) as DOMRect
+    expect(mm.cellAtPoint(100, 50)).toEqual({ x: 9, y: 4 })
+    expect(mm.cellAtPoint(100 + 6 * 2 + 1, 50 + 3 * 2)).toEqual({ x: 11, y: 5 })
+    expect(mm.cellAtPoint(237.9, 157.9)).toEqual({ x: 31, y: 21 })
+    expect(mm.cellAtPoint(99, 60)).toBeNull()
+    expect(mm.cellAtPoint(238, 60)).toBeNull()
+    // clamp: off-canvas points pin to the nearest edge cell.
+    expect(mm.cellAtPoint(0, 60, true)).toEqual({ x: 9, y: 5 })
+    expect(mm.cellAtPoint(500, 500, true)).toEqual({ x: 31, y: 21 })
+    expect(mm.cellAtPoint(-5, -5, true)).toEqual({ x: 9, y: 4 })
+  })
+})
