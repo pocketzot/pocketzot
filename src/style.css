@@ -5152,6 +5152,11 @@ html.map-hold, html.map-hold * {
      there sizes the minmax(max-content) row to its own height, so the bar
      stretched to 155px and a lone ⎋ filled it. The d-pad float stays. */
   #game-view.menu-bar .tc-panel { display: none; }
+  /* So does a user-opened keyboard, until the bar goes, as portrait gets
+     from the inline hide on #touch-controls: left up, the fixed sheet
+     covered the bar and the menu's bottom rows. !important beats the
+     keyboard's inline open state. */
+  #game-view.menu-bar #kbd-overlay { display: none !important; }
 
   /* Spell rail: in-flow sidebar row directly above the touch panel. Base
      styling applies — the fixed one-row height and the sideways-scrolling
