@@ -79,7 +79,7 @@ export function attachCornerSwipe(el: HTMLElement, opts: CornerSwipeOpts): void 
       if (Math.hypot(dx, dy) < SLOP_PX) return
       dragging = true
       el.classList.add('ml-dragging')
-      try { el.setPointerCapture(e.pointerId) } catch { /* test MouseEvent (no id) or detached */ }
+      try { el.setPointerCapture(e.pointerId) } catch { /* pointer no longer active, or detached */ }
     }
     el.style.transform = `translate(${dx}px, ${dy}px)`
   })

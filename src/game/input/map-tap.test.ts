@@ -14,13 +14,12 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-// happy-dom has no PointerEvent constructor; MouseEvent carries the fields
-// the recognizer reads (isPrimary/pointerId default undefined = primary/0,
-// matching real single-touch streams closely enough for the state machine).
-function fire(el: HTMLElement, type: string, x: number, y: number, extra: Record<string, unknown> = {}): void {
-  const ev = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, button: 0 })
-  for (const [k, v] of Object.entries(extra)) Object.defineProperty(ev, k, { value: v })
-  el.dispatchEvent(ev)
+// One primary pointer by default, like a single-touch stream (happy-dom's
+// PointerEvent defaults isPrimary to false).
+function fire(el: HTMLElement, type: string, x: number, y: number, extra: PointerEventInit = {}): void {
+  el.dispatchEvent(new PointerEvent(type, {
+    clientX: x, clientY: y, bubbles: true, button: 0, pointerId: 1, isPrimary: true, ...extra,
+  }))
 }
 
 function setup(cellAt?: (x: number, y: number) => { x: number; y: number } | null) {

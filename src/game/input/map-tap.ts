@@ -166,13 +166,11 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): MapGes
     const target = e.target as HTMLElement | null
     if (!target || !target.closest('#map-grid')) { cancel(); return }
     cancel()
-    // Test events are MouseEvent-shaped (happy-dom has no PointerEvent
-    // constructor with pointerId); missing ids collapse to 0 consistently.
-    activePointer = e.pointerId ?? 0
+    activePointer = e.pointerId
     // Touch gets implicit capture, a mouse doesn't: a drag lifted outside
     // the element would never end the gesture, and the next stray move
     // would pan (seen in desktop WebKit). Capture makes both deliver here.
-    try { el.setPointerCapture(e.pointerId) } catch { /* test MouseEvent (no id) or detached */ }
+    try { el.setPointerCapture(e.pointerId) } catch { /* pointer no longer active, or detached */ }
     hit = opts.hitTester()
     startX = lastX = e.clientX
     startY = lastY = e.clientY
@@ -193,7 +191,7 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): MapGes
   })
 
   el.addEventListener('pointermove', (e) => {
-    if (activePointer === null || (e.pointerId ?? 0) !== activePointer) return
+    if (activePointer === null || e.pointerId !== activePointer) return
     lastX = e.clientX
     lastY = e.clientY
     const dx = e.clientX - startX
@@ -215,7 +213,7 @@ export function attachMapGestures(el: HTMLElement, opts: MapGestureOpts): MapGes
   el.addEventListener('pointerup', (e) => {
     // A live timer at lift means neither the drag conversion nor the hold
     // happened: this was a tap.
-    const tapped = timer != null && (e.pointerId ?? 0) === activePointer
+    const tapped = timer != null && e.pointerId === activePointer
     const cell = tapped ? hit?.(startX, startY) : null
     cancel()
     if (cell) opts.onTap?.(cell)
