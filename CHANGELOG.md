@@ -7,6 +7,18 @@ formatting and HTML chrome differ. Drift is a bug.
 
 # What's new
 
+## 2026-09-30
+
+- Spell rail: long-press a spell and drag to rearrange.
+- Spell rail: you can now scroll horizontally when needed.
+- Spell rail: added an `I` button at the right end to list your spells.
+- X-mode: you can now tap or drag on the minimap to pan the view.
+- Improved the appearance of stacked prompts.
+- Text inputs now open the system keyboard after tapping the field.
+- Character creation on versions <= 0.23 now shows the d-pad and virtual
+  keyboard, needed for navigation in older versions.
+- Other improvements.
+
 ## 2026-09-26
 
 - Dragging the map in normal play now opens X-mode.
