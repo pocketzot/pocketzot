@@ -1,7 +1,8 @@
 // The played character's persisted facts, fed by the game view's wire
 // handlers: the login-shelf doll capture (../avatars saveAvatar), the
-// crypt's terminal outcome stamp (recordAvatarOutcome), and the anonymous
-// usage counters (../counter). No DOM. One instance per game view, so every
+// crypt's terminal outcome stamp (recordAvatarOutcome), the anonymous
+// usage counters (../counter), and the end of the spell-rail arrangement's
+// lifetime (./spell-order). No DOM. One instance per game view, so every
 // latch here resets per game (fresh view) and is never reset otherwise.
 //
 // Spectated games write nothing: the shelf and crypt are *your* characters,
@@ -12,6 +13,7 @@ import type { PlayerMsg } from '../ws/types'
 import type { Cell } from './map/map-store'
 import type { TileLoader } from './tiles/tile-loader'
 import { mergeRunes, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
+import { clearSpellOrder } from './spell-order'
 import { OFFLINE_GAME_ID } from '../offline/offline-state'
 import { count, countEach } from '../counter'
 import { looksLikeWelcome, parseWelcome } from './char-label'
@@ -211,6 +213,7 @@ export class CharacterRecord {
     if (!terminal || spectating || !this.charName || !gameId || this.endingRecorded) return
     this.endingRecorded = true
     recordAvatarOutcome({ wsUrl, username, gameId }, { reason, message, dump }, this.charMeta)
+    clearSpellOrder({ wsUrl, username, gameId })
     // Same own-real-game gate as the crypt write, plus the wizard/explore
     // latch — see cheatSeen. Win rows carry the rune count parsed from the
     // end blurb (absent on parse miss, never 0).
@@ -236,6 +239,11 @@ export class CharacterRecord {
     this.welcomeLine = null
     this.charMeta.background = welcome.background
     if (!welcome.resumed && !this.opts.spectating && this.opts.gameId) {
+      // A new character ends the slot's arrangement (lifetime rule:
+      // ./spell-order). The welcome precedes the first command prompt, and
+      // so the rail's first harvest.
+      const { wsUrl, username, gameId } = this.opts
+      clearSpellOrder({ wsUrl, username, gameId })
       const offline = this.offlineSuffix
       count(`newchar${offline}`)
       countEach(`newchar-each${offline}`)

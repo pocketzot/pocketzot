@@ -9,20 +9,30 @@
 // `spell-row` class on #game-view lifts the log and grows the map's bottom
 // reserve. The trade and its evidence: the #map-grid padding rules in
 // style.css.
+//
+// Both surfaces show the player's arrangement (../game/spell-order), made
+// by long-press-dragging on the rail (rail-arrange.ts).
 
 import type { ClientMsg } from '../ws/types'
+import type { AvatarKey } from '../avatars'
 import type { SpellEntry } from '../game/spell-harvest'
+import { arrangeSpells, loadSpellOrder, saveSpellOrder } from '../game/spell-order'
 import { TEX, type TileLoader } from '../game/tiles/tile-loader'
 import { CELL, renderTiles } from '../game/tiles/tile-view'
 import { uiColor } from '../game/dcss-colors'
 import { peekGap } from './rail-peek'
 import { tabIconGeometry } from './tab-icon'
+import { attachRailArrange, type RailArrange } from './rail-arrange'
 
 export interface SpellRailDeps {
   // The game view's root: carries the spell-row layout class.
   view: HTMLElement
   send(msg: ClientMsg): void
+  // The harvest, in letter order; the rail applies the arrangement.
   spells(): SpellEntry[]
+  // Where the arrangement persists; null = nowhere (spectating, fixture
+  // replays).
+  slot: AvatarKey | null
   // This game's per-version tile loader; null until the version is known.
   loader(): TileLoader | null
   spectating: boolean
@@ -54,6 +64,7 @@ export class SpellRail {
   // the cheap path instead of rebuilding every button + tile per examine.
   private builtFrom: SpellEntry[] | null = null
   private bookLoader: TileLoader | null = null
+  private readonly arrange: RailArrange
 
   constructor(deps: SpellRailDeps) {
     this.d = deps
@@ -61,6 +72,7 @@ export class SpellRail {
     this.element.style.display = 'none'
     this.track.className = 'spell-rail-track'
     this.element.appendChild(this.track)
+    this.arrange = attachRailArrange(this.track, () => this.saveOrder())
     new ResizeObserver(() => { this.applyGap(); this.syncOverflow() }).observe(this.track)
     const book = document.createElement('div')
     book.className = 'spell-rail-book'
@@ -82,6 +94,7 @@ export class SpellRail {
     // occlude the very cells the player entered X-mode to read.
     const spells = this.d.spells()
     const visible = !this.d.spectating && !this.d.inXMode() && spells.length > 0
+    if (!visible || this.builtFrom !== spells) this.arrange.finish()
     this.d.view.classList.toggle('spell-row', visible)
     const shown = this.element.style.display !== 'none'
     if (shown) this.scrollLeft = this.track.scrollLeft
@@ -89,7 +102,7 @@ export class SpellRail {
     if (this.bookLoader !== this.d.loader()) this.paintBook()
     if (this.builtFrom !== spells) {
       this.track.innerHTML = ''
-      for (const s of spells) this.track.appendChild(this.makeSpellButton(s, 'spell-rail-btn'))
+      for (const s of this.arranged(spells)) this.track.appendChild(this.makeSpellButton(s, 'spell-rail-btn'))
       this.builtFrom = spells
     }
     if (!shown) {
@@ -107,12 +120,28 @@ export class SpellRail {
     if (this.d.spectating || spells.length === 0) return null
     const grid = document.createElement('div')
     grid.className = 'tc-spell-grid'
-    for (const s of spells) grid.appendChild(this.makeSpellButton(s, 'tc-spell-btn'))
+    for (const s of this.arranged(spells)) grid.appendChild(this.makeSpellButton(s, 'tc-spell-btn'))
     return grid
   }
 
+  // Before the view detaches (why: RailArrange.finish).
+  dispose(): void {
+    this.arrange.finish()
+  }
+
+  private arranged(spells: SpellEntry[]): SpellEntry[] {
+    return this.d.slot ? arrangeSpells(spells, loadSpellOrder(this.d.slot)) : spells
+  }
+
+  // A drop: the track's DOM order is the new arrangement.
+  private saveOrder(): void {
+    if (!this.d.slot) return
+    const names = [...this.track.children].map(b => (b as HTMLElement).dataset.spell ?? '')
+    saveSpellOrder(this.d.slot, names)
+  }
+
   private applyGap(): void {
-    const btn = this.track.firstElementChild
+    const btn = this.track.firstElementChild as HTMLElement | null
     // Never recompute while hidden: the observer fires on display:none with
     // a 0 width, and a floor gap left in place would shift every button
     // under the scroll offset restored on show (render).
@@ -121,7 +150,7 @@ export class SpellRail {
     // Measure before clearing the override: a layout read with the floor
     // gap in place clamps scrollLeft to the narrower row (measured: a rail
     // scrolled to the end came back one button short after X mode).
-    const btnW = btn.getBoundingClientRect().width
+    const btnW = btn.offsetWidth  // untransformed: a lifted first button is scaled
     this.track.style.columnGap = ''
     const cssGap = parseFloat(getComputedStyle(this.track).columnGap) || 0
     this.track.style.columnGap = `${peekGap(trackW, btnW, cssGap)}px`
@@ -168,6 +197,7 @@ export class SpellRail {
   private makeSpellButton(s: SpellEntry, btnClass: string): HTMLElement {
     const btn = document.createElement('button')
     btn.className = btnClass
+    btn.dataset.spell = s.title
     btn.title = `${s.title}${s.fail ? ` (${s.fail})` : ''}`
     if (typeof s.colour === 'number') btn.style.color = uiColor(s.colour)
     btn.appendChild(renderTiles(this.d.loader(), [{ t: s.tile, tex: TEX.GUI }], 1))

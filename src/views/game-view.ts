@@ -450,6 +450,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     view,
     send,
     spells: () => harvester.spells,
+    slot: gameId && !spectating ? { wsUrl: conn.wsUrl, username, gameId } : null,
     loader: () => loader,
     spectating: !!spectating,
     inXMode: () => inXMode,
@@ -2138,6 +2139,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     advisory.disarm()
     // Its give-up timer would otherwise repaint this view's spell surfaces.
     harvester.reset()
+    spellRail.dispose()
   }
   registerViewDispose(view, dispose)
   return view

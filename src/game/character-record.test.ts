@@ -11,9 +11,11 @@ vi.mock('../avatars', async (orig) => ({
 vi.mock('../counter', () => ({ count: vi.fn(), countEach: vi.fn() }))
 vi.mock('./tiles/atlas-dedup', () => ({ cachedFingerprint: () => null }))
 vi.mock('./tiles/avatar-bake', () => ({ ensureDollBaked: vi.fn(), isBakeableLoader: () => false }))
+vi.mock('./spell-order', () => ({ clearSpellOrder: vi.fn() }))
 
 import { saveAvatar, recordAvatarOutcome } from '../avatars'
 import { count, countEach } from '../counter'
+import { clearSpellOrder } from './spell-order'
 import { CharacterRecord } from './character-record'
 
 const opts = { wsUrl: 'wss://test.example/socket', httpBase: 'https://test.example', username: 'u', gameId: 'dcss-0.34' }
@@ -90,6 +92,24 @@ describe('CharacterRecord', () => {
     r.recordEnding('dead')
     expect(r.meta.runes).toBeUndefined()
     expect(r.meta.orb).toBeUndefined()
-    expect([saveAvatar, recordAvatarOutcome, count, countEach].every(f => vi.mocked(f).mock.calls.length === 0)).toBe(true)
+    expect([saveAvatar, recordAvatarOutcome, count, countEach, clearSpellOrder]
+      .every(f => vi.mocked(f).mock.calls.length === 0)).toBe(true)
+  })
+
+  it("ends the spell arrangement on a new character's welcome and on a terminal end only", () => {
+    const slot = { wsUrl: opts.wsUrl, username: opts.username, gameId: opts.gameId }
+    const resumed = played()
+    resumed.onPlayer(player({ name: 'Synth', species: 'Minotaur' }))
+    resumed.onMessageLine('Welcome back, Synth the Minotaur Berserker.')
+    resumed.recordEnding('saved')
+    expect(clearSpellOrder).not.toHaveBeenCalled()
+    resumed.recordEnding('dead', 'Slain')
+    expect(clearSpellOrder).toHaveBeenCalledExactlyOnceWith(slot)
+
+    vi.clearAllMocks()
+    const fresh = played()
+    fresh.onPlayer(player({ name: 'Synth', species: 'Minotaur' }))
+    fresh.onMessageLine('Welcome, Synth the Minotaur Berserker.')
+    expect(clearSpellOrder).toHaveBeenCalledExactlyOnceWith(slot)
   })
 })

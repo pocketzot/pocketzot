@@ -3611,6 +3611,9 @@ html.map-hold, html.map-hold * {
    is a floor: SpellRail.applyGap (spell-rail.ts) widens it inline so the
    edge button peeks (rail-peek.ts). */
 .spell-rail-track {
+  /* The buttons' offsetParent: rail-arrange.ts measures slots in its
+     content box. */
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -3655,6 +3658,13 @@ html.map-hold, html.map-hold * {
   cursor: pointer;
 }
 .spell-rail-btn:active { background: var(--surface); }
+/* Held for arranging (rail-arrange.ts): raised over the neighbours it
+   passes. The finger-following offset is the inline `translate`. */
+.spell-rail-btn.lifted {
+  z-index: 1;
+  scale: 1.12;
+  background: var(--surface);
+}
 /* Corner cast-keystroke letter ("za"), shared by the rail and the z-tab grid
    (both built by makeSpellButton) so it looks/sits the same in both. */
 .spell-letter {
