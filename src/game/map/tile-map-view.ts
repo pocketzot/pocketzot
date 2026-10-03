@@ -7,11 +7,14 @@
 
 import type { Cell, MapStore } from './map-store'
 import type { CellHitTester } from '../input/map-tap'
-import { parseCellKey } from './map-store'
+import { cellKey, parseCellKey } from './map-store'
 import { decodeColor, DEFAULT_FG, flashColor } from './colors'
 import { DCSS_COLOR_MAP } from '../dcss-colors'
 import { TEX, type TileLoader, type TileSprite } from '../tiles/tile-loader'
 import { WATER_LINE } from '../tiles/tile-view'
+import {
+  animatedBase, animOptionsFrom, stepFrame, type AnimOptions, type AnimTiles, type Frame,
+} from '../tiles/tile-anim'
 import { fgFlags, bgFlags } from './flag-decode'
 import { viewFloorDiameter, type SightFacts } from './los'
 import { getStatusIconSizer, type StatusIconSizer } from './icon-sizes'
@@ -157,6 +160,14 @@ export class TileMapView {
   // Per-tile-run variant count from tileinfo-dngn. Used to pick an animation
   // frame for blood/mold/liquefaction via `cell.flv.s % tileCount(id)`.
   private tileCount: ((id: number) => number) | null = null
+  // Animated-tile state (see animate()). animTiles is null until preload
+  // resolves (or when tileinfo-dngn lacks basetile/tile_count). animFrames
+  // maps a cell to the frame it shows (stepFrame owns the reset rule) — the
+  // reference mutates its map_knowledge in place instead.
+  private animTiles: AnimTiles | null = null
+  private animOpts: AnimOptions = animOptionsFrom({})
+  private animFrames = new Map<string, Frame>()
+  private animCounter = 0
   // Range thresholds from tileinfo-dngn / tileinfo-main. ov[] entries route
   // by id-range (floor underlays, dngn overlays, main-atlas zaps). bg.value
   // thresholds also gate blood-on-walls vs blood-on-floor.
@@ -227,6 +238,10 @@ export class TileMapView {
       this.featMax = this.dngn.FEAT_MAX ?? 0
       this.dngnMax = this.dngn.DNGN_MAX ?? 0
       this.mainMax = ((mainMod as Record<string, unknown>).MAIN_MAX as number) ?? 0
+      const bt = (dngnMod as Record<string, unknown>).basetile
+      this.animTiles = typeof bt === 'function' && this.tileCount
+        ? { dngn: this.dngn, basetile: bt as (id: number) => number, tileCount: this.tileCount, dngnMax: this.dngnMax }
+        : null
       this.ready = true
       // Schedule a fit+paint on the next frame rather than painting now.
       // Two races make a direct fullRender unsafe on first load:
@@ -441,6 +456,82 @@ export class TileMapView {
         this.paintCell(col, row, offX + col, offY + row)
       }
     }
+  }
+
+  setAnimOptions(o: AnimOptions): void { this.animOpts = o }
+
+  // One animation step over the viewport — dungeon_renderer.js `animate`.
+  // The reference runs it at the end of every `map` message (display.js
+  // display()), on every `txt` update, and on a 4 Hz timer only under
+  // tile_realtime_anim; game-view owns those triggers. Frames for cells
+  // outside the viewport are dropped, so the map stays viewport-sized; such a
+  // cell comes back showing the server's variant, indistinguishable from a
+  // step.
+  animate(): void {
+    const t = this.animTiles
+    if (!this.ready || !t) return
+    // Skip the viewport sweep (a bgFlags decode per cell) when nothing can
+    // animate — before `options` arrives, or with both options off.
+    if (!this.animOpts.misc && !this.animOpts.water) return
+    this.animCounter = (this.animCounter + 1) % 65536
+    const offX = this.offX
+    const offY = this.offY
+    const frames = new Map<string, Frame>()
+    const changed: number[] = []  // screen tags, row-major
+    for (let row = 0; row < this.viewportH; row++) {
+      for (let col = 0; col < this.viewportW; col++) {
+        const mx = offX + col
+        const my = offY + row
+        const cell = this.store.get(mx, my)
+        if (!cell) continue
+        const bg = bgFlags(cell.t_bg)
+        const base = animatedBase(bg.value, t, this.animOpts)
+        if (base === null) continue
+        const key = cellKey(mx, my)
+        const { cur, id } = stepFrame(bg.value, base, !bg.UNSEEN && !bg.MM_UNSEEN,
+          this.animFrames.get(key), t, this.animCounter, Math.random)
+        if (id !== bg.value) frames.set(key, { from: bg.value, id })
+        if (id !== cur) changed.push(row * this.viewportW + col)
+      }
+    }
+    this.animFrames = frames
+    for (const tag of changed) {
+      const col = tag % this.viewportW
+      this.repaintBgFrame(col, (tag - col) / this.viewportW)
+    }
+  }
+
+  // Repaint a cell whose bg frame alone changed, clipped to its own box. Every
+  // animated dngn variant fits its 32×32 box (checked against the bundled
+  // tileinfo-dngn, 2026-10-03), so no pixel outside it changes. The halo
+  // repaint (addDirtyTags) would clear the neighbours' boxes and drop spill
+  // from two cells out — a tall monster two rows below an altar lost its head
+  // on every re-roll. Inside the clip, the three later-in-sweep neighbours
+  // repaint only their up/left spill into the box; earlier neighbours' spill
+  // into it is what the cell's own clear overdraws in a full sweep.
+  private repaintBgFrame(col: number, row: number): void {
+    const offX = this.offX
+    const offY = this.offY
+    this.ctx.save()
+    try {
+      this.ctx.beginPath()
+      this.ctx.rect(col * ATLAS_CELL, row * ATLAS_CELL, ATLAS_CELL, ATLAS_CELL)
+      this.ctx.clip()
+      for (const [dc, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        const c = col + dc
+        const r = row + dr
+        if (this.inView(c, r)) this.paintCell(c, r, offX + c, offY + r)
+      }
+    } finally {
+      this.ctx.restore()
+    }
+  }
+
+  // The bg id to draw for a cell: its animation frame when it has one.
+  private shownBg(mx: number, my: number, id: number): number {
+    if (this.animFrames.size === 0) return id
+    const f = this.animFrames.get(cellKey(mx, my))
+    return f && f.from === id ? f.id : id
   }
 
   // Collect the changed cells PLUS a one-cell halo around each, as screen
@@ -719,7 +810,9 @@ export class TileMapView {
     // Resolve the background sprite once (tex dispatch + atlas lookup) and reuse
     // it for both the safety net below and the actual bg paint further down, so
     // the per-cell dngn dispatch runs once per redraw rather than twice.
-    const bgSprite = bg.value > 0 ? this.dngnSprite(bg.value) : null
+    // Only the sprite takes the animation frame: frames stay within one
+    // base tile's run, so the range tests on bg.value below are unaffected.
+    const bgSprite = bg.value > 0 ? this.dngnSprite(this.shownBg(mx, my, bg.value)) : null
 
     // Safety net: an *explored* cell (bg past DNGN_UNSEEN) whose background
     // tile id doesn't resolve in this loader's atlas would otherwise paint

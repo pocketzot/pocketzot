@@ -23,6 +23,7 @@ import { registerViewDispose } from './view-dispose'
 import { MapStore } from '../game/map/map-store'
 import { MapView } from '../game/map/map-view'
 import { TileMapView } from '../game/map/tile-map-view'
+import { animOptionsFrom, type AnimOptions } from '../game/tiles/tile-anim'
 import type { SightFacts } from '../game/map/los'
 import { StatsView } from '../game/hud/stats-view'
 import { StatusView } from '../game/hud/status-view'
@@ -146,6 +147,21 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // only paint once they're handed this loader (adoptLoader).
   let loader: TileLoader | null = null
   let mapView: MapView | TileMapView = new MapView(store)
+  // The player's tile_*_anim RC options (from `options`; all off until it
+  // arrives) and the tile_realtime_anim timer. The other triggers are the
+  // map and txt handlers — reference parity, see TileMapView.animate.
+  let tileAnim: AnimOptions = animOptionsFrom({})
+  let tileAnimTimer: number | null = null
+  function animateTiles(): void {
+    if (renderMode === 'tiles') (mapView as TileMapView).animate()
+  }
+  function setTileAnim(o: AnimOptions): void {
+    tileAnim = o
+    if (renderMode === 'tiles') (mapView as TileMapView).setAnimOptions(o)
+    if (tileAnimTimer !== null) { clearInterval(tileAnimTimer); tileAnimTimer = null }
+    // dungeon_renderer.js update_animation_interval: 1000 / 4 ms.
+    if (o.realtime) tileAnimTimer = window.setInterval(animateTiles, 1000 / 4)
+  }
   // Live view for console poking (it's swapped by setRenderMode, hence a getter).
   if (import.meta.env.DEV) {
     Object.defineProperty(window, '__dcssMapView', { configurable: true, get: () => mapView })
@@ -1011,6 +1027,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Default tile mode to zoom-on. Apply unconditionally — tile X-mode
     // uses the zoom-on (LoS-floor) base shrunk by X_MODE_SCALE.
     if (mode === 'tiles') next.setZoomMode(true)
+    if (next instanceof TileMapView) next.setAnimOptions(tileAnim)
     next.setSight(sight)
     // Carry the X-mode scale across the swap: the new view starts at 1.0
     // by default, which would visibly un-zoom the map mid-X-mode. inXMode
@@ -1279,7 +1296,10 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       game_client: onGameClient,
       map: onMap,
       player: onPlayer,
-      options: (msg) => statsView.setOptions(msg.options ?? {}),
+      options: (msg) => {
+        statsView.setOptions(msg.options ?? {})
+        setTileAnim(animOptionsFrom(msg.options ?? {}))
+      },
       txt: onTxt,
       'ui-push': onUiPush,
       'ui-stack': onUiStack,
@@ -1427,6 +1447,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (msg.clear) mapView.fullRender()          // store wiped — hard
     else if (panned) mapView.panRender(dirty)    // origin moved — blit
     else mapView.render(dirty)
+    animateTiles()
     monsterListView.update(store.getMonsters())
     if (monsterPanelOpen) monsterPanel.update(store.getMonsters())
     minimaps.scheduleRepaint()
@@ -1487,6 +1508,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     if (msg.id && lines && typeof lines === 'object' && !Array.isArray(lines)) {
       crtView.updateLines(lines, msg.clear === true)
     }
+    // dungeon_renderer.js "Hack to show animations … even in turns where
+    // nothing else happens", on text.js's text_update.
+    animateTiles()
   }
 
   function onUiPush(msg: MsgOf<'ui-push'>): void {
@@ -2140,6 +2164,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Its give-up timer would otherwise repaint this view's spell surfaces.
     harvester.reset()
     spellRail.dispose()
+    if (tileAnimTimer !== null) clearInterval(tileAnimTimer)
   }
   registerViewDispose(view, dispose)
   return view
