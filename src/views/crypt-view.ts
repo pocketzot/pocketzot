@@ -2,7 +2,8 @@ import { listAllAvatars, type Avatar } from '../avatars'
 import { nameTitle } from '../game/char-label'
 import { paintAvatars } from './avatar-tiles'
 import { avatarToCard, cardHeadline, renderCharCard } from './char-card'
-import { pickCryptLine } from './crypt-flavor'
+import { cryptFate, pickCryptLine } from './crypt-flavor'
+import { decorateCrypt } from './crypt-room'
 import { mountBackdrop, mountOverlay } from './overlay'
 import { attachScrollCue } from '../util/scroll-cue'
 import { count } from '../counter'
@@ -16,15 +17,21 @@ import { count } from '../counter'
 // strip reads as the crypt's top row.
 //
 // Heading: a thematic line chosen from the history's state (./crypt-flavor),
-// in the smaller flavor style (it's prose, not a wordmark).
+// in the smaller flavor style (it's prose, not a wordmark). Once the offline
+// pack has supplied its tiles, the crypt is also dressed as a room
+// (./crypt-room).
 export function openCrypt(): void {
   if (document.querySelector('.crypt-view')) return // already open — ignore re-taps
   count('crypt')
+  let undecorate = (): void => {}
   const { view } = mountCryptShell('', '', `
-      <p class="crypt-flavor"></p>
-      <div class="crypt-grid"></div>
-  `)
+      <div class="crypt-floor">
+        <p class="crypt-flavor"></p>
+        <div class="crypt-grid"></div>
+      </div>
+  `, () => undecorate())
   const avatars = listAllAvatars()
+  undecorate = decorateCrypt(view, cryptFate(avatars))
   // Set via textContent (the flavor lines are author-written plain text).
   view.querySelector<HTMLElement>('.crypt-flavor')!.textContent = pickCryptLine(avatars)
   // Scale 2.5 (80px): bigger than the login strip's 64px teaser, but small enough

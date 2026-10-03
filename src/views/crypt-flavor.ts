@@ -18,12 +18,18 @@ export const CRYPT_LINES: readonly string[] = [
 // names the room. Both fate lines are deliberately transient: a win is not a
 // permanent unlock (it already lives on the doll's Orb badge and the card's
 // trophy), and a winner's next death should still get the grim line. Only
-// `dead` counts as died: a quit or bail-out is a decision.
-export function pickCryptLine(avatars: readonly Avatar[]): string {
+// `dead` counts as died: a quit or bail-out is a decision. The room's wall
+// (crypt-room.ts) follows the same fate.
+export type CryptFate = 'won' | 'dead' | null
+
+export function cryptFate(avatars: readonly Avatar[]): CryptFate {
   const newest = avatars[0]?.outcome?.reason // newest-first (listAllAvatars)
-  if (newest === 'won') return GLORY
-  if (newest === 'dead') return TRIBULATIONS
-  return GAZE
+  return newest === 'won' || newest === 'dead' ? newest : null
+}
+
+export function pickCryptLine(avatars: readonly Avatar[]): string {
+  const fate = cryptFate(avatars)
+  return fate === 'won' ? GLORY : fate === 'dead' ? TRIBULATIONS : GAZE
 }
 
 // Random pick over the pool. Currently unreached — the heading is a state.

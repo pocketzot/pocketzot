@@ -517,8 +517,11 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 0.5rem max(1rem, var(--safe-right))
-           max(1rem, var(--safe-bottom)) max(1rem, var(--safe-left));
+  --crypt-pad-t: 0.5rem;
+  --crypt-pad-r: max(1rem, var(--safe-right));
+  --crypt-pad-l: max(1rem, var(--safe-left));
+  --crypt-pad: var(--crypt-pad-t) var(--crypt-pad-r) max(1rem, var(--safe-bottom)) var(--crypt-pad-l);
+  padding: var(--crypt-pad);
 }
 /* Rotating thematic line (src/views/crypt-flavor.ts): prose, clearly smaller than
    the logo wordmark. The crypt's sole heading. */
@@ -550,6 +553,30 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
   touch-action: manipulation;
 }
 :root:not(.press-cancelled) .crypt-doll:active { transform: scale(0.92); transition: transform 0s var(--press-delay); }
+/* The crypt's floor element (openCrypt): takes the scroller's padding and at
+   least its height, so a floor painted on it (crypt-room.ts — never on the
+   scroller itself, see there) spans edge to edge and screen to bottom. */
+.crypt-scroll:has(> .crypt-floor) { padding: 0; }
+.crypt-floor {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: var(--crypt-pad);
+}
+/* The crypt dressed as a room (images and sizes are set inline): the floor
+   on .crypt-floor, the wall frieze full-bleed across its top, out through
+   the padding (safe areas included); both centred on the full width, so
+   they line up. */
+.crypt-room .crypt-floor {
+  background-repeat: no-repeat;
+  background-position: center top;
+  image-rendering: pixelated;
+}
+.crypt-frieze {
+  margin: calc(-1 * var(--crypt-pad-t)) calc(-1 * var(--crypt-pad-r)) 0.75rem calc(-1 * var(--crypt-pad-l));
+  background-repeat: no-repeat;
+  background-position: center top;
+}
+.crypt-room .crypt-flavor { text-shadow: 0 0 4px #000, 0 0 4px #000; }
 /* Tap-a-doll card modal: the char-card itself is the dialog, centered over
    the crypt. The backdrop IS a .doc-backdrop (mountBackdrop, overlay.ts) —
    only the card sizing is crypt-specific. */
