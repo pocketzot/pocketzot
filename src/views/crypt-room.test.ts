@@ -1,15 +1,16 @@
 // @vitest-environment happy-dom
-// The crypt room's no-jump rule: a stored strip makes the wall take its
+// The crypt room's no-jump rule: the build's strip makes the wall take its
 // place SYNCHRONOUSLY, before the first paint, so the crypt's content never
-// moves when the images land. No stored strip, no wall (and no pack probe
-// can add one before first paint — happy-dom has no Cache API).
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fakeStorage } from '../test/fake-storage'
-import { bakedDollUrl, hash36, storeBakedDoll } from '../game/tiles/avatar-bake'
+// moves when the images land. A build without a strip leaves the crypt
+// plain.
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { decorateCrypt } from './crypt-room'
-import { STRIP } from './crypt-room-layout'
 
-const FP = `crypt#b1:${hash36(STRIP.join())}`
+const h = vi.hoisted(() => ({ url: null as string | null }))
+vi.mock('virtual:crypt-strip', () => ({
+  get default() { return h.url },
+}))
+
 const STRIP_URL = 'data:image/png;base64,AAAA'
 
 function cryptView(): HTMLElement {
@@ -20,19 +21,15 @@ function cryptView(): HTMLElement {
   return view
 }
 
-beforeEach(() => {
-  vi.stubGlobal('localStorage', fakeStorage())
-})
-
 afterEach(() => {
   document.body.innerHTML = ''
-  vi.unstubAllGlobals()
+  h.url = null
+  vi.restoreAllMocks()
 })
 
 describe('decorateCrypt', () => {
-  it('reserves the wall before first paint when a strip is stored', () => {
-    storeBakedDoll(FP, [], STRIP_URL)
-    localStorage.setItem('pocketzot:crypt-room', FP)
+  it('reserves the wall before first paint when the build has a strip', () => {
+    h.url = STRIP_URL
     const view = cryptView()
     const dispose = decorateCrypt(view, 'dead')
     const frieze = view.querySelector<HTMLElement>('.crypt-floor > .crypt-frieze')
@@ -42,7 +39,7 @@ describe('decorateCrypt', () => {
     dispose()
   })
 
-  it('leaves the crypt as it is with no stored strip', () => {
+  it('leaves the crypt as it is when the build has no strip', () => {
     const view = cryptView()
     const dispose = decorateCrypt(view, null)
     expect(view.querySelector('.crypt-frieze')).toBeNull()
@@ -50,29 +47,19 @@ describe('decorateCrypt', () => {
     dispose()
   })
 
-  it('ignores a marker whose strip was evicted', () => {
-    localStorage.setItem('pocketzot:crypt-room', FP)
+  it('takes the room back down when the strip fails to load', async () => {
+    h.url = STRIP_URL
+    vi.spyOn(HTMLImageElement.prototype, 'decode').mockRejectedValue(new Error('offline'))
     const view = cryptView()
-    decorateCrypt(view, 'won')()
+    const dispose = decorateCrypt(view, 'won')
+    expect(view.classList.contains('crypt-room')).toBe(true)
+    await vi.waitFor(() => expect(view.classList.contains('crypt-room')).toBe(false))
     expect(view.querySelector('.crypt-frieze')).toBeNull()
-  })
-
-  // Composing reads the strip by STRIP index: a strip baked under an older
-  // tile list would paint the wrong tiles.
-  it('drops a strip baked under another tile list', () => {
-    const stale = 'crypt#b1:oldlayout'
-    storeBakedDoll(stale, [], STRIP_URL)
-    localStorage.setItem('pocketzot:crypt-room', stale)
-    const view = cryptView()
-    decorateCrypt(view, 'won')()
-    expect(view.querySelector('.crypt-frieze')).toBeNull()
-    expect(bakedDollUrl(stale, [])).toBeNull()
-    expect(localStorage.getItem('pocketzot:crypt-room')).toBeNull()
+    dispose()
   })
 
   it('does nothing to a view without a floor element', () => {
-    storeBakedDoll(FP, [], STRIP_URL)
-    localStorage.setItem('pocketzot:crypt-room', FP)
+    h.url = STRIP_URL
     const view = document.createElement('div')
     view.innerHTML = '<div class="crypt-scroll"></div>'
     decorateCrypt(view, null)()

@@ -5,6 +5,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PRECACHE_EXTRAS } from './src/sw/classify.js'
+import { bakeCryptStrip } from './src/build/crypt-strip.js'
+import { STRIP } from './src/views/crypt-room-layout'
 
 const projectRoot = dirname(fileURLToPath(import.meta.url))
 
@@ -115,8 +117,46 @@ function serveRecordings(): Plugin {
   }
 }
 
+// `virtual:crypt-strip`: the URL of the crypt room's tile strip
+// (crypt-room.ts), baked here from the offline pack in public/gamedata/local/
+// (src/build/crypt-strip.js), or null when this checkout has no pack — the
+// crypt then ships plain, with a build warning. In a build it is a
+// content-hashed asset under assets/: the SW precaches it with the shell,
+// it re-downloads only when the tiles change, and build:deploy's pack strip
+// leaves it alone. In dev, a data URL; Vite restarts on edits to
+// crypt-room-layout.ts (a config dependency), so the strip follows STRIP —
+// but a pack (re)installed mid-session needs a manual restart.
+// Under vitest, null without touching the pack (tests vi.mock the module).
+function cryptStrip(): Plugin {
+  const id = 'virtual:crypt-strip'
+  let build = false
+  return {
+    name: 'pz-crypt-strip',
+    configResolved(config) {
+      build = config.command === 'build'
+    },
+    resolveId(source) {
+      return source === id ? `\0${id}` : undefined
+    },
+    load(resolved) {
+      if (resolved !== `\0${id}`) return
+      if (process.env.VITEST) return 'export default null'
+      let png: Buffer
+      try {
+        png = bakeCryptStrip(resolve(projectRoot, 'public/gamedata/local'), STRIP)
+      } catch (e) {
+        this.warn(`crypt strip not baked, the crypt ships undecorated: ${(e as Error).message}`)
+        return 'export default null'
+      }
+      if (!build) return `export default ${JSON.stringify(`data:image/png;base64,${png.toString('base64')}`)}`
+      const ref = this.emitFile({ type: 'asset', name: 'crypt-strip.png', source: png })
+      return `export default import.meta.ROLLUP_FILE_URL_${ref}`
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [swPrecache(), serveRecordings()],
+  plugins: [swPrecache(), serveRecordings(), cryptStrip()],
   build: {
     sourcemap: false,
   },

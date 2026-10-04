@@ -17,9 +17,8 @@ import { count } from '../counter'
 // strip reads as the crypt's top row.
 //
 // Heading: a thematic line chosen from the history's state (./crypt-flavor),
-// in the smaller flavor style (it's prose, not a wordmark). Once the offline
-// pack has supplied its tiles, the crypt is also dressed as a room
-// (./crypt-room).
+// in the smaller flavor style (it's prose, not a wordmark). The crypt is
+// also dressed as a room (./crypt-room).
 export function openCrypt(): void {
   if (document.querySelector('.crypt-view')) return // already open — ignore re-taps
   count('crypt')

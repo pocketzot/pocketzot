@@ -28,9 +28,8 @@ const SEP = '\x00'
 // games is a generous bound for one device, budgeted at 128), the crypt's
 // history (STORE_CAP), and the fixed sprites rune-sprites.ts bakes under
 // `runes#<build>:<name>` (~20 runes/Orb, 14 gems, plus the offline lobby's
-// icons) — at ~1 KB per bake still under 200 KB of localStorage — plus the
-// crypt room's one tile strip (crypt-room.ts, ~40 KB). Insertion-order LRU,
-// oldest-stored evicted.
+// icons) — at ~1 KB per bake still under 200 KB of localStorage.
+// Insertion-order LRU, oldest-stored evicted.
 export const BAKE_CAP = 128 + STORE_CAP + 48
 
 // Parsed-map memo keyed on the raw stored string (same idiom as
@@ -66,7 +65,7 @@ function persist(cache: Record<string, string>): void {
 }
 
 // djb2, base36 — short content keys.
-export function hash36(s: string): string {
+function hash36(s: string): string {
   let h = 5381
   for (let i = 0; i < s.length; i++) h = (Math.imul(h, 33) ^ s.charCodeAt(i)) >>> 0
   return h.toString(36)

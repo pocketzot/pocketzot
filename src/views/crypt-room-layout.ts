@@ -60,8 +60,9 @@ const DESIGN_W = 7
 // are the design's anchors.
 const FLANK: ReadonlyArray<readonly [number, number]> = [[0, 15], [1, 2], [2, 2], [4, 2]]
 
-// Every tile the room draws, in one fixed order — crypt-room.ts bakes them
-// into one strip and composes from it by index.
+// Every tile the room draws, in one fixed order — the build bakes them into
+// one strip (vite.config.ts cryptStrip) and crypt-room.ts composes from it
+// by index.
 export const STRIP: readonly string[] = [...new Set([
   ...FLOOR_ART.flat().filter((n): n is string => !!n),
   ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(W),
