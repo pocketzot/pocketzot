@@ -3,12 +3,16 @@
 // groups and picks the phone layout; rendering lives in newgame-view.ts.
 //
 // The wire `main-items` is a desktop grid: buttons at (x, y) under column
-// headers, with additional labels at arbitrary mid-column positions
-// (background screen: Zealot at (0, ~6), Warrior-mage at (1, ~5)). The
-// phone layout flattens it column-major — each label starts a group, and
-// a column's buttons belong to the nearest label above them — which
-// reproduces the desktop reading order (Warrior, Zealot, Adventurer,
-// Warrior-mage, Mage) as vertical section bands.
+// headers, with additional labels at arbitrary mid-column positions, one or
+// more per column. Background screen in 0.34 (static jobs_order,
+// newgame.cc): Zealot at (0, 6), Warrior-mage at (1, 5). Trunk since
+// 4c975580b7 generates the groups (util/job-gen.py stacks each column by
+// job count, so positions move as backgrounds are added); at that commit,
+// Warrior-mage (0, 6), Zealot heading column 1, then Adventurer (1, 4) and
+// Metamorph (1, 8). The phone layout flattens it
+// column-major — each label starts a group, and a column's buttons belong
+// to the nearest label above them — which reproduces the desktop reading
+// order of either era as vertical section bands.
 import { stripDcss } from './overlay-body'
 import { DCSS_COLOR_MAP } from '../game/dcss-colors'
 import type { TileRef } from '../game/tiles/tile-view'

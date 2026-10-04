@@ -54,6 +54,33 @@ describe('parseGroups', () => {
     expect(groups.map(g => g.col)).toEqual([0, 0, 1, 1, 2])
   })
 
+  it('several mid-column labels in one column each start a group (trunk job-gen grid)', () => {
+    const items: NewgameItems = {
+      width: 3,
+      labels: [
+        { x: 0, y: 0, label: 'Warrior' },
+        { x: 0, y: 6, label: 'Warrior-mage' },
+        { x: 1, y: 0, label: 'Zealot' },
+        { x: 1, y: 4, label: 'Adventurer' },
+        { x: 1, y: 8, label: 'Metamorph' },
+        { x: 2, y: 0, label: 'Mage' },
+      ],
+      buttons: [
+        btn(0, 1, 'a - Fighter'), btn(0, 7, 'f - Warper'),
+        btn(1, 1, 'j - Berserker'), btn(1, 2, 'k - Chaos Knight'),
+        btn(1, 5, 'm - Artificer'),
+        btn(1, 9, 'p - Shapeshifter'), btn(1, 10, 'q - Mystic'),
+        btn(2, 1, 's - Hedge Wizard'),
+      ],
+    }
+    const groups = parseGroups(items)
+    expect(groups.map(g => g.label)).toEqual(
+      ['Warrior', 'Warrior-mage', 'Zealot', 'Adventurer', 'Metamorph', 'Mage'])
+    expect(groups[3].items.map(i => i.name)).toEqual(['Artificer'])
+    expect(groups[4].items.map(i => i.name)).toEqual(['Shapeshifter', 'Mystic'])
+    expect(groups.map(g => g.col)).toEqual([0, 0, 1, 1, 1, 2])
+  })
+
   it('an unlabeled grid yields one unlabeled group (weapon menu)', () => {
     const items: NewgameItems = {
       width: 1,

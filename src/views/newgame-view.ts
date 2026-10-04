@@ -6,7 +6,8 @@
 // snap-scrolling strip (newgame-model.ts parseGroups keeps the column
 // index) — rows get a phone's whole width instead of a third of it, so
 // sprite + "a - Gnoll" + full name fit without shrinking. Mid-column
-// labels (Zealot, Warrior-mage) stay in their column as sub-headers.
+// labels (backgrounds: Warrior-mage, Metamorph, …) stay in their column
+// as sub-headers.
 // Suffix-label menus (weapon aptitudes) and single-column menus render
 // as plain rows. The sub-items shortcuts sit in a static footer on the
 // overlay's own black, pinned only so the long single-column lists keep
