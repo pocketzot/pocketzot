@@ -9,10 +9,11 @@ formatting and HTML chrome differ. Drift is a bug.
 
 ## 2026-10-04
 
-- Improved spell and ability menu layouts.
+- Improved spell and ability menu layouts for phones and tablets.
 - Characters and character cards now show collected gems.
 - Remodeled the crypt.
-- Tiles mode: altars, portals, and other features now animate.
+- Tiles mode: altars, portals, and other features now animate as in the
+  desktop client.
 - Other improvements.
 
 ## 2026-09-30
