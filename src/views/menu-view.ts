@@ -17,6 +17,7 @@ import {
   type MenuItem, type MenuModel, type MenuMsg,
 } from '../game/menu-model'
 import { menuTagHasBar, type MenuBar } from './menu-bar'
+import { columnTable, menuColumns, type ColumnTable } from './menu-columns'
 import { systemKeyboardField } from './text-field'
 
 // Debounce for reporting a client-side scroll back to the server — menus
@@ -69,6 +70,9 @@ export class MenuView {
   // (see menu.js:730 in the reference client). Non-null = both that
   // suppression (see filterOpen) and the local-only typing state.
   private filterInput: HTMLInputElement | null = null
+  // The active menu's column layout (menu-columns.ts), recomputed on every
+  // list build; non-null moves the title's column words to a heading row.
+  private columns: ColumnTable | null = null
   // The list's available height changes without any menu message or scroll —
   // rotation, the virtual keyboard claiming layout rows, X-mode exit — and
   // can flip the overflow measurement updateFooter keys the more/alt_more
@@ -107,6 +111,7 @@ export class MenuView {
     if (this.model.active === msg) return
     this.captureScroll()  // before reassignment: keyed to the covered menu
     this.d.shift.reset()
+    this.columns = null   // the covered menu's; the next list build recomputes
     this.model.adopt(msg)
   }
 
@@ -232,13 +237,16 @@ export class MenuView {
     }
     if (m.title) {
       active.title = m.title
-      // Don't blow away the active filter input — the title slot is
-      // currently the prompt label. The title re-renders when the filter
-      // closes.
-      if (!this.filterInput) {
-        const titleSpan = this.d.content().querySelector<HTMLElement>('.overlay-title span')
-        if (titleSpan) titleSpan.textContent = stripDcss(m.title.text)
-      }
+      // A column menu's toggle sends the toggled rows first
+      // (ToggleableMenu::pre_process → webtiles_update_items) and the title
+      // after: update_title only flags it (menu.cc:3371), do_menu flushes it
+      // on its next loop pass (menu.cc:1587). The rows land under the old
+      // title, match neither shape and paint verbatim; this rebuild lays
+      // them out under the new one. The two are separate datagrams
+      // (tileweb.cc finish_message), so the verbatim paint can reach the
+      // screen for one frame.
+      if (this.columns || menuColumns(active.tag, m.title.text)) this.updateItems(active)
+      else this.paintTitle()
     }
     if (m.last_hovered !== undefined) this.applyServerHover(m.last_hovered)
     // Derived unconditionally (the reference runs update_more on every
@@ -329,10 +337,18 @@ export class MenuView {
     const active = this.model.active
     if (titleEl && active) {
       titleEl.innerHTML = ''
-      const span = document.createElement('span')
-      span.textContent = stripDcss(active.title?.text ?? '')
-      titleEl.appendChild(span)
+      titleEl.appendChild(document.createElement('span'))
+      this.paintTitle()
     }
+  }
+
+  // The active menu's title into the title slot — without its column words
+  // while a heading row carries them. Never while the filter input holds
+  // the slot (the title prompt label); closeFilter repaints.
+  private paintTitle(): void {
+    if (this.filterInput) return
+    const span = this.d.content().querySelector<HTMLElement>('.overlay-title span')
+    if (span) span.textContent = this.columns?.title ?? stripDcss(this.model.active?.title?.text ?? '')
   }
 
   private listEl(): HTMLElement | null {
@@ -515,7 +531,7 @@ export class MenuView {
   private renderItems(items: MenuItem[]): void {
     const listEl = document.createElement('div')
     listEl.className = 'overlay-list'
-    this.fillItems(listEl, items)
+    const header = this.fillItems(listEl, items)
     // The footer updater lives here, not in show: every rebuild gets a
     // fresh listener on the fresh element, so item updates can't strand the
     // position indicator on a dead node.
@@ -525,8 +541,12 @@ export class MenuView {
     }, { passive: true })
     this.listResize?.disconnect()
     this.listResize?.observe(listEl)
-    const footer = this.d.content().querySelector('.menu-footer')
-    this.d.content().insertBefore(listEl, footer)
+    const content = this.d.content()
+    content.querySelector('.menu-colhdr')?.remove()
+    const footer = content.querySelector('.menu-footer')
+    if (header) content.insertBefore(header, footer)
+    content.insertBefore(listEl, footer)
+    this.paintTitle()
   }
 
   private itemButton(labelHtml: string, onClick: () => void, colour?: number): HTMLButtonElement {
@@ -541,8 +561,27 @@ export class MenuView {
     return el
   }
 
-  private fillItems(listEl: HTMLElement, rawItems: MenuItem[]): void {
+  // Returns the column heading row when the menu lays out as columns.
+  private fillItems(listEl: HTMLElement, rawItems: MenuItem[]): HTMLElement | null {
     const coalesced = coalesceMenuItems(rawItems)
+    const active = this.model.active
+    const cols = active && menuColumns(active.tag, active.title?.text)
+    this.columns = cols ? columnTable(cols, coalesced.map(c => c.item)) : null
+    let header: HTMLElement | null = null
+    if (this.columns) {
+      header = document.createElement('div')
+      header.className = 'menu-colhdr'
+      // Stands in for the rows' tile column, so the words share their x.
+      if (coalesced.some(c => c.item.tiles?.length)) {
+        const spacer = document.createElement('span')
+        spacer.className = 'mcol-spacer'
+        header.appendChild(spacer)
+      }
+      const body = document.createElement('div')
+      body.className = 'mcol-hbody'
+      body.innerHTML = this.columns.header
+      header.appendChild(body)
+    }
     for (let c = 0; c < coalesced.length; c++) {
       const { item, idx: i } = coalesced[c]
       if (item.level === 0) continue  // separator
@@ -575,9 +614,11 @@ export class MenuView {
         // styling of its own — the text carries it, as in the reference.
         // Prefixless rows (the unrecognised-items list — bare " staff of air"
         // / " scroll of fog (uncommon)") start at column 0 and must NOT indent.
-        const prefix = String(item.text ?? '')
+        // A column row (menu-columns.ts) brings its own layout and indent.
+        const laid = this.columns?.rows.get(String(item.text ?? ''))
+        const prefix = !laid && String(item.text ?? '')
           .match(/^\s*(?:<[a-zA-Z]+>.<\/[a-zA-Z]+>|(?:<[^>]+>)*.)\s([-+# $])\s/)
-        const el = this.itemButton(dcssToHtml(String(item.text ?? '')), () => {
+        const el = this.itemButton(laid ?? dcssToHtml(String(item.text ?? '')), () => {
           const shift = this.d.shift
           const active = this.model.active
           // Shop shift-tap: shopping list uses the uppercase letter as a direct
@@ -619,9 +660,11 @@ export class MenuView {
         }
         el.dataset.menuIdx = String(i)
         if (prefix) el.classList.add('item-hang')
+        if (laid) el.classList.add('mcol-row')
         if (i === this.model.hovered) el.classList.add('item-hovered')
         listEl.appendChild(el)
       }
     }
+    return header
   }
 }

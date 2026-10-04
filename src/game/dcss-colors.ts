@@ -52,6 +52,11 @@ export function stripDcss(text: string): string {
   return text.replace(/<[^>]+>/g, '')
 }
 
+// Match a markup tag (optionally `<<`-escaped) or a bare `>` / `&`. Every
+// `<`, `>`, `&` in the input is consumed by it, so the text between matches
+// is already HTML-safe. A fresh /g regex per walk (lastIndex is state).
+const markupTokens = (): RegExp => /<?<(\/?(?:bg:)?[a-z]*)>?|>|&/gi
+
 // Convert DCSS colour markup (`<red>…</red>`, `<w>K</w>`) to safe HTML.
 // Mirrors the server client's formatted_string_to_html (webserver
 // game_data/static/util.js): only one span is open at a time, unterminated
@@ -60,10 +65,7 @@ export function stripDcss(text: string): string {
 // One emitter: item-use.cc `_item_swap_prompt` sends `<w><<</w> or …` for the
 // `<` swap slot, so without escape handling the leading `<` is dropped.
 export function dcssToHtml(text: string): string {
-  // Match a markup tag (optionally `<<`-escaped) or a bare `>` / `&`. Every
-  // `<`, `>`, `&` in the input is consumed here, so the text between matches
-  // is already HTML-safe and can be appended verbatim.
-  const re = /<?<(\/?(?:bg:)?[a-z]*)>?|>|&/gi
+  const re = markupTokens()
   const colorStack: string[] = []
   let out = ''
   let last = 0
@@ -110,5 +112,51 @@ export function dcssToHtml(text: string): string {
   }
   out += text.slice(last)
   if (colorStack.length > 0) out += '</span>'
+  return out
+}
+
+// The markup for plain-text columns [from, to) of DCSS-marked-up text, with
+// the colour tags open at `from` re-opened so the slice renders in the
+// colours it had in place (dcssToHtml closes whatever stays open). Tags are
+// zero-width and the token rules are dcssToHtml's. One column per
+// character: callers slice ASCII text only (the engine's strwidth counts
+// East Asian wide characters as two, which this does not).
+export function sliceDcss(text: string, from: number, to = Infinity): string {
+  const re = markupTokens()
+  const stack: string[] = []
+  let col = 0
+  let out = ''
+  let started = false
+  const put = (raw: string): void => {
+    if (col >= from && col < to) {
+      if (!started) { out += stack.map(n => `<${n}>`).join(''); started = true }
+      out += raw
+    }
+    col++
+  }
+  const plain = (s: string): void => {
+    for (const ch of s) put(ch === '<' ? '<<' : ch)
+  }
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null && col < to) {
+    plain(text.slice(last, m.index))
+    last = re.lastIndex
+    const whole = m[0]
+    if (whole === '>' || whole === '&') { put(whole); continue }
+    if (whole.startsWith('<<')) { plain(whole.slice(1)); continue }
+    if (!whole.endsWith('>')) { plain(whole); continue }
+    let name = m[1].toLowerCase()
+    const closing = name.startsWith('/')
+    if (closing) name = name.slice(1)
+    if (name.startsWith('bg:') || !(name in DCSS_COLOR_MAP)) {
+      if (name === '' && !closing) plain(whole)
+      continue
+    }
+    if (closing) stack.pop()
+    else stack.push(name)
+    if (started && col < to) out += whole
+  }
+  if (col < to) plain(text.slice(last))
   return out
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { dcssToHtml, escHtml, uiColor, DCSS_UI_COLOR } from './dcss-colors'
+import { dcssToHtml, escHtml, sliceDcss, uiColor, DCSS_COLOR_MAP, DCSS_UI_COLOR } from './dcss-colors'
 
 describe('palette', () => {
   it('style.css --color-0..15 equal the JS table', () => {
@@ -115,5 +115,32 @@ describe('dcssToHtml', () => {
   it('handles <w> alias as a white highlight', () => {
     expect(dcssToHtml('<w>K</w>'))
       .toBe('<span style="color:#eeeeec">K</span>')
+  })
+})
+
+describe('sliceDcss', () => {
+  // The spell-row shape: one outer tag, a nested fail tag.
+  const row = '<lightgrey>Foxfire  <yellow>3%</yellow>  1</lightgrey>'
+
+  it('counts plain columns only and re-opens the tags open at the start', () => {
+    expect(sliceDcss(row, 0, 7)).toBe('<lightgrey>Foxfire')
+    expect(sliceDcss(row, 9, 11)).toBe('<lightgrey><yellow>3%')
+    expect(sliceDcss(row, 13)).toBe('<lightgrey>1</lightgrey>')
+  })
+
+  it('renders each slice in the colour it had in place', () => {
+    // The re-opened outer tag paints an empty span first; only the inner
+    // colour carries text.
+    expect(dcssToHtml(sliceDcss(row, 9, 11)).replace(/<span[^>]*><\/span>/g, ''))
+      .toBe(dcssToHtml('<yellow>3%</yellow>'))
+    expect(dcssToHtml(sliceDcss(row, 13, 14))).toBe(dcssToHtml('<lightgrey>1</lightgrey>'))
+    // Text after the inner tag closes is back in the outer colour.
+    expect(dcssToHtml(sliceDcss(row, 9))).toContain(`<span style="color:${DCSS_COLOR_MAP.lightgrey}">  1`)
+  })
+
+  it('keeps escapes and literals one column each', () => {
+    expect(sliceDcss('<w><<</w> or a&b', 0, 1)).toBe('<w><<')
+    expect(sliceDcss('a&b>c', 1, 4)).toBe('&b>')
+    expect(sliceDcss('<bogus>ab', 1)).toBe('b')
   })
 })

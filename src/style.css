@@ -3470,6 +3470,39 @@ html.map-hold, html.map-hold * {
    start at column 0 and must wrap flush, not indent. */
 .overlay-item.item-hang .overlay-label { padding-left: 4ch; text-indent: -4ch; }
 
+/* Column menus (menu-columns.ts): spell and ability rows as a name line
+   (hotkey prefix hanging, as .item-hang) plus a line of school / cost /
+   stats, with fail and level on a right-hand rail, under one heading row
+   holding the title's column words. Widths are in ch: the heading row and
+   the rows share font sizes box for box — rail cells are row-size boxes,
+   the lines under the name chrome-size — so a column measures the same in
+   both. */
+.overlay-item.mcol-row .overlay-label { flex: 1; }
+.menu-colhdr {
+  display: flex;
+  gap: 0.6rem;                 /* .overlay-item's gap and inline padding */
+  padding: 0 0.25rem;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-overlay);
+  color: var(--text-dim);
+}
+.mcol-spacer { flex: 0 0 32px; margin-right: -0.2rem; }  /* a menu row's tile-stack */
+.mcol-hbody { flex: 1; min-width: 0; display: flex; align-items: baseline; }
+.mcol-hbody > .mcol-sub { flex: 1; min-width: 0; }
+.mcol-line { display: flex; align-items: baseline; }
+.mcol-name { flex: 1; min-width: 0; padding-left: 4ch; text-indent: -4ch; }
+.mcol-key { white-space: pre; }
+.mcol-rail { display: flex; flex: none; text-indent: 0; }
+.mcol-cell { text-align: right; }
+.mcol-sub { display: block; padding-left: 4ch; }
+.mcol-sub > span, .mcol-hword { font-size: var(--fs-overlay-chrome); }
+.mcol-dim { color: var(--text-dim); }
+/* A greyed row (COL_USELESS / COL_INAPPLICABLE = DARKGRAY, spl-util.h) greys
+   its dim line too; not inherit, so hover leaves it grey. */
+.overlay-item.fg8 .mcol-dim { color: var(--color-8); }
+.mcol-grid { display: grid; }
+
 .overlay-header {
   font-size: var(--fs-overlay-chrome);
   padding: 0.5rem 0.25rem 0.15rem;

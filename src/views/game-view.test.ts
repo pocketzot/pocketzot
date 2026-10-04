@@ -1584,6 +1584,42 @@ describe('menu handler', () => {
     expect(sent(h).at(-1)).toEqual({ msg: 'input', text: '!' })
   })
 
+  it('lays a spell menu out in columns and follows the ! toggle', () => {
+    const pad = (s: string, n: number) => s.padEnd(n)
+    const title = (cols: string) => ({ text: `<lightgrey> <white>${pad('Your spells (describe)', 25)}           ${cols}` })
+    const base = { level: 2, hotkeys: [97], tiles: [{ t: 1, tex: 0 }],
+      text: ` a - <lightgrey>${pad('Magic Dart', 32)}${pad('Conjuration', 26)}<lightgrey>1%</lightgrey>       1      </lightgrey>` }
+    const stats = { ...base,
+      text: ` a - <lightgrey>${pad('Magic Dart', 32)}${pad('100%', 10)}${pad('3d3', 10)}${pad('5', 8)}${pad('Almost silent', 14)}</lightgrey>` }
+    const titleText = (h: Harness) => overlay(h).querySelector('.overlay-title')?.textContent
+    const heads = (h: Harness) => overlay(h).querySelector('.menu-colhdr')?.textContent?.trim().split(/\s+/)
+    const h = setup()
+    h.dispatch({ msg: 'menu', tag: 'spell', title: title('Type                      Failure  Level  '), items: [base] })
+    expect(titleText(h)).toBe('Your spells (describe)')
+    expect(heads(h)).toEqual(['Type', 'Failure', 'Level'])
+    expect(overlay(h).querySelector('.overlay-item')?.classList.contains('mcol-row')).toBe(true)
+    // A `!` toggle: the toggled rows, then the title (menu-view's update_menu
+    // handler has the engine ordering). Between the two the rows match
+    // neither shape and paint verbatim under the old title.
+    h.dispatch({ msg: 'update_menu_items', chunk_start: 0, items: [stats] })
+    expect(overlay(h).querySelector('.menu-colhdr')).toBeNull()
+    expect(titleText(h)).toMatch(/Type +Failure +Level/)
+    h.dispatch({ msg: 'update_menu', title: title('Power     Damage    Range   Noise         ') })
+    expect(titleText(h)).toBe('Your spells (describe)')
+    expect(heads(h)).toEqual(['Power', 'Damage', 'Range', 'Noise'])
+    expect(overlay(h).querySelector('.overlay-item .mcol-grid')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('100% 3d3 5 Almost silent')
+    // The tap still sends the row's hotkey path (MF_ARROWS_SELECT absent here).
+    overlay(h).querySelector<HTMLElement>('.overlay-item')!.click()
+    expect(sent(h)).toContainEqual({ msg: 'key', keycode: 97 })
+    h.dispatch({ msg: 'close_menu' })
+
+    // Rows off the columns render verbatim, under the server's whole title.
+    h.dispatch({ msg: 'menu', tag: 'spell', title: title('Type                      Failure  Level  '),
+      items: [{ level: 2, hotkeys: [97], text: ' a - Magic Dart Conjuration 1% 1' }] })
+    expect(overlay(h).querySelector('.menu-colhdr')).toBeNull()
+    expect(titleText(h)).toMatch(/^ Your spells \(describe\) +Type +Failure +Level/)
+  })
+
   it('renders a type:crt menu as a CRT display and paints txt lines into it', () => {
     const h = setup()
     h.dispatch({ msg: 'menu', type: 'crt' })
