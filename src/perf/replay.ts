@@ -73,6 +73,7 @@ function installInstrumentation(): void {
   instrumentMethod(TileMapView.prototype, 'fullRender', 'tiles.fullRender')
   instrumentMethod(TileMapView.prototype, 'panRender', 'tiles.panRender')
   instrumentMethod(TileMapView.prototype, 'fitToContainer', 'tiles.fit')
+  instrumentMethod(TileMapView.prototype, 'animate', 'tiles.animate')
   instrumentMethod(StatsView.prototype, 'update', 'hud.stats')
   instrumentMethod(StatusView.prototype, 'update', 'hud.status')
   instrumentMethod(MonsterListView.prototype, 'update', 'hud.monsters')

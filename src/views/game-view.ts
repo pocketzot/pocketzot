@@ -147,19 +147,21 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
   // only paint once they're handed this loader (adoptLoader).
   let loader: TileLoader | null = null
   let mapView: MapView | TileMapView = new MapView(store)
-  // The player's tile_*_anim RC options (from `options`; all off until it
-  // arrives) and the tile_realtime_anim timer. The other triggers are the
-  // map and txt handlers — reference parity, see TileMapView.animate.
+  // The player's tile_*_anim RC options, and the tile_realtime_anim timer.
+  // The reference steps animations at the end of every `map` message
+  // (display.js display()), on every `txt` update, and on that 4 Hz timer
+  // (dungeon_renderer.js update_animation_interval) — onMap, onTxt and here.
+  // Unlike the reference, nothing steps in X mode: every cursor move there
+  // is a map message with no game time passing, and panning on a phone
+  // shouldn't pay for flicker.
   let tileAnim: AnimOptions = animOptionsFrom({})
   let tileAnimTimer: number | null = null
   function animateTiles(): void {
-    if (renderMode === 'tiles') (mapView as TileMapView).animate()
+    if (!inXMode) mapView.animate(tileAnim)
   }
   function setTileAnim(o: AnimOptions): void {
     tileAnim = o
-    if (renderMode === 'tiles') (mapView as TileMapView).setAnimOptions(o)
     if (tileAnimTimer !== null) { clearInterval(tileAnimTimer); tileAnimTimer = null }
-    // dungeon_renderer.js update_animation_interval: 1000 / 4 ms.
     if (o.realtime) tileAnimTimer = window.setInterval(animateTiles, 1000 / 4)
   }
   // Live view for console poking (it's swapped by setRenderMode, hence a getter).
@@ -1027,7 +1029,6 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Default tile mode to zoom-on. Apply unconditionally — tile X-mode
     // uses the zoom-on (LoS-floor) base shrunk by X_MODE_SCALE.
     if (mode === 'tiles') next.setZoomMode(true)
-    if (next instanceof TileMapView) next.setAnimOptions(tileAnim)
     next.setSight(sight)
     // Carry the X-mode scale across the swap: the new view starts at 1.0
     // by default, which would visibly un-zoom the map mid-X-mode. inXMode
@@ -1297,8 +1298,9 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       map: onMap,
       player: onPlayer,
       options: (msg) => {
-        statsView.setOptions(msg.options ?? {})
-        setTileAnim(animOptionsFrom(msg.options ?? {}))
+        const opts = msg.options ?? {}
+        statsView.setOptions(opts)
+        setTileAnim(animOptionsFrom(opts))
       },
       txt: onTxt,
       'ui-push': onUiPush,

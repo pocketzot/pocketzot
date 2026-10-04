@@ -33,6 +33,7 @@ const tileCount = real.tile_count as (id: number) => number
 
 const WEB_DEFAULTS = animOptionsFrom({ tile_misc_anim: true, tile_water_anim: false, tile_realtime_anim: false })
 const ALL_ON = { misc: true, water: true, realtime: false }
+const never = (): number => { throw new Error('random used') }
 
 describe('animOptionsFrom', () => {
   it('reads the three RC options; absent is off (reference get_option → null)', () => {
@@ -71,7 +72,6 @@ describe.skipIf(!HAVE_PACK)('cellIsAnimated (real tileinfo-dngn)', () => {
 })
 
 describe.skipIf(!HAVE_PACK)('nextFrame (real tileinfo-dngn)', () => {
-  const never = (): number => { throw new Error('random used') }
 
   it("cycles Jiyva's altar through every variant and wraps", () => {
     const base = d.DNGN_ALTAR_JIYVA
@@ -108,15 +108,18 @@ describe.skipIf(!HAVE_PACK)('nextFrame (real tileinfo-dngn)', () => {
 })
 
 describe.skipIf(!HAVE_PACK)('animatedBase / stepFrame (real tileinfo-dngn)', () => {
-  const t: AnimTiles = { dngn: d, basetile, tileCount, dngnMax: d.DNGN_MAX }
+  const t: AnimTiles = { dngn: d, basetile, tileCount }
   const J = d.DNGN_ALTAR_JIYVA
-  const never = (): number => { throw new Error('random used') }
 
-  it('maps any variant to its base, and refuses ids basetile would assert on', () => {
-    expect(animatedBase(J + 5, t, WEB_DEFAULTS)).toBe(J)
-    expect(animatedBase(d.DNGN_LAVA, t, WEB_DEFAULTS)).toBeNull()
-    expect(animatedBase(0, t, WEB_DEFAULTS)).toBeNull()
-    expect(animatedBase(d.DNGN_MAX, t, WEB_DEFAULTS)).toBeNull()
+  it('maps any variant to its base, whichever option gates it', () => {
+    expect(animatedBase(J + 5, t)).toBe(J)
+    expect(animatedBase(d.DNGN_LAVA + 1, t)).toBe(d.DNGN_LAVA)
+    expect(animatedBase(basetile(d.FLOOR_GREY_DIRT), t)).toBeNull()
+  })
+
+  it('refuses ids basetile would assert on', () => {
+    expect(animatedBase(0, t)).toBeNull()
+    expect(animatedBase(d.DNGN_MAX, t)).toBeNull()
   })
 
   it('continues from the frame on screen while the server id is unchanged', () => {
