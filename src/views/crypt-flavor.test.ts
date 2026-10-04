@@ -3,15 +3,15 @@
 // the resting state.
 import { describe, expect, it } from 'vitest'
 import type { Avatar } from '../avatars'
-import { GAZE, GLORY, TRIBULATIONS, pickCryptLine } from './crypt-flavor'
+import { DEAD_LINES, ENDED, GAZE, GLORY, TRIBULATIONS, pickCryptLine } from './crypt-flavor'
 
-function avatar(reason?: string): Avatar {
+function avatar(reason?: string, endedAt = 2): Avatar {
   const a = {
     wsUrl: 'wss://crawl.dcss.io/socket', username: 'u', gameId: 'dcss-0.34',
     charName: 'Bram', httpBase: 'https://crawl.dcss.io', version: 'abc',
     doll: null, mcache: null, turn: 100, seenAt: 1,
   } as Avatar
-  if (reason) a.outcome = { reason, endedAt: 2 }
+  if (reason) a.outcome = { reason, endedAt }
   return a
 }
 
@@ -24,6 +24,13 @@ describe('pickCryptLine', () => {
     expect(pickCryptLine([avatar('dead'), avatar()])).toBe(TRIBULATIONS)
     // An older death behind a newer quit is not the post-death window.
     expect(pickCryptLine([avatar('quit'), avatar('dead')])).toBe(GAZE)
+  })
+
+  it('gives each death its own line, the same on every open', () => {
+    expect(pickCryptLine([avatar('dead', 1001)])).toBe(ENDED)
+    expect(pickCryptLine([avatar('dead', 1001)])).toBe(ENDED)
+    const seen = new Set([1000, 1001, 1002, 1003].map((t) => pickCryptLine([avatar('dead', t)])))
+    expect(seen).toEqual(new Set(DEAD_LINES))
   })
 
   it('does not count a quit or bail-out as a tribulation', () => {
