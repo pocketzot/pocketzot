@@ -12,7 +12,7 @@ import { ATTITUDE_CLASSES } from './monster-style'
 // carries no status at all (tileweb.cc _send_monster), so everything here is
 // read back from the two tile channels: the fg flag bits (behaviour, net/web,
 // poison) and `cell.icons` — status_icons_for() (tilepick.cc), one icon per
-// MB_ flag. Icon ids are version-specific, so they're matched by their
+// MB_ flag, plus terrain overlays (see SILENT_ICONS). Icon ids are version-specific, so they're matched by their
 // tileinfo-icons *name* (iconNameMap), which is stable across versions.
 
 export type IconNames = ReadonlyMap<number, string>
@@ -127,9 +127,13 @@ const ORDER_INDEX = new Map(STATUS_ORDER.map(([key], i) => [key, i]))
 // already spelled out in the monster's name or elsewhere (GHOSTLY "ghostly
 // …", VAMPIRE_THRALL "vampire …" per monster_info::_core_name; UNDYING_ARMS
 // in the weapon description; HEART = an incubating egg; STAMPEDE).
+// DRAGON_VEIN_* aren't monster state at all: trunk tileview.cc (since
+// f4c9e3c107) adds them to a cell's icons when a monster or item stands on
+// a vein, so the overlay stays visible over the sprite — drawn, never worded.
 const SILENT_ICONS = new Set([
   'ANIMATED_WEAPON', 'UNREWARDING', 'TESSERACT_SPAWN', 'SUNDERING',
   'GHOSTLY', 'VAMPIRE_THRALL', 'UNDYING_ARMS', 'HEART', 'STAMPEDE',
+  'DRAGON_VEIN_AIR', 'DRAGON_VEIN_EARTH', 'DRAGON_VEIN_FIRE', 'DRAGON_VEIN_ICE',
 ])
 
 // Nameless revenant memory count (NOBODY_MEMORY_1..n); worded as

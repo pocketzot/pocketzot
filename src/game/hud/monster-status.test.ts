@@ -12,7 +12,7 @@ const ICONS = {
   get_img: () => '',
   SUMMONED: 100, BERSERK: 101, HASTED: 102, PETRIFIED: 103, FRENZIED: 104,
   SLOWED: 105, CONFUSED: 106, NOBODY_MEMORY_1: 107, NOBODY_MEMORY_3: 108,
-  GHOSTLY: 109, SOME_NEW_STATUS: 110, MINION: 112,
+  GHOSTLY: 109, SOME_NEW_STATUS: 110, MINION: 112, DRAGON_VEIN_FIRE: 111,
   ICONS_MAX: 113, TILEI_ICONS_MAX: 113,
 }
 const names = iconNameMap(ICONS)
@@ -76,6 +76,10 @@ describe('monsterStatusLabels — icons and order', () => {
   it('drops silent icons and unknown ids; humanises unknown names at the end', () => {
     expect(monsterStatusLabels(0, [109, 999, 110, 101], HOSTILE, names))
       .toEqual(['berserk', 'some new status'])
+  })
+
+  it('never words the dragon-vein terrain overlay', () => {
+    expect(monsterStatusLabels(0, [111, 101], HOSTILE, names)).toEqual(['berserk'])
   })
 
   it('words nameless-revenant memories', () => {
