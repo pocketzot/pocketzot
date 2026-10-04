@@ -72,6 +72,9 @@ describe('columnTable: spell rows', () => {
     expect(b).toContain(`color:${DCSS_COLOR_MAP.yellow}">28%`)
     // "Failure" (7) is wider than any value: the column is the heading +1.
     expect(b).toContain('width:8ch')
+    // Wide layout: "b - " + 25 + 2; schools 25 + 2; rail 8 + 6 + 1 gap; +1.
+    expect(t.tracks).toBe('31ch 27ch auto')
+    expect(t.header).toContain('class="mcol-stick" style="width:74ch"')
   })
 
   it('takes the preselected "+" row, a no-hotkey row and the enkindle fail forms', () => {
@@ -117,6 +120,9 @@ describe('columnTable: the ! view', () => {
     expect(t.rows.size).toBe(3)
     // Power 5+1, Damage max("(3-5)d12"=8)+1, Range 5+1; Noise takes the rest.
     expect(t.header).toContain('grid-template-columns:6ch 9ch 6ch minmax(0,1fr)')
+    // Wide layout: "a - " + 19 + 2, then the grid: 6 + 9 + 6 + 15 + 3 gaps; +1.
+    expect(t.tracks).toBe('25ch auto')
+    expect(t.header).toContain('class="mcol-stick" style="width:65ch"')
     expect(text(t.rows.get(items[1].text!)!).replace(/\s+/g, ' ').trim())
       .toBe('b - Shatter 38% (3-5)d12 2-4/7 Extremely loud')
   })

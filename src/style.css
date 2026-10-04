@@ -3488,7 +3488,7 @@ html.map-hold, html.map-hold * {
   color: var(--text-dim);
 }
 .mcol-spacer { flex: 0 0 32px; margin-right: -0.2rem; }  /* a menu row's tile-stack */
-.mcol-hbody { flex: 1; min-width: 0; display: flex; align-items: baseline; }
+.mcol-hbody { flex: 1; min-width: 0; display: flex; align-items: baseline; position: relative; }
 .mcol-hbody > .mcol-sub { flex: 1; min-width: 0; }
 .mcol-line { display: flex; align-items: baseline; }
 .mcol-name { flex: 1; min-width: 0; padding-left: 4ch; text-indent: -4ch; }
@@ -3502,6 +3502,25 @@ html.map-hold, html.map-hold * {
    its dim line too; not inherit, so hover leaves it grey. */
 .overlay-item.fg8 .mcol-dim { color: var(--color-8); }
 .mcol-grid { display: grid; }
+/* Wide layout (tablets; MenuView.syncColumnsWide): one line per row on the
+   table's --mcol-tracks, the heading row's body on the same tracks. The
+   values move up to row size and the grid's ch tracks with them, in the
+   heading row too, whose words stay chrome size. The stick only measures. */
+.mcol-stick { position: absolute; height: 0; visibility: hidden; }
+.mcol-wide .mcol-row .overlay-label,
+.menu-colhdr.mcol-wide .mcol-hbody {
+  display: grid;
+  grid-template-columns: var(--mcol-tracks);
+  align-items: baseline;
+}
+.mcol-wide .mcol-line { display: contents; }
+.mcol-wide .mcol-name { grid-area: 1 / 1; }
+.mcol-wide .mcol-sub { grid-area: 1 / 2; padding-left: 0; }
+.mcol-wide .mcol-rail { grid-area: 1 / 3; gap: 1ch; }
+.mcol-wide .mcol-grid { column-gap: 1ch; }
+.mcol-wide .mcol-row .mcol-sub > span,
+.menu-colhdr.mcol-wide .mcol-grid { font-size: inherit; }
+.menu-colhdr.mcol-wide .mcol-grid > span { font-size: var(--fs-overlay-chrome); }
 
 .overlay-header {
   font-size: var(--fs-overlay-chrome);

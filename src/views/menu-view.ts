@@ -81,7 +81,7 @@ export class MenuView {
   // observer, re-targeted at each rebuilt list in renderItems (guarded:
   // test envs may lack ResizeObserver).
   private readonly listResize = typeof ResizeObserver === 'function'
-    ? new ResizeObserver(() => this.updateFooter())
+    ? new ResizeObserver(() => { this.syncColumnsWide(); this.updateFooter() })
     : null
 
   constructor(deps: MenuViewDeps) {
@@ -546,7 +546,21 @@ export class MenuView {
     const footer = content.querySelector('.menu-footer')
     if (header) content.insertBefore(header, footer)
     content.insertBefore(listEl, footer)
+    this.syncColumnsWide()
     this.paintTitle()
+  }
+
+  // The column table's wide layout (menu-columns.ts ColumnTable.tracks) when
+  // the heading row's body holds its stick. That body is as wide as the
+  // rows' labels in either layout, so the switch can't flap.
+  private syncColumnsWide(): void {
+    const header = this.d.content().querySelector('.menu-colhdr')
+    const body = header?.querySelector('.mcol-hbody')
+    const stick = header?.querySelector<HTMLElement>('.mcol-stick')
+    // clientWidth 0 = no layout (test envs): narrow.
+    const wide = !!body && !!stick && body.clientWidth > 0 && stick.offsetWidth <= body.clientWidth
+    header?.classList.toggle('mcol-wide', wide)
+    this.listEl()?.classList.toggle('mcol-wide', wide)
   }
 
   private itemButton(labelHtml: string, onClick: () => void, colour?: number): HTMLButtonElement {
@@ -581,6 +595,8 @@ export class MenuView {
       body.className = 'mcol-hbody'
       body.innerHTML = this.columns.header
       header.appendChild(body)
+      header.style.setProperty('--mcol-tracks', this.columns.tracks)
+      listEl.style.setProperty('--mcol-tracks', this.columns.tracks)
     }
     for (let c = 0; c < coalesced.length; c++) {
       const { item, idx: i } = coalesced[c]

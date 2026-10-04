@@ -2,7 +2,8 @@
 // out for an 80-column terminal; rendered verbatim at phone width the runs
 // of pad spaces collapse and every field runs together. Here the column
 // words leave the title for one heading row, and each row becomes its name
-// line plus aligned values.
+// line plus aligned values — or, where the whole table fits on one line per
+// row (tablets), the wide layout: name, then every column.
 //
 // Wire formats (trunk and 0.34.1 alike; every row carries the MenuEntry
 // preface first: " a - ", " a + " for SpellMenu's preselected last-cast
@@ -65,6 +66,7 @@ interface Field { plain: string; html: string }
 interface ParsedRow {
   preface: string   // HTML of the "a - " cells (the leading space dropped)
   name: string      // HTML
+  nameLen: number   // columns
   sub?: string      // plain text of the dim line (rail)
   cells: Field[]    // rail cells, or grid cells
 }
@@ -97,14 +99,14 @@ function field(text: string, plain: string, from: number, to = Infinity): Field 
 // Preface and name, the part every row shape shares. The name field must
 // end in a pad space and the next field start right after it — the check
 // that the row really is laid out on these columns.
-function head(text: string, plain: string): { preface: string; name: string } | null {
+function head(text: string, plain: string): { preface: string; name: string; nameLen: number } | null {
   if (!/^[\x20-\x7e]*$/.test(plain)) return null
   if (!/^ (?:\S [-+]| {3}) $/.test(plain.slice(0, PREFACE))) return null
   const at = PREFACE + NAME
   if (!/^ \S/.test(plain.slice(at - 1))) return null
   const name = field(text, plain, PREFACE, at)
   if (!name) return null
-  return { preface: dcssToHtml(sliceDcss(text, 1, PREFACE)), name: name.html }
+  return { preface: dcssToHtml(sliceDcss(text, 1, PREFACE)), name: name.html, nameLen: name.plain.length }
 }
 
 // Schools, fail, level. A schools string of 26+ columns gets no pad at all
@@ -167,6 +169,11 @@ export interface ColumnTable {
   // Label HTML per laid-out row, keyed by the item's text; rows absent here
   // render verbatim.
   rows: Map<string, string>
+  // The wide layout's grid tracks (name, then the rest), set as
+  // --mcol-tracks on the heading row and the list. The heading row carries
+  // a .mcol-stick as wide as that one-line row; MenuView turns the wide
+  // layout on when the stick fits.
+  tracks: string
 }
 
 export function columnTable(cols: MenuColumns, items: MenuItem[]): ColumnTable | null {
@@ -193,6 +200,17 @@ export function columnTable(cols: MenuColumns, items: MenuItem[]): ColumnTable |
   // probe reads the overlay's opening words); flex and grid ignore them.
   const name = (r: ParsedRow) =>
     `<span class="mcol-name"><span class="mcol-key">${r.preface}</span>${r.name}</span>`
+  // Wide layout, one line per row: the name track (preface + widest name)
+  // and the dim track (rail only) take a 2ch gap after them; the rail or
+  // grid takes a 1ch gap between columns on top of each width's own 1ch
+  // (style.css .mcol-wide).
+  const rows = [...parsed.values()]
+  const nameW = 4 + Math.max(...rows.map(r => r.nameLen)) + 2
+  const restW = widths.reduce((a, b) => a + b, 0) + widths.length - 1
+  const subW = grid ? 0 : Math.max(cols.heads[0].length, ...rows.map(r => r.sub!.length)) + 2
+  const tracks = grid ? `${nameW}ch auto` : `${nameW}ch ${subW}ch auto`
+  // +1ch: a row's label can be a scrollbar narrower than the heading row.
+  const stick = `<span class="mcol-stick" style="width:${nameW + subW + restW + 1}ch"></span>`
   let header: string
   const out = new Map<string, string>()
   if (!grid) {
@@ -215,5 +233,5 @@ export function columnTable(cols: MenuColumns, items: MenuItem[]): ColumnTable |
       out.set(text, `<span class="mcol-line">${name(r)}</span> ${grid(r.cells.map(c => c.html))}`)
     }
   }
-  return { title: cols.title, header, rows: out }
+  return { title: cols.title, header: header + stick, rows: out, tracks }
 }
