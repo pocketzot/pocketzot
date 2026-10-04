@@ -7,6 +7,14 @@ formatting and HTML chrome differ. Drift is a bug.
 
 # What's new
 
+## 2026-10-04
+
+- Improved spell and ability menu layouts.
+- Characters and character cards now show collected gems.
+- Remodeled the crypt.
+- Tiles mode: altars, portals, and other features now animate.
+- Other improvements.
+
 ## 2026-09-30
 
 - Spell rail: long-press a spell and drag to rearrange.
