@@ -90,6 +90,12 @@ export interface PlayerStatus {
   text?: string  // longer label
   desc?: string
   col?: number   // DCSS color index
+  // When set, `light` carries DCSS colour markup (trunk f29552d7ee; 0.34
+  // never sends it). tileweb.cc _send_player sets it only when
+  // light_text_formatted is non-empty; player.js renders
+  // .html(formatted_string_to_html(light)) then, .text(light) otherwise — so
+  // never run a plain light through dcssToHtml, a `<` in it is literal.
+  use_html?: boolean
 }
 
 export interface LobbyEntry {
