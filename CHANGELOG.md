@@ -9,7 +9,7 @@ formatting and HTML chrome differ. Drift is a bug.
 
 ## 2026-10-16
 
-- Changed the key layout for the 'm' menu.
+- The `m` menu now uses a QWERTY layout.
 - Improved handling for when the system keyboard is shown.
 
 ## 2026-10-08
