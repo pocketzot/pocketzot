@@ -2722,10 +2722,12 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
     // A probe cut short by something other than its reply (SpellHarvester
     // abort) must leave the game a way back: the wire order of golden 15
     // for a map wipe during load — the drag's `X` reaches the engine ahead
-    // of the auto-probe's `I`, which the level map ignores; leaving the map
-    // sends close_all_menus (viewmap.cc redraw_screen), then input_mode
-    // 0→1. The old reset() there cleared the ladder with no retry: one `I`
-    // per game, no menu ever shown, no rail.
+    // of the auto-probe's `I`, which the level map spends as
+    // CMD_MAP_FIND_STASH (cmd-keys.h); leaving the map sends
+    // close_all_menus (ui.cc pop_layout → redraw_screen → tileweb.cc
+    // pop_all_ui_layouts), then input_mode 0→1. The old reset() there
+    // cleared the ladder with no retry: one `I` per game, no menu ever
+    // shown, no rail.
     describe('a probe cut short by close_all_menus (level map opened by a stray X)', () => {
       it('re-probes once at the command prompt that follows the map', () => {
         vi.useFakeTimers()

@@ -63,13 +63,20 @@ export const HARVEST_RETRY_BUDGET = 2
 // "describe" (spl-cast.cc). Leading whitespace allowed — the wire title is
 // set_title(me, true, true)'s indented form, "<lightgrey> <white>Your spells
 // (describe) …" (golden 19), so an anchored match without it never fires.
-const PROBE_TITLE = /^\s*Your spells \(describe\)/
+// Before 0.30 list_spells' default title was the bare "Your Spells"
+// (spl-cast.h at tags 0.24-b1..0.29-b1; the "(%s)" form lands in 0.30-b1),
+// shared by `I` and `z` alike, so that form is accepted too — the 0.24
+// floor is a supported server. The other pre-0.30 callers titled their
+// lists "Adjust which spell?" / "Forget which spell?" (adjust.cc,
+// spl-selfench.cc at 0.24-b1) and never match.
+const PROBE_TITLE = /^\s*Your (?:spells \(describe\)|Spells\b)/
 // A spell list the player opened themselves whose rows are the memorised
 // spells in list_spells' row format: `I` (describe) or `z` (cast). Not the
 // `=` "(adjust)" flavour (its letters are about to change) and not the
 // memorise library, which shares tag:"spell" (spl-book.cc SpellLibraryMenu)
-// but lists spells the player does NOT know.
-const USER_SPELL_LIST = /^\s*Your spells \((describe|cast)\)/
+// but lists spells the player does NOT know — its calc_title starts
+// "Spells (", never "Your".
+const USER_SPELL_LIST = /^\s*Your (?:spells \((?:describe|cast)\)|Spells\b)/
 
 export interface SpellHarvestHooks {
   // Outbound WS send (the probe's `I` and the menu-closing Escape).
@@ -112,7 +119,10 @@ export class SpellHarvester {
   private retriesLeft = HARVEST_RETRY_BUDGET
   // The in-flight probe is a `dirty` re-probe (reharvestIfDirty): if it is
   // cut short, the cache is suspect — a stale letter casts the WRONG spell —
-  // so abort() clears it and re-flags dirty instead of spending a retry.
+  // so abort() clears it. The retry it arms is the budgeted kind, never a
+  // re-flagged `dirty`: reharvestIfDirty runs on every msgs and command
+  // entry, so re-flagging would re-probe without bound while whatever cut
+  // the probe short (an RC keymap on `I`) keeps doing so.
   private dirtyProbe = false
   // Every capture assigns a NEW array, never mutates in place: the rail
   // uses reference identity on this array to tell "content changed,
@@ -178,23 +188,23 @@ export class SpellHarvester {
   // foreign menu (onMenu) or a close_all_menus teardown. The `I` is either
   // already consumed by whatever the engine was really doing — keys the
   // player queued ahead of it during load: a map wipe's `X` opens the level
-  // map, whose exit sends close_all_menus (viewmap.cc redraw_screen; golden
-  // 15); a strip wipe's `i` opens the inventory — or still unread, and
-  // cannot be told apart. Unlike reset(), this leaves the game a way back:
-  // the ladder's give-up could never fire (its timer is cleared here), and
-  // without a retry latch nothing re-probed for the rest of the game
-  // (autoHarvested spent, dirty clear) — a rail missing from a game whose
-  // load was wiped. A no-op outside a probe: the engine's own
-  // close_all_menus follows every capture (list_spells → redraw_screen;
-  // golden 19) and must not re-probe.
+  // map, where `I` is CMD_MAP_FIND_STASH (cmd-keys.h) and only moves its
+  // cursor, and whose exit sends close_all_menus (ui.cc pop_layout →
+  // redraw_screen → tileweb.cc pop_all_ui_layouts; golden 15); a strip
+  // wipe's `i` opens the inventory — or still unread, and cannot be told
+  // apart. Arms the budgeted retry (armRetry): the ladder's give-up never
+  // fires once its timer is cleared here, and nothing else re-probes this
+  // game (autoHarvested spent, dirty clear). A no-op outside a probe: the
+  // engine's own close_all_menus follows every capture (list_spells →
+  // redraw_screen; golden 19) and must not re-probe.
   abort(): void {
     if (this.phase === 'idle') return
     this.reset()
     if (this.dirtyProbe) {
       this.cache = []
-      this.dirty = true
       this.hooks.onSpellsChanged()
-    } else this.armRetry()
+    }
+    this.armRetry()
   }
 
   // Fire a silent `I` to (re)populate the cache. Only from a clean game
@@ -229,7 +239,7 @@ export class SpellHarvester {
     if (this.harvest()) { this.dirty = false; this.dirtyProbe = true }
   }
 
-  // Resolve the give-up's pending retry (armTimeout). The caller invokes
+  // Resolve a failed probe's pending retry (armRetry). The caller invokes
   // this only on an input_mode 0→1 transition, never on a 1→1 repeat: a
   // spectator join makes the engine re-send the current mode to the player
   // too (tileweb.cc _send_everything → update_input_mode(mode, true)), so
@@ -280,13 +290,15 @@ export class SpellHarvester {
     // its probes (budget spent, or a reply lost outright) heals: the moment
     // the player looks at their spells. Sends nothing, so it is not a probe
     // and needs no budget; it restores one, and stands down a retry the
-    // abort just armed (that probe would only fetch what this holds).
+    // abort just armed and any pending `dirty` re-probe (either would only
+    // fetch what this holds).
     if (tag === 'spell' && !this.spectating && USER_SPELL_LIST.test(titlePlain)) {
       const spells = parseSpellMenu(items)
       if (spells.length) {
         this.cache = spells
         this.retriesLeft = HARVEST_RETRY_BUDGET
         this.retryPending = false
+        this.dirty = false
         this.hooks.onSpellsChanged()
       }
     }

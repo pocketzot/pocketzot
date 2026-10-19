@@ -1656,7 +1656,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
       // COMMAND-while-COMMAND repeat (game.js set_input_mode early-returns).
       if (prevInputMode !== 1) {
         messageLog.markLast('cmd')
-        harvester.retryOnCommandEntry()  // a given-up probe's one retry
+        harvester.retryOnCommandEntry()  // a failed probe's retry (spell-harvest.ts armRetry)
       }
       harvester.maybeAutoHarvest()  // populate the spell rail on first entry to play
       harvester.reharvestIfDirty()  // refresh after a `=` reassign (or a deferred memorise/forget)

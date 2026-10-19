@@ -45,6 +45,9 @@ const row = (letter: string, name: string, schools = 'Ice', fail = '1%', level =
 const DESCRIBE_TITLE = ' Your spells (describe)   Type   Failure   Level'
 const ADJUST_TITLE = ' Your spells (adjust)   Type   Failure   Level'
 const CAST_TITLE = ' Your spells (cast)   Type   Failure   Level'
+// list_spells' default title before 0.30 (spl-cast.h at 0.24-b1..0.29-b1):
+// `I` and `z` share it, no "(action)" suffix.
+const PRE_030_TITLE = ' Your Spells              Type           Power        Failure   Level  Hunger'
 
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { vi.useRealTimers() })
@@ -119,6 +122,20 @@ describe('probe lifecycle', () => {
     expect(h.spells.map(s => s.letter)).toEqual(['a'])
     h.retryOnCommandEntry()
     expect(sentI()).toBe(1)                        // nothing to fetch
+  })
+
+  it('a pre-0.30 server\'s bare "Your Spells" title is the probe\'s reply, and the player\'s list', () => {
+    const { h, sent } = makeHarvester()
+    h.harvest()
+    expect(h.onMenu('spell', PRE_030_TITLE, [row('a', 'Freeze')])).toBe(true)
+    expect(h.spells.map(s => s.letter)).toEqual(['a'])
+    expect(sent).toEqual([{ msg: 'input', text: 'I' }, { msg: 'key', keycode: 27 }])
+    // Passive capture too; the other pre-0.30 list_spells titles never.
+    expect(h.onMenu('spell', PRE_030_TITLE, [row('b', 'Blink')])).toBe(false)
+    expect(h.spells.map(s => s.letter)).toEqual(['b'])
+    h.onMenu('spell', 'Adjust which spell?', [row('c', 'Apportation')])
+    h.onMenu('spell', 'Forget which spell?', [row('c', 'Apportation')])
+    expect(h.spells.map(s => s.letter)).toEqual(['b'])
   })
 
   it('spectators do not take the player\'s spell list either', () => {
@@ -303,7 +320,7 @@ describe('aborted probes', () => {
     expect(sentI()).toBe(1 + HARVEST_RETRY_BUDGET + 3)
   })
 
-  it('an aborted dirty re-probe clears the suspect cache and re-flags dirty instead', () => {
+  it('an aborted dirty re-probe clears the suspect cache and retries on the same bounded budget', () => {
     const { h, sentI, changed } = makeHarvester()
     h.harvest()
     h.onMenu('spell', DESCRIBE_TITLE, [row('a', 'Freeze')])
@@ -313,10 +330,25 @@ describe('aborted probes', () => {
     h.onMenu('inventory', 'Inventory', [])
     expect(h.spells).toEqual([])   // a stale letter would cast the wrong spell
     expect(changed()).toBe(before + 1)
-    h.retryOnCommandEntry()        // no retry was spent on it…
+    h.reharvestIfDirty()           // not re-flagged dirty: that path is unbounded
     expect(sentI()).toBe(2)
-    h.reharvestIfDirty()           // …the dirty path carries it
-    expect(sentI()).toBe(3)
+    // The retry path carries it, and it runs out like any other failure —
+    // an `I` keymapped to a menu must not re-probe on every message.
+    for (let i = 0; i < 4; i++) {
+      h.retryOnCommandEntry()
+      h.reharvestIfDirty()
+      h.onMenu('inventory', 'Inventory', [])
+    }
+    expect(sentI()).toBe(2 + HARVEST_RETRY_BUDGET)
+  })
+
+  it("the player's own spell list stands down a pending dirty re-probe", () => {
+    const { h, sentI } = makeHarvester()
+    h.onMsgLine("Spell assigned to 'b'.")
+    h.onMenu('spell', DESCRIBE_TITLE, [row('a', 'Freeze'), row('b', 'Blink')])  // their `I`
+    h.reharvestIfDirty()
+    expect(sentI()).toBe(0)        // it already holds what a probe would fetch
+    expect(h.spells.map(s => s.letter)).toEqual(['a', 'b'])
   })
 })
 
