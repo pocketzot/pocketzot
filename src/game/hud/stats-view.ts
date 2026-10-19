@@ -77,16 +77,22 @@ export class StatsView {
     this.onSettingsTap = cb
   }
 
+  // Release the orientation listener (game-view's dispose). A live
+  // MediaQueryList listener is rooted on the window, and through `this`
+  // it holds the whole game view — DOM, map store, canvases — so every
+  // view built in a session (one per resume) stayed in memory until the
+  // device next rotated, which is when the old self-unhook-on-detach ran.
+  // Measured 2026-10-19: a built, disposed, never-attached game view with
+  // the event loop drained was still reachable, ~6.5 MB in happy-dom, and
+  // the heap snapshot's retainer path ran through this listener's `this`.
+  dispose(): void {
+    this.mql?.removeEventListener('change', this.onOrientationChange)
+  }
+
   // Swap templates on rotate and repaint from the accumulated state — render()
   // re-queries its slots every pass and both templates expose the same slot
-  // ids, so the render methods are layout-agnostic. buildGameView creates a
-  // fresh StatsView per game session with no dispose hook; the listener
-  // detects its element has left the document and unhooks itself.
+  // ids, so the render methods are layout-agnostic.
   private onOrientationChange = (): void => {
-    if (!this.el.isConnected) {
-      this.mql?.removeEventListener('change', this.onOrientationChange)
-      return
-    }
     const layout = this.mql?.matches ? 'square' : 'compact'
     if (layout === this.layout) return
     this.layout = layout

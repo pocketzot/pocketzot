@@ -2193,6 +2193,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     // Its give-up timer would otherwise repaint this view's spell surfaces.
     harvester.reset()
     spellRail.dispose()
+    statsView.dispose()
     if (tileAnimTimer !== null) clearInterval(tileAnimTimer)
   }
   registerViewDispose(view, dispose)

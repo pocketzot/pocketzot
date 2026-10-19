@@ -1,11 +1,28 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { StatsView } from './stats-view'
 import { InventoryStore } from '../inventory-store'
 
 function makeView(): StatsView {
   return new StatsView(new InventoryStore())
 }
+
+afterEach(() => { vi.unstubAllGlobals() })
+
+describe('StatsView orientation listener', () => {
+  it('dispose() releases it — a live MQL listener roots the whole game view on the window', () => {
+    const listeners = new Set<unknown>()
+    vi.stubGlobal('matchMedia', () => ({
+      matches: false,
+      addEventListener: (_t: string, fn: unknown) => { listeners.add(fn) },
+      removeEventListener: (_t: string, fn: unknown) => { listeners.delete(fn) },
+    }))
+    const v = makeView()
+    expect(listeners.size).toBe(1)
+    v.dispose()
+    expect(listeners.size).toBe(0)
+  })
+})
 
 function pietyEl(v: StatsView): HTMLElement {
   return v.element.querySelector('#hud-piety')!
