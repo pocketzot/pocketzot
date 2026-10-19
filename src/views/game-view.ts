@@ -1773,7 +1773,7 @@ export function buildGameView(opts: GameViewOptions): HTMLElement {
     menuShift.reset()
     closeClientOverlays()
     menuView.dropFilter()
-    harvester.reset()
+    harvester.abort()  // a probe this cuts short gets its retry (spell-harvest.ts)
     if (!gameOverSeen) hideOverlay()
   }
 

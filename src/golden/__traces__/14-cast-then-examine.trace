@@ -17,4 +17,5 @@ start | overlay:none | shows:map,log,touch
 #25 cursor id=0
   = overlay:none | shows:map,log,hud,touch | prompt[3]="Press: ? - help, v - describe, . - travel"
 #29 input_mode mode=1
+  → {"msg":"input","text":"I"}
   = overlay:none | shows:map,log,hud,touch
