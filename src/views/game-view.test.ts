@@ -395,6 +395,22 @@ describe('message log (msgs)', () => {
     expect(isHidden(moreBtn(h))).toBe(true)
     expect(msgLog(h).firstElementChild).toBe(moreLine(h))
   })
+
+  it('a get-line field rides its prompt row and leaves it intact on close', () => {
+    const h = setup()
+    // Wire order from the quit capture (20-quit-game-over): prompt, then init_input.
+    h.dispatch({ msg: 'msgs', messages: [{ text: 'older' }, { text: 'Name it? ', channel: 2 }] })
+    h.dispatch({ msg: 'init_input', type: 'messages', prefill: '', maxlen: 80 })
+    expect(msgTexts(h)).toEqual(['older', 'Name it?'])
+    const prompt = msgRows(h)[0]
+    expect(prompt.querySelector('.game-text-input')).not.toBeNull()
+    h.send.mockClear()
+    prompt.querySelector<HTMLElement>('span:not(.msg-turn-mark)')!.click()
+    expect(sent(h)).toEqual([])  // no Ctrl-P into the line reader
+    h.dispatch({ msg: 'close_input' })
+    expect(msgLog(h).querySelector('.game-text-input, .game-text-input-row')).toBeNull()
+    expect(msgTexts(h)).toEqual(['older', 'Name it?'])
+  })
 })
 
 describe('player message → HUD reveal gating', () => {

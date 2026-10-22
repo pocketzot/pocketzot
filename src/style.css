@@ -2453,7 +2453,6 @@ html.map-hold, html.map-hold * {
   align-self: flex-start;
   max-width: 100%;
   background: color-mix(in srgb, var(--bg) 50%, transparent);
-  padding: 0;
 }
 
 /* --more-- (reference: webtiles' #more is an unstyled line directly
@@ -2570,7 +2569,19 @@ html.map-hold, html.map-hold * {
   #game-view.x-mode #map-grid { --map-top-occlusion: 0px; }
 }
 
-.game-msg { color: var(--text); line-height: var(--msglog-line); }
+/* Hanging indent: column 0 stays the turn-mark gutter on wrapped lines, as
+   console crawl's message window keeps it (message.cc add_item breaks at
+   out_width() = width - 1 and gives every wrapped line its own prefix
+   column); the WebTiles reference's pre-wrap .game_message wraps into it.
+   text-indent inherits into inline-blocks (the mark, prompt buttons, the
+   text-input field), so descendants reset it. */
+.game-msg {
+  color: var(--text);
+  line-height: var(--msglog-line);
+  padding-left: 1ch;
+  text-indent: -1ch;
+}
+.game-msg * { text-indent: 0; }
 
 /* The '#' dump line, tappable as a whole — offline once its bytes are
    pre-read (game-view makeDumpRow), online linking the morgue URL
@@ -2619,7 +2630,13 @@ html.map-hold, html.map-hold * {
   /* The log's size. Sub-16px is safe from iOS focus auto-zoom only via the
      viewport meta (see .rc-editor-text). */
   font-size: var(--msglog-font);
-  padding: 0.15rem 0.5rem;
+  /* It rides the prompt's line in the in-log buttons' frame: one line pitch
+     plus 4px (their 1px border + 1px padding, rule above). A height, not
+     line-height: WebKit floors an input's line-height at `normal`
+     (measured 19px against the buttons' 17.2px). */
+  vertical-align: middle;
+  height: calc(1em * var(--msglog-line) + 4px);
+  padding: 0 0.5rem;
   outline: none;
   width: calc(12ch + 1rem);  /* 12ch of text inside the padding */
 }
