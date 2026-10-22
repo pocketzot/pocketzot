@@ -91,5 +91,6 @@ My thanks to the following people, whose feedback, feature requests, and bug rep
 - invasionofsmallcubes
 - aeshna-cyanea
 - Caeous
+- Majed
 
 And thanks to everyone else who has sent a kind word. I always appreciate your messages.
