@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isKeyHintsLine, parsePromptText, PROMPT_TRIGGER_RE, type PromptSegment } from './prompt-parse'
+import { isKeyHintsLine, isSwapOptionsLine, parsePromptText, PROMPT_TRIGGER_RE, type PromptSegment } from './prompt-parse'
 
 function buttons(segments: PromptSegment[]): Array<{ label: string; key: string }> {
   return segments
@@ -184,6 +184,52 @@ describe('parsePromptText — chooser key-hints line', () => {
     // Inventory-letter lines ("a - a +0 dagger") read like hint tokens.
     expect(isKeyHintsLine('a - a +0 dagger (weapon)')).toBe(false)
     expect(isKeyHintsLine('You have: a - a +0 dagger, b - 3 darts')).toBe(false)
+  })
+})
+
+// Wire form captured on CDI 0.34 (2026-10-22): the line opens on the key's
+// own <white>, no channel-colour prefix (prompt-parse.ts SWAP_OPTION_RE).
+describe('parsePromptText — item-swap option rows', () => {
+  it('splits the joined line into "K or slot" buttons that send K', () => {
+    const r = parsePromptText('<white><<<lightgrey> or c - a ring of fire'
+      + '<lightgrey>; </lightgrey><white>><lightgrey> or d - a ring of ice')
+    expect(r.color).toBeNull()
+    expect(r.segments).toEqual([
+      { kind: 'button', label: '<white><<<lightgrey> or c', key: '<' },
+      { kind: 'text', value: '<lightgrey> - a ring of fire<lightgrey>; </lightgrey>' },
+      { kind: 'button', label: '<white>><lightgrey> or d', key: '>' },
+      { kind: 'text', value: '<lightgrey> - a ring of ice' },
+    ])
+  })
+
+  it('takes a single option, the ^ key, and a non-default channel colour after K', () => {
+    const r = parsePromptText('<white>^<yellow> or e - a ring of fire (left hand)')
+    expect(r.segments).toEqual([
+      { kind: 'button', label: '<white>^<yellow> or e', key: '^' },
+      { kind: 'text', value: '<yellow> - a ring of fire (left hand)' },
+    ])
+  })
+
+  // Quad damage all_caps()es the text (message.cc _mpr): the slot letter
+  // reads C while the engine compares against slot c, so only K is safe.
+  it('still sends K under quad damage capitals', () => {
+    const r = parsePromptText('<white><<<lightgrey> OR C - A RING OF FIRE'
+      + '<lightgrey>; </lightgrey><white>><lightgrey> OR D - A RING OF ICE')
+    expect(buttons(r.segments).map(b => b.key)).toEqual(['<', '>'])
+  })
+
+  // 0.24–0.32 _prompt_ring_to_remove keys octopode slots 1–8.
+  it('accepts the pre-0.33 digit keys', () => {
+    expect(buttons(parsePromptText('<white>3<lightgrey> or c - a ring of fire').segments))
+      .toEqual([{ label: '<white>3<lightgrey> or c', key: '3' }])
+  })
+
+  it('rejects the shape anywhere but the line start, or past a non-join gap', () => {
+    expect(isSwapOptionsLine('You see <white>><lightgrey> or c - here')).toBe(false)
+    expect(isSwapOptionsLine('<lightgrey><white><<<lightgrey> or c - a ring of fire')).toBe(false)
+    expect(isSwapOptionsLine('<lightgrey>c - a ring of fire (left hand)')).toBe(false)
+    expect(isSwapOptionsLine('<white><<<lightgrey> or c - a ring<lightgrey>; </lightgrey>zzz'
+      + '<white>><lightgrey> or d - b')).toBe(false)
   })
 })
 

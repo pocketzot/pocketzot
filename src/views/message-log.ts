@@ -8,7 +8,7 @@
 import type { ClientMsg } from '../ws/types'
 import type { Handlers, MsgOf } from '../ws/dispatcher'
 import { dcssToHtml } from '../game/dcss-colors'
-import { isKeyHintsLine, parsePromptText, PROMPT_TRIGGER_RE, type PromptSegment } from './prompt-parse'
+import { isKeyHintsLine, isSwapOptionsLine, parsePromptText, PROMPT_TRIGGER_RE, type PromptSegment } from './prompt-parse'
 import { systemKeyboardField } from './text-field'
 import { downloadPackFile } from '../offline/save-transfer'
 
@@ -183,8 +183,13 @@ export class MessageLog {
         this.decorateDumpUrlRow(row, this.pendingDumpUrl)
         this.pendingDumpUrl = null
         this.pushRow(row)
-      } else if (!inX && m.channel === 2
-          && (PROMPT_TRIGGER_RE.test(m.text) || isKeyHintsLine(m.text))) {
+      } else if (!inX && ((m.channel === 2
+          && (PROMPT_TRIGGER_RE.test(m.text) || isKeyHintsLine(m.text)))
+          // The swap chooser's plain option rows follow its prompt lines in
+          // one batch (prompt-parse.ts SWAP_OPTION_RE). An RC
+          // force_more_message / flash_screen_message on those lines splits
+          // the batch: no buttons then, never stray ones.
+          || (m.channel === 0 && promptBatch && isSwapOptionsLine(m.text)))) {
         const row = this.promptRow(m.text)
         this.livePrompt.push(row)
         this.pushRow(row)

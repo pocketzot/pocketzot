@@ -192,6 +192,32 @@ describe('message log (msgs)', () => {
     expect(sent(h)).toEqual([{ msg: 'input', text: 'T' }])
   })
 
+  // item-use.cc _item_swap_prompt, batch shape captured on CDI 0.34
+  // (2026-10-22): two prompt lines, then the options as one joined PLAIN line.
+  it('makes the swap chooser\'s plain option row tappable until play resumes', () => {
+    const h = setup()
+    h.dispatch({ msg: 'msgs', messages: [
+      { text: '<cyan>To do this, you must remove one of the following items:<lightgrey>', channel: 2 },
+      { text: '<cyan>(<white>?<cyan> for menu, <white>Esc<cyan> to cancel)<lightgrey>', channel: 2 },
+      { text: '<white><<<lightgrey> or c - a ring of fire<lightgrey>; </lightgrey>'
+        + '<white>><lightgrey> or d - a ring of ice', channel: 0 },
+    ] })
+    const btns = () => [...msgLog(h).querySelectorAll<HTMLButtonElement>('.game-prompt .action-btn')]
+    expect(btns().map(b => b.textContent)).toEqual(['< or c', '> or d'])
+    btns()[1].click()
+    expect(sent(h)).toContainEqual({ msg: 'input', text: '>' })
+    h.dispatch({ msg: 'input_mode', mode: 1 })
+    expect(btns().every(b => b.disabled)).toBe(true)
+  })
+
+  it('leaves a swap-shaped plain line outside a prompt batch untapped', () => {
+    const h = setup()
+    h.dispatch({ msg: 'msgs', messages: [
+      { text: '<white><<<lightgrey> or c - a ring of fire (left hand)', channel: 0 },
+    ] })
+    expect(msgLog(h).querySelector('.game-prompt')).toBeNull()
+  })
+
   // The offline '#' dump line: {msg:'dump'} (mini-server synthesis) arms the
   // stem, and the engine's "Char dumped to '<path>'." line renders verbatim
   // as a whole-line tap target. The row PRE-READS through the readMorgue

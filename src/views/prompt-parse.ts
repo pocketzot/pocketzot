@@ -64,6 +64,51 @@ export function isKeyHintsLine(text: string): boolean {
   return keyHintSegments(stripDcss(text)) !== null
 }
 
+// The item-swap chooser's option rows, "< or c - a ring of fire": item-use.cc
+// _item_swap_prompt (0.33+, trunk identical; at most 3 candidates) prints its
+// title and "(? for menu, Esc to cancel)" on MSGCH_PROMPT, then each candidate
+// as a PLAIN line `<w>K</w> or <slot> - <name>`, K from _item_swap_keys
+// (<, >, ^); 0.24–0.32's _prompt_ring_to_remove emits the same shape with
+// _ring_slot_key's 1–8 too. getchm takes K or the slot letter. Captured on
+// CDI 0.34 (2026-10-22), one batch after the two prompt lines:
+//   <white><<<lightgrey> or a - …<lightgrey>; </lightgrey><white>><lightgrey> or o - …
+// The line opens on the key's own `<white>`, never a channel colour:
+// formatted_string::textcolour (format.cc) replaces a trailing colour op, and
+// to_colour_string writes full names and no close tags. Same-turn options
+// join (message.cc message_line::merge) with full_text's
+// `<lightgrey>; </lightgrey>` (or `<lightgrey> </lightgrey>`) between them.
+// Never match on stripDcss: its tag regex eats `<<<lightgrey>` whole.
+const SWAP_OPTION_RE = /<white>(<<|[>^1-8])(<[a-z]+>) or ([a-z])(?= - )/gi
+const SWAP_JOIN_RE = /<lightgrey>;? <\/lightgrey>$/
+
+function swapOptionSegments(body: string): PromptSegment[] | null {
+  const segments: PromptSegment[] = []
+  let last = 0
+  // The colour the button's label ended in, re-opened on the text after it
+  // (each segment renders on its own).
+  let reopen = ''
+  for (const m of body.matchAll(SWAP_OPTION_RE)) {
+    const gap = body.slice(last, m.index)
+    if (last === 0 ? m.index !== 0 : !SWAP_JOIN_RE.test(gap)) return null
+    if (gap) segments.push({ kind: 'text', value: reopen + gap })
+    // Send K, not the slot letter: quad damage all_caps()es the message text
+    // (message.cc _mpr), so the letter reads C where getchm compares slot c;
+    // K has no case (`<<` unescaped as in dcssToHtml).
+    segments.push({ kind: 'button', label: m[0], key: m[1] === '<<' ? '<' : m[1] })
+    reopen = m[2]
+    last = m.index + m[0].length
+  }
+  if (last === 0) return null
+  if (last < body.length) segments.push({ kind: 'text', value: reopen + body.slice(last) })
+  return segments
+}
+
+// Gate for a swap-chooser option row (a channel-0 line — the dispatcher's
+// channel-2 trigger never sees it).
+export function isSwapOptionsLine(text: string): boolean {
+  return swapOptionSegments(text) !== null
+}
+
 export type PromptSegment =
   | { kind: 'text'; value: string }
   | { kind: 'button'; label: string; key: string }
@@ -87,6 +132,8 @@ export interface PromptParse {
 // the text — pick contiguous substrings of the body and emit them as
 // button segments; everything else is text.
 export function parsePromptText(text: string): PromptParse {
+  const swap = swapOptionSegments(text)
+  if (swap) return { color: null, body: text, segments: swap, hasButton: true }
   let color: string | null = null
   const colorOpen = text.match(/^<([a-z]+)>/i)
   if (colorOpen) {
