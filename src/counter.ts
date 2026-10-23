@@ -4,19 +4,16 @@
 // stale-heal: this page load exists because the stale-shell rescue reloaded
 // a broken session (util/self-heal.ts consumeStaleShellHeal) — each heal
 // also implies one extra 'boot' beacon for the same user intent.
-// won/dead/newchar/crypt: see the game-outcome gates in game-view.ts
-// (spectate/fixture/wizard-explore) — the gates live at the call sites.
+// Game outcomes are '-each' only (gates at the call sites in
+// game/character-record.ts: spectate/fixture/wizard-explore).
 export type CountedEvent = 'boot' | 'play' | 'spectate' | 'play-offline' | 'stale-heal'
-  | 'dead' | 'dead-offline'
-  | 'newchar' | 'newchar-offline' | 'crypt'
+  | 'crypt'
 // Unlatched events (countEach): one row per occurrence, so their rows are
 // event totals, never people-counts. Convention: unlatched names end in
 // '-each' ('-offline' stays last), bare names are always latched — the
-// suffix, not vocabulary, carries the semantics. Wins have NO latched
-// twin: latched 'won'/'won-offline' shipped 2026-08-18 13:57 UTC and were
-// replaced by 'won-each' the same day — wins are rare enough that missing
-// a second same-page-load win (offline runs can chain for days without a
-// reload) costs more than a people-flavored win count is worth.
+// suffix, not vocabulary, carries the semantics. Retired latched names
+// ('dead', 'newchar', 'won' and their '-offline' forms) must never be
+// reused: their rows are history with other meanings (functions/_stats.js).
 export type RepeatedEvent = 'rune-each' | 'rune-each-offline'
   | 'won-each' | 'won-each-offline'
   | 'dead-each' | 'dead-each-offline'

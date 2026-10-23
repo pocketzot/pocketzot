@@ -15,7 +15,7 @@ import type { TileLoader } from './tiles/tile-loader'
 import { mergeNames, recordAvatarOutcome, saveAvatar, type AvatarMeta } from '../avatars'
 import { clearSpellOrder } from './spell-order'
 import { OFFLINE_GAME_ID } from '../offline/offline-state'
-import { count, countEach } from '../counter'
+import { countEach } from '../counter'
 import { looksLikeWelcome, parseWelcome } from './char-label'
 import { hasOrbLight, parseGemPickup, parseMorgueRunes, parseRunePickup, parseWinRuneCount } from './rune-messages'
 import { cachedFingerprint } from './tiles/atlas-dedup'
@@ -57,7 +57,7 @@ export class CharacterRecord {
   // get a retry when that frame arrives; retries are keyed on identity so a
   // parse that fails for good never recompiles per frame.
   //
-  // The 'newchar' counter keys on the same parse. Never arm it on the
+  // The 'newchar-each' counter keys on the same parse. Never arm it on the
   // newgame-choice ui-push: an RC `species`/`background`/`combo` preset
   // makes _choose_species_job (newgame.cc) skip _prompt_choice, so those
   // creations show no screen. Nor on the first map frame: a spectator
@@ -223,7 +223,6 @@ export class CharacterRecord {
     if (reason === 'won') {
       countEach(`won-each${offline}`, {}, parseWinRuneCount(message))
     } else {
-      count(`dead${offline}`)
       countEach(`dead-each${offline}`)
     }
   }
@@ -245,9 +244,7 @@ export class CharacterRecord {
       // so the rail's first harvest.
       const { wsUrl, username, gameId } = this.opts
       clearSpellOrder({ wsUrl, username, gameId })
-      const offline = this.offlineSuffix
-      count(`newchar${offline}`)
-      countEach(`newchar-each${offline}`)
+      countEach(`newchar-each${this.offlineSuffix}`)
     }
   }
 

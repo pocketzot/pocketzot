@@ -3380,9 +3380,6 @@ describe('newchar counting', () => {
 
   afterEach(() => { import.meta.env.DEV = realDev })
 
-  // The latched 'newchar' twin rides along, but its Set is module state
-  // shared with every other test here — assert the unlatched row, which
-  // can't depend on what ran first.
   const each = (suffix = ''): string[] =>
     beacons.filter((u) => u === `/api/e?e=newchar-each${suffix}`)
   const chars = (): string[] => beacons.filter((u) => u.includes('newchar'))
