@@ -7,6 +7,12 @@ formatting and HTML chrome differ. Drift is a bug.
 
 # What's new
 
+## 2026-10-22
+
+- Ring swap prompts in the message log are now tappable.
+- Improved message log formatting.
+- Fixed an issue that could prevent the spell rail from loading.
+
 ## 2026-10-16
 
 - The `m` menu now uses a QWERTY layout.
