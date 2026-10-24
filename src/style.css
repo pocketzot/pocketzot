@@ -1177,6 +1177,10 @@ html.pz-home-indicator { --safe-bottom: var(--home-indicator-cap); }
    full-width — Back and the account chip anchor to the screen corners
    like a nav bar. */
 .lobby-scroll > * {
+  /* Never shrink: the column scrolls instead (mechanism at #game-hud > *).
+     Shrinkable, the offline lobby's overflow:hidden cards were clipped in
+     phone landscape and flattened to 0px under a long save list. */
+  flex-shrink: 0;
   width: 100%;
   max-width: 42rem;
   margin-inline: auto;
@@ -1975,6 +1979,10 @@ button.lobby-account-chip:active { background: var(--press); }
   border-radius: var(--r-ctl);
   white-space: pre;
   overflow-x: hidden;
+  /* The card is the scroller; overflow-x makes this a scroll container too,
+     which would otherwise take the squeeze (mechanism at #game-hud > *) and
+     hide a long recap's tail, with no scrollbar on iOS to show it's there. */
+  flex-shrink: 0;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.5;
@@ -5465,7 +5473,13 @@ html.map-hold, html.map-hold * {
   /* When the sidebar is height-starved, the squeeze must land on this
      scroll container — not on its rows, which otherwise flex-shrink in
      place and slice the status/weapon lines mid-glyph while scrollHeight
-     tracks the shrunken content (so nothing ever scrolls). */
+     tracks the shrunken content (so nothing ever scrolls). Why a row can
+     shrink below its content at all: a flex item whose overflow isn't
+     visible is a scroll container, and a scroll container's automatic
+     minimum size is 0, not its content (css-flexbox-1 §4.5) — so any
+     overflow:hidden/auto child of a column scroller takes the whole
+     squeeze while its visible-overflow siblings hold their size. The
+     .lobby-scroll and .lobby-exit-summary rules point here. */
   #game-hud > * { flex-shrink: 0; }
 
   /* Stack HP and MP bars vertically when the HUD is a narrow sidebar */
