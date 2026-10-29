@@ -261,13 +261,18 @@ export class TileLoader {
     const p = new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image()
       img.onload = () => {
-        // `load` means fetched, not decoded: both engines decode lazily, so
-        // the first drawImage from a cold atlas paid a synchronous decode of
-        // the whole sheet (~40 ms for main.png in a desktop profile). Start
-        // it now, in the background, and never gate on it — WebKit rejects
-        // decode() under memory pressure and may purge the bitmap again, and
-        // a drawImage that lands before it finishes just decodes as before.
-        img.decode?.().catch(() => {})
+        // `load` means fetched, not decoded, so the first drawImage from a
+        // cold atlas pays a synchronous decode of the whole sheet. Never call
+        // `img.decode()` on an atlas to pre-empt that. Started and not
+        // awaited: WebKit's drawImage paints nothing, with no error, from an
+        // image whose async decode is still running (Playwright WebKit, cold
+        // tiles load, A/B on the same build: 3 of 8 reloads lost the player
+        // doll with a decode started here, 0 of 8 without; fullRender()
+        // restored it), and the loss persists because TileMapView paints
+        // each cell once on ready, then only dirty cells, and panRender
+        // blits the canvas onto itself. Awaited before resolving: WebKit
+        // rejects decode() under memory pressure and may purge the bitmap
+        // again afterwards, so the atlas would be held back or never arrive.
         this.atlasSync.set(name, img)
         resolve(img)
       }

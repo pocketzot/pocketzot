@@ -91,7 +91,7 @@ describe('TileLoader module loads always settle', () => {
 })
 
 // happy-dom never loads an <img> either; a stand-in Image fires `load` on
-// the next microtask and lets each test choose what decode() does.
+// the next microtask and exposes decode() so a test can watch for calls.
 function stubImage(decode: () => Promise<void>): void {
   vi.stubGlobal('Image', class {
     onload: (() => void) | null = null
@@ -117,16 +117,14 @@ async function preloadMain(version: string): Promise<ReturnType<typeof getTileLo
 describe('TileLoader atlas decode', () => {
   afterEach(() => { vi.unstubAllGlobals() })
 
-  it('never gates the atlas load on decode()', async () => {
-    stubImage(() => new Promise(() => {}))  // a decode that never finishes
-    const loader = await preloadMain('decode-pending')
+  // Pins the prohibition at loadAtlas (see its comment for the WebKit
+  // evidence).
+  it('never calls decode() on an atlas', async () => {
+    const decode = vi.fn(() => Promise.resolve())
+    stubImage(decode)
+    const loader = await preloadMain('no-decode')
     expect(loader.getSync(TEX.MAIN, 5)).not.toBeNull()
-  })
-
-  it('swallows a decode() rejection', async () => {
-    stubImage(() => Promise.reject(new Error('purged')))
-    const loader = await preloadMain('decode-rejects')
-    expect(loader.getSync(TEX.MAIN, 5)).not.toBeNull()
+    expect(decode).not.toHaveBeenCalled()
   })
 })
 
