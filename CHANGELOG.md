@@ -7,6 +7,11 @@ formatting and HTML chrome differ. Drift is a bug.
 
 # What's new
 
+## 2026-10-29
+
+- Performance improvements to map and HUD rendering.
+- Other improvements.
+
 ## 2026-10-22
 
 - Ring swap prompts in the message log are now tappable.
