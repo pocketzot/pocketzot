@@ -27,6 +27,14 @@ const LEGACY_KEY = 'pocketzot:offline-last'
 export const OFFLINE_WS_URL = 'local://offline'
 export const OFFLINE_GAME_ID = 'offline'
 
+// `?offline=1&engine=fake`: replay a golden fixture (fake-engine.ts) in place
+// of the WASM engine. DEV builds only — the fixtures it bundles would ship in
+// the prod boot chunk, and the SW precaches every assets/ file, so every
+// visitor would download them (dev-material/perf-review-2026-08.md S4).
+export function fakeEngineRequested(params: URLSearchParams): boolean {
+  return import.meta.env.DEV && params.get('engine') === 'fake'
+}
+
 export interface OfflineChar {
   name: string
   title?: string

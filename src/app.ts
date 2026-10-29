@@ -6,7 +6,7 @@ import { buildOfflineLobbyView } from './views/offline-lobby'
 import { buildGameView, type SpectateTarget } from './views/game-view'
 import { disposeView } from './views/view-dispose'
 import type { TileLoader } from './game/tiles/tile-loader'
-import { OFFLINE_GAME_ID } from './offline/offline-state'
+import { OFFLINE_GAME_ID, fakeEngineRequested } from './offline/offline-state'
 import { jspiSupported } from './offline/artifact-store'
 import { activeGameStart, attemptResume, clearGameStart, loadPersistedResume, markProactiveClose } from './reconnect'
 import { count, type CountFlags } from './counter'
@@ -69,7 +69,7 @@ export function initApp(appEl: HTMLElement): void {
     return
   }
   if (params.has('offline')) {
-    if (params.get('engine') === 'fake') void showOfflineGame('local')
+    if (fakeEngineRequested(params)) void showOfflineGame('local')
     else showOfflineLobby()
     return
   }
@@ -132,7 +132,7 @@ async function showOfflineGame(name: string): Promise<void> {
   // Fixture replays get no gameId, keeping avatar/crypt writes disabled —
   // same reason boot.ts excludes them from the slot-record tracker: a golden
   // capture's character isn't yours and must not mint a phantom shelf entry.
-  const gameId = params.get('engine') === 'fake' ? '' : OFFLINE_GAME_ID
+  const gameId = fakeEngineRequested(params) ? '' : OFFLINE_GAME_ID
   if (gameId) {
     // J gates the Asyncify retirement (dev-material/jspi-migration.md).
     count('play-offline', { ...gameStartFlags(), jspi: jspiSupported() })

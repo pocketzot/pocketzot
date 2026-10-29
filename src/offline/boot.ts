@@ -2,17 +2,17 @@
 // Dynamic-imported from app.ts (offline-lobby slot tap or ?offline=1) so the
 // engine machinery stays out of the main bundle.
 //
-// Engine selection: ?engine=fake replays a golden fixture (see
-// fake-engine.ts; ?fixture=<name> picks one); anything else loads the real
-// WASM engine worker, which needs the Phase A artifacts under
-// public/offline/.
+// Engine selection: ?engine=fake (DEV only, fakeEngineRequested) replays a
+// golden fixture (see fake-engine.ts; ?fixture=<name> picks one); anything
+// else loads the real WASM engine worker, which needs the Phase A artifacts
+// under public/offline/.
 
 import { FakeEnginePort } from './fake-engine'
 import { WorkerEnginePort, type EnginePort } from './engine-port'
 import { MORGUE_DIR } from './game-records'
 import { LocalConnection } from './local-connection'
 import { createMiniServer } from './mini-server'
-import { offlineTracker } from './offline-state'
+import { fakeEngineRequested, offlineTracker } from './offline-state'
 import {
   buildExportPackFile, downloadPackFile, fetchEngineBuild,
   readOfflineFiles, unpackSave, writeOfflineFiles,
@@ -46,7 +46,7 @@ export function bootOffline(params: URLSearchParams, name: string): OfflineBoot 
   // meaningful for any future non-DEV offline build; the meter's cost is a
   // few timestamps per input.
   const perf = params.has('perf') || import.meta.env.DEV
-  const port: EnginePort = params.get('engine') === 'fake'
+  const port: EnginePort = fakeEngineRequested(params)
     ? new FakeEnginePort(params.get('fixture') ?? undefined)
     : new WorkerEnginePort(perf, name, params.get('jspi') !== '0')
 
