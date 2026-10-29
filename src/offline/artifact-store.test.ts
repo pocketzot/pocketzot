@@ -180,7 +180,7 @@ describe('fetchArtifactResponse', () => {
 })
 
 describe('gunzipStreamIfNeeded', () => {
-  const gzip = async (text: string): Promise<Uint8Array> => new Uint8Array(
+  const gzip = async (text: string): Promise<Uint8Array<ArrayBuffer>> => new Uint8Array(
     await new Response(
       new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer())
   const drain = async (s: ReadableStream<Uint8Array>): Promise<string> =>

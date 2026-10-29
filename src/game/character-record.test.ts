@@ -63,7 +63,7 @@ describe('CharacterRecord', () => {
 
   it('wizard or explore mode keeps the stamp but drops the public counters', () => {
     const r = played()
-    r.onPlayer(player({ name: 'Synth', wizard: true }))
+    r.onPlayer(player({ name: 'Synth', wizard: 1 }))
     r.onMessageLine(PICKUP('golden'))
     r.recordEnding('won', 'Escaped with the Orb and 3 runes')
     expect(recordAvatarOutcome).toHaveBeenCalledTimes(1)

@@ -157,7 +157,7 @@ describe('X level-map key set', () => {
     const tab = builtinSets()[0].tabs.find(t => t.name === '>')!
     expect(tab.cols).toBe(X_MODE_COLS)
     const shared = X_MODE_KEYS.flatMap((k, i) => {
-      const j = tab.slots.findIndex(s => s.text === k.slot.text)
+      const j = tab.slots.findIndex(s => s?.text === k.slot.text)
       return j < 0 ? [] : [{ key: k.label, at: i, onTab: j }]
     })
     expect(shared.map(s => s.key)).toEqual(['e', '!', 'G', '<', '>'])

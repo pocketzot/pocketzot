@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MapStore } from '../game/map/map-store'
-import { MinimapHosts } from './minimap-hosts'
+import { MinimapHosts, type MinimapHostsDeps } from './minimap-hosts'
 
 const pointer = (type: string, x: number, y: number, buttons: number): PointerEvent =>
   new PointerEvent(type, { clientX: x, clientY: y, button: 0, buttons, pointerId: 1, isPrimary: true, bubbles: true })
 
 describe('MinimapHosts X-slot scrub', () => {
   let inX: boolean
-  let panTo: ReturnType<typeof vi.fn>
+  let panTo: ReturnType<typeof vi.fn<MinimapHostsDeps['panTo']>>
   let hosts: MinimapHosts
   let xSlot: HTMLElement
 
@@ -32,7 +32,7 @@ describe('MinimapHosts X-slot scrub', () => {
       { x: 30, y: 20, g: '#', mf: 2 },
     ])
     inX = true
-    panTo = vi.fn()
+    panTo = vi.fn<MinimapHostsDeps['panTo']>()
     xSlot = document.createElement('div')
     document.body.appendChild(xSlot)
     hosts = new MinimapHosts({

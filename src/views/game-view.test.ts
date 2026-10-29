@@ -2704,7 +2704,7 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
     // After a give-up the probe's one retry fires only on an input_mode 0→1
     // transition (SpellHarvester.retryOnCommandEntry).
     describe('retry after a give-up', () => {
-      const giveUp = (h: Harness) => {
+      const giveUp = () => {
         startHarvest()
         vi.advanceTimersByTime(1500 + 8500)
         expect(cache()).toHaveLength(0)
@@ -2713,7 +2713,7 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
       it("retries once the player's next command returns to COMMAND", () => {
         vi.useFakeTimers()
         const h = setup()
-        giveUp(h)
+        giveUp()
         h.dispatch({ msg: 'input_mode', mode: 0 })
         expect(sentInputI(h)).toHaveLength(1)
         h.dispatch({ msg: 'input_mode', mode: 1 })
@@ -2726,7 +2726,7 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
       it('ignores the COMMAND repeat a spectator join sends', () => {
         vi.useFakeTimers()
         const h = setup()
-        giveUp(h)
+        giveUp()
         h.dispatch({ msg: 'input_mode', mode: 1 })  // tileweb.cc _send_everything
         h.dispatch({ msg: 'msgs', messages: [{ text: 'bob joined.' }] })
         expect(sentInputI(h)).toHaveLength(1)
@@ -2739,7 +2739,7 @@ describe('spell harvest (silent I → Esc) + preface parsing', () => {
       it('a reply later than the give-up renders, fills the rail from its rows, and stands down the retry', () => {
         vi.useFakeTimers()
         const h = setup()
-        giveUp(h)
+        giveUp()
         h.dispatch({ msg: 'input_mode', mode: 0 })  // the engine read our `I`
         h.dispatch({ msg: 'menu', tag: 'spell', title: WIRE_TITLE, items: BASE })
         expect(isHidden(overlay(h))).toBe(false)     // too late to swallow: it shows

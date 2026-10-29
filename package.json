@@ -7,12 +7,13 @@
   "scripts": {
     "dev": "vite",
     "check:links": "node scripts/check-html-links.mjs",
-    "build": "node scripts/check-html-links.mjs && tsc && vitest run && vite build",
+    "build": "node scripts/check-html-links.mjs && tsc && tsc -p tsconfig.test.json && vitest run && vite build",
     "build:deploy": "npm run build && rm -rf dist/offline dist/gamedata/local",
     "preview": "vite preview",
     "test": "vitest"
   },
   "devDependencies": {
+    "@types/node": "^25.9.9",
     "happy-dom": "^20.11.2",
     "typescript": "^7.0.2",
     "vite": "^7.0.0",

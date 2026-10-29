@@ -1,6 +1,7 @@
 // The build-time crypt strip bake: the PNG codec and the strip layout.
 // The real pack is gitignored, so these run on synthetic sheets.
 import { describe, expect, it } from 'vitest'
+// @ts-expect-error plain-JS module (build-time Node, never seen by the app's tsc)
 import { composeStrip, decodePng, encodePng, evalTileinfo } from './crypt-strip.js'
 
 function image(width: number, height: number, px: (x: number, y: number) => [number, number, number, number]) {

@@ -262,7 +262,7 @@ describe('StatsView stat_colour warning', () => {
 
   it('ranks lost > threshold > drained, as the reference does', () => {
     const v = makeView()
-    v.update({ str: 2, str_max: 10, status: [{ text: 'lost str' }] })
+    v.update({ str: 2, str_max: 10, status: [{ light: 'Crippled', text: 'lost str' }] })
     const str = statEl(v, 'hud-str')
     expect(str.classList.contains('stat-zero')).toBe(true)
     expect(str.style.color).toBe('')

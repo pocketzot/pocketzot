@@ -62,7 +62,7 @@ describe('offline seam integration (golden replay through LocalConnection)', () 
     const names = Array.from(store.getMonsters().values())
       .map(m => m.mon.name ?? '<unnamed>').sort()
     expect(names).toEqual([...expected.monsterNames].sort())
-    for (const s of expected.cellSamples) {
+    for (const s of expected.cellSamples as { x: number; y: number; g?: string; col?: number }[]) {
       const cell = store.get(s.x, s.y)
       expect(cell, `cell at (${s.x},${s.y})`).toBeDefined()
       if (s.g !== undefined) expect(cell?.g).toBe(s.g)

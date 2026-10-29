@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import type { ClientMsg } from '../../ws/types'
 import { CK_DOWN, CK_PGUP } from './keyboard'
 import { keyNav, routeInput, wireNav, type RoutedInput, type RouterTargets } from './input-router'
