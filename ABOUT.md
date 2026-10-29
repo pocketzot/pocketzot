@@ -1,26 +1,24 @@
 # About PocketZot
 
-PocketZot is an unofficial [DCSS](https://crawl.develz.org) app designed for iOS and Android phones in portrait mode. Play online on public [WebTiles](https://crawl.develz.org/wordpress/howto) servers, or offline with DCSS running entirely on your device.
+PocketZot is an unofficial [DCSS](https://crawl.develz.org) app designed for iOS and Android phones in portrait mode. Play online on [WebTiles](https://crawl.develz.org/wordpress/howto) servers, or offline with DCSS running entirely on your device.
 
 ## Getting started
 
-DCSS has no app on the App Store, but you don't need one: install PocketZot like an app with "Add to Home Screen". Then log in to a WebTiles server and play, or tap "Play offline". iPads and other tablets work too.
+DCSS has no app on the App Store, but you don't need one: install PocketZot like an app using "Add to Home Screen" from the iOS share sheet, or the browser menu on Android. Then log in to a WebTiles server, or play offline. iPads and other tablets work too.
 
 ## Features
 
-- Custom ASCII-first design that fits the full standard console map onto a phone in portrait mode, with a font still large enough to read
-- Offline play support
-- Tiles support
-- Chat support
-- Customizable controls
-- Map touch gestures
-- Log in with multiple WebTiles server accounts and switch between them
+- Online play on WebTiles servers
+- Offline play entirely on your device
+- ASCII and tiles map modes
+- Context-aware controls for in-game menus
+- Customizable touch controls
+- Map gestures
 - Inline tap targets in many menus and descriptions
-- Context-aware control sets for common situations
-- Spectator mode with an expanded map view
 - Floating, collapsible monster list; tap to inspect monsters
+- Spectator mode with an expanded map view
+- Chat
 - 8.6 trillion logos
-- Installs to your home screen as a PWA
 
 ## Controls
 
