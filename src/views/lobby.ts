@@ -13,7 +13,9 @@ import { activeGameStart, clearGameStart, FORCE_TERMINATE_WARNING, rememberGameS
 import { classifyTransition } from '../ws/transition'
 import { combineHandlers, dispatch, type MsgOf } from '../ws/dispatcher'
 import { MessageHold } from '../ws/message-hold'
-import { isBelowSupportCutoff, parseDcssVersion } from '../util/dcss-version'
+import {
+  compareDcssVersion, isBelowSupportCutoff, parseDcssVersion, type DcssVersion,
+} from '../util/dcss-version'
 import { attachScrollCue } from '../util/scroll-cue'
 import { registerViewDispose } from './view-dispose'
 
@@ -754,26 +756,15 @@ const TRUNK_RE = /(^|[-_])(trunk|git)([-_]|$)/i
 export function selectPrimaryGameIds(ids: string[]): string[] {
   let trunkId: string | null = null
   let stableId: string | null = null
-  let stableVer: [number, number] = [-1, -1]
+  let stableVer: DcssVersion | null = null
   for (const id of ids) {
     if (VARIANT_RE.test(id)) continue
     if (TRUNK_RE.test(id)) { if (!trunkId) trunkId = id; continue }
-    const v = parseVersion(id)
-    if (v && cmpVersion(v, stableVer) > 0) { stableVer = v; stableId = id }
+    // Unversioned ids ("bcrawl" and other forks) parse null, so they never
+    // compete for the stable slot.
+    const v = parseDcssVersion(id)
+    if (v && (!stableVer || compareDcssVersion(v, stableVer) > 0)) { stableVer = v; stableId = id }
   }
   // Order is the contract: stable on top, trunk second.
   return [stableId, trunkId].filter((x): x is string => !!x)
-}
-
-// Extract a [major, minor] tuple from a game id like "dcss-0.34" or "0.34".
-// Returns null when no version is present (e.g. "dcss-git", "trunk", "bcrawl"),
-// so forks and the trunk build never compete for the stable slot.
-function parseVersion(gameId: string): [number, number] | null {
-  const m = /(\d+)\.(\d+)/.exec(gameId)
-  if (!m) return null
-  return [parseInt(m[1], 10), parseInt(m[2], 10)]
-}
-
-function cmpVersion(a: [number, number], b: [number, number]): number {
-  return a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]
 }

@@ -10,14 +10,6 @@ export const ENDED = 'AND LO, IT IS ENDED'
 // The dead state's lines, one per death (pickCryptLine).
 export const DEAD_LINES: readonly string[] = [TRIBULATIONS, ENDED]
 
-export const CRYPT_LINES: readonly string[] = [
-  GAZE,
-  GLORY,
-  TRIBULATIONS,
-  'DISTURB NOT THEIR HALLOWED REPOSE',
-  'MEDITATE UPON THY TRIUMPHS',
-]
-
 // The inscription comments on the newest entry's fate (won / dead), else
 // names the room. Both fate lines are deliberately transient: a win is not a
 // permanent unlock (it already lives on the doll's Orb badge and the card's
@@ -39,9 +31,4 @@ export function pickCryptLine(avatars: readonly Avatar[]): string {
   if (fate === 'won') return GLORY
   if (fate === 'dead') return DEAD_LINES[avatars[0]!.outcome!.endedAt % DEAD_LINES.length]!
   return GAZE
-}
-
-// Random pick over the pool. Currently unreached — the heading is a state.
-export function rollCryptLine(): string {
-  return CRYPT_LINES[Math.floor(Math.random() * CRYPT_LINES.length)]!
 }

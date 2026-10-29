@@ -33,6 +33,10 @@ export function parseDcssVersion(...candidates: Array<string | undefined>): Dcss
   return null
 }
 
+export function compareDcssVersion(a: DcssVersion, b: DcssVersion): number {
+  return a.major !== b.major ? a.major - b.major : a.minor - b.minor
+}
+
 // The oldest version everything the client requires exists on the wire for
 // (newgame-choice). At or above: expected to work. Below: character creation
 // is known-broken; everything else is best-effort.
@@ -41,8 +45,7 @@ export const SUPPORT_CUTOFF: DcssVersion = { major: 0, minor: 24 }
 // True only for a *parsed* version below the cutoff — null (trunk/fork/
 // unknown) is modern, per the fail-open rule above.
 export function isBelowSupportCutoff(v: DcssVersion | null): boolean {
-  return v !== null && (v.major < SUPPORT_CUTOFF.major
-    || (v.major === SUPPORT_CUTOFF.major && v.minor < SUPPORT_CUTOFF.minor))
+  return v !== null && compareDcssVersion(v, SUPPORT_CUTOFF) < 0
 }
 
 export function formatDcssVersion(v: DcssVersion): string {

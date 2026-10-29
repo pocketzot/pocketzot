@@ -91,6 +91,10 @@ describe('dcssToHtml', () => {
     expect(dcssToHtml('<bogus>x</bogus>')).toBe('x')
   })
 
+  it('ignores an unknown close tag inside a known span, as the official client does', () => {
+    expect(dcssToHtml('<red>a</z>b</red>')).toBe('<span style="color:#b30009">ab</span>')
+  })
+
   it('renders a raw < inside payload as a literal, not a pseudo-tag', () => {
     // A lone '<' that doesn't form a complete tag is escaped to &lt; and the
     // surrounding markup is preserved (the old /(<[^>]+>)/ splitter swallowed
