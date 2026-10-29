@@ -59,6 +59,23 @@ interface RowData {
   memberCells: (Cell | undefined)[]
 }
 
+// Tile-row signatures, for the expanded path's per-row cache and the
+// collapsed path's single-row memo alike: a row whose signature is unchanged
+// is not rebuilt. Covers every visual input. JSON.stringify is overkill for
+// small numeric tuples but trivially cheap for ~6 entries × 8 fields, and
+// avoids hand-rolled hashing bugs. The suffix is a visual input too: the last
+// row carries the "+N" overflow, so a changed hidden-monster count must
+// rebuild that row. (No d.hpColor term: tile rows draw damage from each
+// member's fg, already covered by the member tuple; the chip is ASCII-only.)
+function rowSig(d: RowData, suffix: string | undefined): string {
+  const memberSig = d.memberCells.map((c) => [c?.fg ?? 0, c?.t_bg ?? 0, c?.doll ?? null, c?.mcache ?? null, c?.icons ?? null, c?.highlighted_summoner ?? false, !!c?.trans])
+  return JSON.stringify([d.hasBar, d.barColor, d.color, d.label, suffix ?? null, memberSig])
+}
+
+function invisSig(desc: string, suffix: string | undefined): string {
+  return JSON.stringify(['invis', desc, suffix ?? null])
+}
+
 export class MonsterListView {
   readonly element: HTMLElement
   private mode: 'ascii' | 'tiles' = 'ascii'
@@ -70,13 +87,15 @@ export class MonsterListView {
   // Why positional and not keyed by monster identity: two groups can sort
   // apart on a field outside the prior `att|type|name|clientid` cache key.
   private rows: RowCache[] = []
-  // ASCII-path equivalent of the tile path's per-row sig cache: the exact
-  // HTML string last assigned to element.innerHTML by renderAscii /
-  // renderCollapsed, or null whenever any other path owns the DOM. update()
-  // runs on every `map` message (dozens per action during animations), and
-  // the built HTML already encodes every visual input — identical string
-  // means the rebuild would be a no-op, so skip the innerHTML churn.
-  private lastHtml: string | null = null
+  // Whole-panel equivalent of the tile path's per-row sig cache: the key of
+  // what the panel currently holds when one render call owns all of it — the
+  // exact HTML string renderAscii / renderCollapsed assigned to innerHTML, or
+  // the row signature of the single tile row mountTile appended — and null
+  // whenever the incremental this.rows path owns the DOM. update() runs on
+  // every `map` message (dozens per action during animations), and both keys
+  // encode every visual input — an identical key means the rebuild would be
+  // a no-op, so skip the churn.
+  private lastKey: string | null = null
   private lastMonsters: ReadonlyMap<string, MonsterCell> | null = null
   // Sticky across map updates, encounter cycles, empty-view intervals,
   // and page reloads (persisted via prefs.ts → localStorage). The in-game
@@ -122,7 +141,7 @@ export class MonsterListView {
     if (this.listMode === mode) return
     this.listMode = mode
     this.rows.length = 0
-    this.lastHtml = null
+    this.lastKey = null
     this.element.innerHTML = ''
     this.element.classList.remove('has-hostile')
     if (this.lastMonsters) this.update(this.lastMonsters)
@@ -135,7 +154,7 @@ export class MonsterListView {
     if (mode === this.mode) return
     this.mode = mode
     this.rows.length = 0
-    this.lastHtml = null
+    this.lastKey = null
     this.element.innerHTML = ''
     // Clear defensively — `update()` re-asserts this from groups when it
     // runs, but if lastMonsters is null (mode swap before any monsters
@@ -168,7 +187,7 @@ export class MonsterListView {
     if (this.compact === compact) return
     this.compact = compact
     this.rows.length = 0
-    this.lastHtml = null
+    this.lastKey = null
     this.element.innerHTML = ''
     if (this.lastMonsters) this.update(this.lastMonsters)
   }
@@ -183,7 +202,7 @@ export class MonsterListView {
     // so flipping back mid-encounter replays the current state.
     if (this.listMode === 'hidden') {
       this.rows.length = 0
-      this.lastHtml = null
+      this.lastKey = null
       this.element.innerHTML = ''
       this.element.classList.remove('has-hostile')
       return
@@ -201,7 +220,7 @@ export class MonsterListView {
     // returns to whichever mode the user last selected.
     if (groups.length === 0 && !invisDesc) {
       this.rows.length = 0
-      this.lastHtml = null
+      this.lastKey = null
       this.element.innerHTML = ''
       this.element.classList.remove('has-hostile')
       return
@@ -215,7 +234,11 @@ export class MonsterListView {
     for (const g of groups) {
       if (ATTITUDE_CLASSES[g[0].mon.att ?? 0] === 'hostile') { hasHostile = true; break }
     }
-    this.element.classList.toggle('has-hostile', hasHostile)
+    // Guarded: a same-state toggle runs no update steps per the DOM spec, but
+    // happy-dom (the no-op-update tests) rewrites the attribute anyway.
+    if (this.element.classList.contains('has-hostile') !== hasHostile) {
+      this.element.classList.toggle('has-hostile', hasHostile)
+    }
 
     if (this.listMode === 'collapsed' || this.compact) {
       // Wipe the expanded-mode caches: a re-expand needs to rebuild from
@@ -244,19 +267,22 @@ export class MonsterListView {
       }
     }
 
-    // The chevron floats right inside the FIRST row, so re-insert it every
-    // render — innerHTML rebuilds (ASCII/collapsed paths) and cached-row
-    // replaceWith (tile path) both discard the previous parent. Skip the
-    // toggle when there's only one row: collapsed and expanded would
-    // render the same single row (extras=0 suppresses the "+N" suffix),
-    // so the chevron would be a no-op tap target.
+    // The chevron floats right inside the FIRST row, so re-insert it after a
+    // render that rebuilt that row — innerHTML rebuilds (ASCII/collapsed
+    // paths) and cached-row replaceWith (tile path) both discard the previous
+    // parent. When it is still in place, leave it: insertBefore of a node
+    // already there removes and re-inserts it (two mutation records and a
+    // layout per map message). Skip the toggle when there's only one row:
+    // collapsed and expanded would render the same single row (extras=0
+    // suppresses the "+N" suffix), so the chevron would be a no-op tap target.
     const firstRow = this.element.firstElementChild
     if (groups.length + (invisDesc ? 1 : 0) > 1 && !this.compact && firstRow) {
-      this.toggleEl.textContent = this.listMode === 'collapsed' ? '▾' : '▴'
+      const glyph = this.listMode === 'collapsed' ? '▾' : '▴'
+      if (this.toggleEl.textContent !== glyph) this.toggleEl.textContent = glyph
       // First-in-source right floats sit rightmost, so on the collapsed
       // single line the chevron lands at the far right edge, with the
       // "+N" suffix to its left.
-      firstRow.insertBefore(this.toggleEl, firstRow.firstChild)
+      if (firstRow.firstChild !== this.toggleEl) firstRow.insertBefore(this.toggleEl, firstRow.firstChild)
     } else {
       // Compact mode has no expand affordance — the whole chip taps through
       // to the full panel, so the chevron would be a redundant target.
@@ -402,12 +428,12 @@ export class MonsterListView {
     this.setHtml(html)
   }
 
-  // Assign innerHTML through the lastHtml memo (see the field). Skipping when
+  // Assign innerHTML through the lastKey memo (see the field). Skipping when
   // unchanged leaves the previous render's DOM — including the already-placed
-  // chevron — untouched; update()'s toggle re-insert is position-idempotent.
+  // chevron — untouched; update()'s toggle re-insert checks for that.
   private setHtml(html: string): void {
-    if (html === this.lastHtml) return
-    this.lastHtml = html
+    if (html === this.lastKey) return
+    this.lastKey = html
     this.element.innerHTML = html
   }
 
@@ -428,8 +454,12 @@ export class MonsterListView {
       let visTotal = 0
       for (const g of groups) visTotal += g.length
       const invisSuffix = visTotal > 0 ? `+${visTotal}` : undefined
-      if (useTiles) this.mountTile(this.buildInvisTileRow(invisDesc, 'ml-collapsed', invisSuffix))
-      else this.setHtml(this.buildInvisAsciiRow(invisDesc, 'ml-collapsed', invisSuffix))
+      if (useTiles) {
+        this.mountTile(JSON.stringify(['collapsed', invisSig(invisDesc, invisSuffix)]),
+          () => this.buildInvisTileRow(invisDesc, 'ml-collapsed', invisSuffix))
+      } else {
+        this.setHtml(this.buildInvisAsciiRow(invisDesc, 'ml-collapsed', invisSuffix))
+      }
       return
     }
 
@@ -439,25 +469,28 @@ export class MonsterListView {
     const suffix = total > top.length ? `+${total - top.length}` : undefined
 
     if (useTiles) {
-      this.mountTile(this.buildTileRow({ ...this.rowData(top), extraClass: 'ml-collapsed', suffix }))
+      const d = this.rowData(top)
+      this.mountTile(JSON.stringify(['collapsed', rowSig(d, suffix)]),
+        () => this.buildTileRow({ ...d, extraClass: 'ml-collapsed', suffix }))
     } else {
       this.setHtml(this.buildAsciiRow(top, 'ml-collapsed', suffix))
     }
   }
 
-  // Replace the panel with a single freshly-built tile row: null the ASCII
-  // memo (the incremental this.rows path no longer describes the DOM), wipe,
-  // and mount. Shared by the collapsed group and invis single-row renders.
-  private mountTile(row: HTMLElement): void {
-    this.lastHtml = null
+  // Replace the panel with a single freshly-built tile row, unless the row
+  // the panel holds already has this signature (lastKey memo, see the
+  // field). Shared by the collapsed group and invis single-row renders.
+  private mountTile(sig: string, build: () => HTMLElement): void {
+    if (sig === this.lastKey) return
+    this.lastKey = sig
     this.element.innerHTML = ''
-    this.element.appendChild(row)
+    this.element.appendChild(build())
   }
 
   private renderTiles(groups: MonsterCell[][], rows: number, suffix?: string, invisDesc?: string): void {
     // The tile path manages children incrementally via this.rows, so the
-    // ASCII HTML memo no longer describes the DOM.
-    this.lastHtml = null
+    // whole-panel memo no longer describes the DOM.
+    this.lastKey = null
     // Invariant: empty cache → fresh DOM. Without this wipe, transitioning
     // from collapsed (which leaves a single .ml-collapsed row) back to
     // expanded would stack the new tile rows below the stale collapsed
@@ -482,19 +515,11 @@ export class MonsterListView {
       let build: () => HTMLElement
       if (item === 'invis') {
         const desc = invisDesc as string
-        sig = JSON.stringify(['invis', desc, rowSuffix ?? null])
+        sig = invisSig(desc, rowSuffix)
         build = () => this.buildInvisTileRow(desc, undefined, rowSuffix)
       } else {
         const d = this.rowData(item)
-        // Signature covers every visual input. JSON.stringify is overkill
-        // for small numeric tuples but trivially cheap for ~6 entries × 8
-        // fields, and avoids hand-rolled hashing bugs. The suffix is a
-        // visual input too: the last row carries the "+N" overflow, so a
-        // changed hidden-monster count must rebuild that row.
-        // (No d.hpColor term: tile rows draw damage from each member's fg,
-        // already covered by memberSig; the chip is ASCII-only.)
-        const memberSig = d.memberCells.map((c) => [c?.fg ?? 0, c?.t_bg ?? 0, c?.doll ?? null, c?.mcache ?? null, c?.icons ?? null, c?.highlighted_summoner ?? false, !!c?.trans])
-        sig = JSON.stringify([d.hasBar, d.barColor, d.color, d.label, rowSuffix ?? null, memberSig])
+        sig = rowSig(d, rowSuffix)
         build = () => this.buildTileRow({ ...d, suffix: rowSuffix })
       }
 

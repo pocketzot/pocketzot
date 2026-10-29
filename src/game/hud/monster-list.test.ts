@@ -333,6 +333,64 @@ describe('MonsterListView — invis row', () => {
   })
 })
 
+// update() runs on every `map` message; an unchanged monster set must not
+// touch the DOM at all (innerHTML rebuilds and the chevron's insertBefore
+// each cost mutation records and a layout per message).
+describe('MonsterListView no-op updates', () => {
+  function seededStore(): MapStore {
+    const store = new MapStore()
+    store.merge([
+      { x: 1, y: 1, g: 'C', mon: {
+        id: 1, name: 'Lodul', att: 0, type: 5,
+        typedata: { avghp: 100 }, clientid: 42,
+      } },
+      { x: 2, y: 2, g: 'O', mon: {
+        id: 2, name: 'ogre', att: 0, type: 7,
+        typedata: { avghp: 80 },
+      } },
+    ])
+    return store
+  }
+
+  // Synchronous records only (takeRecords): the tile rows' sprite fills are
+  // async and never resolve against the dummy loader.
+  function mutationsDuring(view: MonsterListView, fn: () => void): string[] {
+    const obs = new MutationObserver(() => {})
+    obs.observe(view.element, { childList: true, subtree: true, attributes: true, characterData: true })
+    fn()
+    const records = obs.takeRecords()
+    obs.disconnect()
+    return records.map((r) => `${r.type} ${(r.target as Element).className ?? ''} ${r.attributeName ?? ''}`)
+  }
+
+  it('leaves the expanded ASCII panel and its chevron alone', () => {
+    const store = seededStore()
+    const view = new MonsterListView(store)
+    view.update(store.getMonsters())
+    expect(view.element.querySelector('.ml-toggle')).not.toBeNull()
+    expect(mutationsDuring(view, () => view.update(store.getMonsters()))).toEqual([])
+  })
+
+  it('leaves the collapsed tile row alone until a visual input changes', () => {
+    localStorage.setItem('pocketzot:prefs', JSON.stringify({ monsterListMode: 'collapsed' }))
+    const store = seededStore()
+    const view = new MonsterListView(store)
+    view.setLoader(getTileLoader('http://test', '0.34.0'))
+    view.setRenderMode('tiles')
+    view.update(store.getMonsters())
+    const row = view.element.querySelector('.ml-collapsed')
+    expect(row).not.toBeNull()
+    expect(mutationsDuring(view, () => view.update(store.getMonsters()))).toEqual([])
+    expect(view.element.querySelector('.ml-collapsed')).toBe(row)
+
+    // The "+N" count is part of the row: a third monster rebuilds it.
+    store.merge([{ x: 3, y: 3, g: 'O', mon: { id: 3, name: 'ogre', att: 0, type: 7, typedata: { avghp: 80 } } }])
+    view.update(store.getMonsters())
+    expect(view.element.querySelector('.ml-collapsed')).not.toBe(row)
+    expect(view.element.querySelector('.ml-collapsed-more')?.textContent).toBe('+2')
+  })
+})
+
 describe('MonsterListView list modes', () => {
   beforeEach(() => {
     localStorage.clear()

@@ -349,7 +349,11 @@ export class MapView {
     // shift large uniform regions — unexplored black, wall and floor runs —
     // come out identical, and `textContent =` replaces the text node even
     // when the value matches, so unconditional writes are real DOM churn.
-    if (p.g !== g) { p.g = g; span.textContent = g }
+    // A changed glyph goes into the existing Text node rather than through
+    // textContent, which would drop that node and create another: every
+    // span owns exactly one Text child (buildGrid seeds ' ', and g is never
+    // empty), and the cursor is a pseudo-element, not a child.
+    if (p.g !== g) { p.g = g; (span.firstChild as Text).data = g }
     if (p.fg !== fg) { p.fg = fg; span.style.color = fg }
     if (p.bg !== bg) { p.bg = bg; span.style.backgroundColor = bg }
     if (p.flash !== flash) { p.flash = flash; span.style.boxShadow = flash }

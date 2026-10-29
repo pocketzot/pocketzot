@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { dropTileLoader, getTileLoader } from './tile-loader'
+import { TEX, dropTileLoader, getTileLoader } from './tile-loader'
 
 // happy-dom never fetches a <script src>, so each test plays the browser:
 // find the tag the loader appended, optionally "execute" it (call the global
@@ -87,6 +87,59 @@ describe('TileLoader module loads always settle', () => {
     const gui = loader.getModule('gui')
     execute(scriptFor('tileinfo-gui.js'), () => define(['./tileinfo-player'], () => ({})))
     expect(await settled(gui)).toBe('pending')
+  })
+})
+
+// happy-dom never loads an <img> either; a stand-in Image fires `load` on
+// the next microtask and lets each test choose what decode() does.
+function stubImage(decode: () => Promise<void>): void {
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null
+    onerror: (() => void) | null = null
+    decode = decode
+    set src(_v: string) { queueMicrotask(() => this.onload?.()) }
+  })
+}
+
+const INFO = { w: 32, h: 32, ox: 0, oy: 0, sx: 64, sy: 0, ex: 96, ey: 32 }
+
+async function preloadMain(version: string): Promise<ReturnType<typeof getTileLoader>> {
+  const loader = getTileLoader('https://t', version)
+  const ready = loader.ensureLoaded(TEX.MAIN)
+  execute(scriptFor('tileinfo-main.js'), () => define([], () => ({
+    get_tile_info: (i: number) => (i === 5 ? INFO : undefined),
+    get_img: () => 'main',
+  })))
+  await ready
+  return loader
+}
+
+describe('TileLoader atlas decode', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('never gates the atlas load on decode()', async () => {
+    stubImage(() => new Promise(() => {}))  // a decode that never finishes
+    const loader = await preloadMain('decode-pending')
+    expect(loader.getSync(TEX.MAIN, 5)).not.toBeNull()
+  })
+
+  it('swallows a decode() rejection', async () => {
+    stubImage(() => Promise.reject(new Error('purged')))
+    const loader = await preloadMain('decode-rejects')
+    expect(loader.getSync(TEX.MAIN, 5)).not.toBeNull()
+  })
+})
+
+describe('TileLoader.getSync', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('hands back one TileSprite per tile, and null for an unknown id', async () => {
+    stubImage(() => Promise.resolve())
+    const loader = await preloadMain('sprite-memo')
+    const s = loader.getSync(TEX.MAIN, 5)
+    expect(s).toMatchObject({ sx: 64, w: 32, h: 32, aw: 32, ah: 32 })
+    expect(loader.getSync(TEX.MAIN, 5)).toBe(s)
+    expect(loader.getSync(TEX.MAIN, 6)).toBeNull()
   })
 })
 

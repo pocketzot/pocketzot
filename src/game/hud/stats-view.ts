@@ -38,6 +38,13 @@ export class StatsView {
   private mql: MediaQueryList | null
   private onPlaceTap: (() => void) | null = null
   private onSettingsTap: (() => void) | null = null
+  // Slot elements by selector, resolved on first use after each mount(), and
+  // the last value written to each (see `changed`). A `player` message lands
+  // every turn with a few changed fields, and `textContent =` / `innerHTML =`
+  // rebuild nodes even when the value matches — a time-only delta used to
+  // cost ~46 mutation records and a layout pass over the whole HUD.
+  private slots = new Map<string, HTMLElement | null>()
+  private written = new Map<string, string>()
 
   constructor(inv: InventoryStore) {
     this.inv = inv
@@ -61,8 +68,16 @@ export class StatsView {
       ? window.matchMedia('(orientation: landscape)')
       : null
     this.layout = this.mql?.matches ? 'square' : 'compact'
-    this.el.innerHTML = this.template()
+    this.mount()
     this.mql?.addEventListener('change', this.onOrientationChange)
+  }
+
+  // The one place the template enters the DOM: the slot refs and the write
+  // memo describe the previous markup, so both reset here.
+  private mount(): void {
+    this.el.innerHTML = this.template()
+    this.slots.clear()
+    this.written.clear()
   }
 
   get element(): HTMLElement {
@@ -89,14 +104,14 @@ export class StatsView {
     this.mql?.removeEventListener('change', this.onOrientationChange)
   }
 
-  // Swap templates on rotate and repaint from the accumulated state — render()
-  // re-queries its slots every pass and both templates expose the same slot
-  // ids, so the render methods are layout-agnostic.
+  // Swap templates on rotate and repaint from the accumulated state — both
+  // templates expose the same slot ids, so the render methods are
+  // layout-agnostic.
   private onOrientationChange = (): void => {
     const layout = this.mql?.matches ? 'square' : 'compact'
     if (layout === this.layout) return
     this.layout = layout
-    this.el.innerHTML = this.template()
+    this.mount()
     this.render()
   }
 
@@ -148,16 +163,15 @@ export class StatsView {
     // #stats_wizmode. Explore mode is reachable from the WebTiles lobby ('+').
     const modeFlag = s.wizard ? ' *WIZARD*' : s.explore ? ' *EXPLORE*' : ''
     const speciesGod = speciesDisplay + godStr
-    const idEl = this.el.querySelector<HTMLElement>('#hud-id')
-    if (idEl) {
+    if (this.layout === 'compact') {
       // compact: one combined line
       const idLine = titled && speciesGod ? `${titled} — ${speciesGod}` : titled || speciesGod
-      idEl.textContent = idLine + modeFlag
+      this.setText('#hud-id', idLine + modeFlag)
     } else {
       // square: separate title and species lines, as in the reference
       // (#stats_titleline / #stats_species_god in game.html)
-      this.setText('hud-title', titled + modeFlag)
-      this.setText('hud-species', speciesGod)
+      this.setText('#hud-title', titled + modeFlag)
+      this.setText('#hud-species', speciesGod)
     }
 
     // Piety row, mirroring the reference's three-way render (player.js):
@@ -167,46 +181,41 @@ export class StatsView {
     // ostracism pips as red X's consuming trailing dots, shown for ANY
     // rank (dots-only at 0) so a fresh convert or penanced row stays
     // visible. Penance tints the whole row red via the CSS class.
-    const pietyEl = this.el.querySelector<HTMLElement>('#hud-piety')
-    if (pietyEl) {
-      const pips = s.ostracism_pips ?? 0
-      if (god === 'Xom') {
-        pietyEl.textContent = piety >= 0
-          ? '.'.repeat(piety) + '*' + '.'.repeat(Math.max(0, 5 - piety))
-          : '......'
-      } else if (god && god !== 'No God' && god !== 'Gozag') {
-        pietyEl.innerHTML = escHtml('*'.repeat(piety) + '.'.repeat(Math.max(0, 6 - piety - pips)))
-          + (pips > 0 ? `<span class="fg5">${escHtml('X'.repeat(pips))}</span>` : '')
-      } else {
-        pietyEl.textContent = ''
-      }
-      pietyEl.classList.toggle('penance', !!s.penance)
+    const pips = s.ostracism_pips ?? 0
+    if (god === 'Xom') {
+      this.setText('#hud-piety', piety >= 0
+        ? '.'.repeat(piety) + '*' + '.'.repeat(Math.max(0, 5 - piety))
+        : '......')
+    } else if (god && god !== 'No God' && god !== 'Gozag') {
+      this.setHtml('#hud-piety', escHtml('*'.repeat(piety) + '.'.repeat(Math.max(0, 6 - piety - pips)))
+        + (pips > 0 ? `<span class="fg5">${escHtml('X'.repeat(pips))}</span>` : ''))
+    } else {
+      this.setText('#hud-piety', '')
     }
+    this.setClass('#hud-piety', 'penance', !!s.penance)
 
     const realHpMax = s.real_hp_max
     const hpDrained = realHpMax != null && realHpMax !== hpMax
     const hpText = hpDrained
       ? `${hp}/${hpMax} (${realHpMax})`
       : `${hp}/${hpMax}`
-    this.setText('hud-hp', hpText)
+    this.setText('#hud-hp', hpText)
 
     // Djinni (whose HP is their casting pool) hide the Magic line entirely,
     // mirroring player.js hiding #stats_mpline. Both templates tag their MP
     // row #hud-mp-line, so this applies in portrait and landscape alike.
-    const mpLine = this.el.querySelector<HTMLElement>('#hud-mp-line')
-    if (mpLine) mpLine.style.display = species === 'Djinni' ? 'none' : ''
+    this.setStyle('#hud-mp-line', 'display', species === 'Djinni' ? 'none' : '')
     // Square-only: the HP caption reads "Health:" until a drained "(real max)"
     // needs the room, then shortens to "HP:". Compact has no caption element,
     // so this no-ops there.
-    const hpCap = this.el.querySelector<HTMLElement>('#hud-hp-caption')
-    if (hpCap) hpCap.textContent = hpDrained ? 'HP:' : 'Health:'
+    this.setText('#hud-hp-caption', hpDrained ? 'HP:' : 'Health:')
 
     // dd_real_mp_max is sent as 0 for non-Deep-Dwarves; only show parens for DD with reduced max.
     const ddRealMpMax = s.dd_real_mp_max ?? 0
     const mpText = ddRealMpMax > 0 && ddRealMpMax !== mpMax
       ? `${mp}/${mpMax} (${ddRealMpMax})`
       : `${mp}/${mpMax}`
-    this.setText('hud-mp', mpText)
+    this.setText('#hud-mp', mpText)
 
     // Tint the HP/MP figure "boosted" (lightblue) while the relevant max is
     // magically inflated, mirroring player.js stat_boosters: HP under divinely
@@ -214,16 +223,16 @@ export class StatsView {
     // unchanged — this is only the numeric readout, as in the reference.)
     const statuses = s.status ?? []
     const hasStatus = (re: RegExp): boolean => statuses.some(st => st.text != null && re.test(st.text))
-    this.el.querySelector('#hud-hp')?.classList.toggle('stat-boosted', hasStatus(/divinely vigorous|berserk/i))
-    this.el.querySelector('#hud-mp')?.classList.toggle('stat-boosted', hasStatus(/divinely vigorous/i))
+    this.setClass('#hud-hp', 'stat-boosted', hasStatus(/divinely vigorous|berserk/i))
+    this.setClass('#hud-mp', 'stat-boosted', hasStatus(/divinely vigorous/i))
 
-    this.renderStatValue('hud-str', s.str, s.str_max, 'str')
-    this.renderStatValue('hud-int', s.int, s.int_max, 'int')
-    this.renderStatValue('hud-dex', s.dex, s.dex_max, 'dex')
+    this.renderStatValue('#hud-str', s.str, s.str_max, 'str')
+    this.renderStatValue('#hud-int', s.int, s.int_max, 'int')
+    this.renderStatValue('#hud-dex', s.dex, s.dex_max, 'dex')
 
-    this.renderDefenseValue('hud-ac', s.ac, s.ac_mod)
-    this.renderDefenseValue('hud-ev', s.ev, s.ev_mod)
-    this.renderDefenseValue('hud-sh', s.sh, s.sh_mod)
+    this.renderDefenseValue('#hud-ac', s.ac, s.ac_mod)
+    this.renderDefenseValue('#hud-ev', s.ev, s.ev_mod)
+    this.renderDefenseValue('#hud-sh', s.sh, s.sh_mod)
 
     this.renderWarnings()
 
@@ -232,8 +241,7 @@ export class StatsView {
     const depth = s.depth
     const placeStr = depth ? `${place}:${depth}` : place
     const goldAura = (s.status ?? []).some(st => st.text === 'gold aura')
-    const xlEl = this.el.querySelector<HTMLElement>('#hud-xl-place')
-    if (xlEl) {
+    if (this.layout === 'compact') {
       // compact: XL/progress/place/gold composed onto one line
       let html = `<span class="hg-caption">XL</span><span>${escHtml(String(xl))}</span>`
       if (s.progress != null) html += ` ${escHtml(String(s.progress))}%`
@@ -245,30 +253,24 @@ export class StatsView {
         const valClass = goldAura ? ' class="stat-boosted"' : ''
         html += ` <span class="hg-caption">$</span><span${valClass}>${escHtml(String(s.gold))}</span>`
       }
-      xlEl.innerHTML = html
+      this.setHtml('#hud-xl-place', html)
     } else {
       // square: XL+Next pair with Place across the grid row (reference rows)
-      this.setText('hud-xl', String(xl))
-      this.setText('hud-prog', `${s.progress ?? 0}%`)
-      this.setText('hud-place', placeStr)
-    }
+      this.setText('#hud-xl', String(xl))
+      this.setText('#hud-prog', `${s.progress ?? 0}%`)
+      this.setText('#hud-place', placeStr)
 
-    // Square: Gozag gold rides the species line (reference
-    // #stats_gozag_gold_label sits after piety there).
-    const goldUi = this.el.querySelector<HTMLElement>('#hud-gold-ui')
-    if (goldUi) {
+      // Square: Gozag gold rides the species line (reference
+      // #stats_gozag_gold_label sits after piety there).
       const showGold = god === 'Gozag' && s.gold != null
-      goldUi.style.display = showGold ? '' : 'none'
-      const goldEl = this.el.querySelector<HTMLElement>('#hud-gold')
-      if (goldEl) {
-        goldEl.textContent = showGold ? String(s.gold) : ''
-        goldEl.classList.toggle('stat-boosted', goldAura)
-      }
+      this.setStyle('#hud-gold-ui', 'display', showGold ? '' : 'none')
+      this.setText('#hud-gold', showGold ? String(s.gold) : '')
+      this.setClass('#hud-gold', 'stat-boosted', goldAura)
     }
 
     const time = s.time ?? 0
     const timeStr = (time / 10).toFixed(1) + (this.timeDelta > 0 ? ` (${(this.timeDelta / 10).toFixed(1)})` : '')
-    this.setText('hud-time-val', timeStr)
+    this.setText('#hud-time-val', timeStr)
 
     this.renderBar('hp', hp, hpMax, s.poison_survival)
     this.renderBar('mp', mp, mpMax, undefined)
@@ -277,28 +279,19 @@ export class StatsView {
     this.renderNoiseBar(s.adjusted_noise ?? 0, hasStatus(/silenced?/i))
 
     // Weapon row (own line, ellipsis if too long)
-    const wqRow = this.el.querySelector<HTMLElement>('#hud-wq')
     const weaponHtml = this.buildWeapon(false)
-    if (wqRow) {
-      wqRow.innerHTML = weaponHtml
-      wqRow.style.display = weaponHtml ? '' : 'none'
-    }
+    this.setHtml('#hud-wq', weaponHtml)
+    this.setStyle('#hud-wq', 'display', weaponHtml ? '' : 'none')
 
     // Offhand weapon row (dual-wield etc.) — only when server flags it.
-    const offhandRow = this.el.querySelector<HTMLElement>('#hud-wq-offhand')
-    if (offhandRow) {
-      const offhandHtml = s.offhand_weapon ? this.buildWeapon(true) : ''
-      offhandRow.innerHTML = offhandHtml
-      offhandRow.style.display = offhandHtml ? '' : 'none'
-    }
+    const offhandHtml = s.offhand_weapon ? this.buildWeapon(true) : ''
+    this.setHtml('#hud-wq-offhand', offhandHtml)
+    this.setStyle('#hud-wq-offhand', 'display', offhandHtml ? '' : 'none')
 
     // Quiver gets its own row directly below the weapon (console-style pairing)
-    const quiverEl = this.el.querySelector<HTMLElement>('#hud-quiver')
-    if (quiverEl) {
-      const quiverHtml = dcssToHtml(s.quiver_desc ?? '')
-      quiverEl.innerHTML = quiverHtml
-      quiverEl.style.display = quiverHtml ? '' : 'none'
-    }
+    const quiverHtml = dcssToHtml(s.quiver_desc ?? '')
+    this.setHtml('#hud-quiver', quiverHtml)
+    this.setStyle('#hud-quiver', 'display', quiverHtml ? '' : 'none')
   }
 
   // Mirrors update_bar() in webserver/game_data/static/player.js:21-67. Segments are
@@ -339,8 +332,7 @@ export class StatsView {
   }
 
   private setSegWidth(cls: string, basisPoints: number): void {
-    const el = this.el.querySelector<HTMLElement>(`.${cls}`)
-    if (el) el.style.width = `${basisPoints / 100}%`
+    this.setStyle(`.${cls}`, 'width', `${basisPoints / 100}%`)
   }
 
   // Mirrors update_bar_noise() in player.js:69-139. adjusted_noise is already
@@ -364,8 +356,7 @@ export class StatsView {
     let changeBar = Math.round((BAR_RES * Math.abs(oldValue - level)) / max)
     if (fullBar + changeBar > BAR_RES) changeBar = BAR_RES - fullBar
 
-    const cell = this.el.querySelector<HTMLElement>('#hud-noise-cell')
-    if (cell) cell.setAttribute('data-level', cat)
+    this.setAttr('#hud-noise-cell', 'data-level', cat)
     this.setSegWidth('noise-full', fullBar)
     // Reference shows the decrease tail whenever there was prior noise; we only
     // show it on an actual drop, matching the HP/MP decrease semantics and
@@ -376,8 +367,7 @@ export class StatsView {
     // right of the (now-black) bar, mirroring the reference's #stats_noise_status
     // rather than hiding the caption. (game.html keeps <span class="stats_caption">
     // static; player.js only sets #stats_noise_status.)
-    const status = this.el.querySelector<HTMLElement>('#hud-noise-status')
-    if (status) status.textContent = silenced ? 'Silenced' : ''
+    this.setText('#hud-noise-status', silenced ? 'Silenced' : '')
   }
 
   private buildWeapon(offhand: boolean): string {
@@ -442,19 +432,18 @@ export class StatsView {
 
   // Mirrors update_stat() in player.js: append " (max)" when the stat is drained
   // below its natural maximum, and colour the value accordingly.
-  private renderStatValue(id: string, val: number | undefined, max: number | undefined, stat: 'str' | 'int' | 'dex'): void {
-    const el = this.el.querySelector<HTMLElement>(`#${id}`)
-    if (!el) return
+  private renderStatValue(sel: string, val: number | undefined, max: number | undefined, stat: 'str' | 'int' | 'dex'): void {
     const v = val ?? 0
     const m = max ?? v
     // Drained: tuck the "(max)" tight against the value via .stat-max's margin
     // (a small fixed gap), rather than a full space, so the readout stays compact.
-    if (v < m) el.innerHTML = `${v}<span class="stat-max">(${m})</span>`
-    else el.textContent = String(v)
-    el.classList.remove('stat-boosted', 'stat-zero', 'stat-degenerated')
+    if (v < m) this.setHtml(sel, `${v}<span class="stat-max">(${m})</span>`)
+    else this.setText(sel, String(v))
     const st = this.statClass(stat, v, m)
-    if (st.cls) el.classList.add(st.cls)
-    el.style.color = st.color ?? ''
+    this.setClass(sel, 'stat-boosted', st.cls === 'stat-boosted')
+    this.setClass(sel, 'stat-zero', st.cls === 'stat-zero')
+    this.setClass(sel, 'stat-degenerated', st.cls === 'stat-degenerated')
+    this.setStyle(sel, 'color', st.color ?? '')
   }
 
   // Contamination and Doom, mirroring update_contam/update_doom in player.js.
@@ -470,8 +459,7 @@ export class StatsView {
     const contamCls = contam >= 200 ? 'fg4' : contam >= 100 ? 'fg14' : 'fg8'
     const doomCls = doom >= 75 ? 'fg5' : doom >= 50 ? 'fg12' : doom >= 25 ? 'fg14' : 'fg7'
 
-    const joined = this.el.querySelector<HTMLElement>('#hud-warn')
-    if (joined) {
+    if (this.layout === 'compact') {
       const parts: string[] = []
       if (contam > 0) {
         parts.push(`<span class="hg-grp"><span class="hg-caption">Contam</span><span class="${contamCls}">${contam}%</span></span>`)
@@ -481,35 +469,70 @@ export class StatsView {
       }
       // Joined with a space so the Contam↔Doom gap matches the inter-stat gap
       // (e.g. AC↔EV) — .hg-warn applies the same word-spacing to that space.
-      joined.innerHTML = parts.join(' ')
+      this.setHtml('#hud-warn', parts.join(' '))
       return
     }
 
     const setWarn = (ui: string, val: string, value: number, cls: string): void => {
-      const uiEl = this.el.querySelector<HTMLElement>(`#${ui}`)
-      if (!uiEl) return
-      uiEl.style.display = value > 0 ? '' : 'none'
-      const valEl = this.el.querySelector<HTMLElement>(`#${val}`)
-      if (valEl) {
-        valEl.textContent = value > 0 ? `${value}%` : ''
-        valEl.className = cls
-      }
+      this.setStyle(ui, 'display', value > 0 ? '' : 'none')
+      this.setText(val, value > 0 ? `${value}%` : '')
+      this.setAttr(val, 'class', cls)
     }
-    setWarn('hud-doom-ui', 'hud-doom', doom, doomCls)
-    setWarn('hud-contam-ui', 'hud-contam', contam, contamCls)
+    setWarn('#hud-doom-ui', '#hud-doom', doom, doomCls)
+    setWarn('#hud-contam-ui', '#hud-contam', contam, contamCls)
   }
 
-  private renderDefenseValue(id: string, val: number | undefined, mod: number | undefined): void {
-    const el = this.el.querySelector<HTMLElement>(`#${id}`)
-    if (!el) return
-    el.textContent = String(val ?? 0)
-    el.classList.toggle('def-boosted', (mod ?? 0) > 0)
-    el.classList.toggle('def-degenerated', (mod ?? 0) < 0)
+  private renderDefenseValue(sel: string, val: number | undefined, mod: number | undefined): void {
+    this.setText(sel, String(val ?? 0))
+    this.setClass(sel, 'def-boosted', (mod ?? 0) > 0)
+    this.setClass(sel, 'def-degenerated', (mod ?? 0) < 0)
   }
 
-  private setText(id: string, text: string): void {
-    const el = this.el.querySelector<HTMLElement>(`#${id}`)
-    if (el) el.textContent = text
+  // ── slot writes ──────────────────────────────────────────────────────────
+  // Every DOM write in render goes through these: the slot is looked up once
+  // per mount, and a value equal to the last one written is not written
+  // again. Text and markup share one memo per slot (an element may get
+  // either, branch by branch), style properties and attributes their own.
+
+  private slot(sel: string): HTMLElement | null {
+    let el = this.slots.get(sel)
+    if (el === undefined) {
+      el = this.el.querySelector<HTMLElement>(sel)
+      this.slots.set(sel, el)
+    }
+    return el
+  }
+
+  private changed(sel: string, kind: string, value: string): boolean {
+    const key = `${kind} ${sel}`
+    if (this.written.get(key) === value) return false
+    this.written.set(key, value)
+    return true
+  }
+
+  private setText(sel: string, text: string): void {
+    const el = this.slot(sel)
+    if (el && this.changed(sel, 'content', `t${text}`)) el.textContent = text
+  }
+
+  private setHtml(sel: string, html: string): void {
+    const el = this.slot(sel)
+    if (el && this.changed(sel, 'content', `h${html}`)) el.innerHTML = html
+  }
+
+  private setStyle(sel: string, prop: 'display' | 'width' | 'color', value: string): void {
+    const el = this.slot(sel)
+    if (el && this.changed(sel, prop, value)) el.style[prop] = value
+  }
+
+  private setAttr(sel: string, name: string, value: string): void {
+    const el = this.slot(sel)
+    if (el && this.changed(sel, name, value)) el.setAttribute(name, value)
+  }
+
+  private setClass(sel: string, cls: string, on: boolean): void {
+    const el = this.slot(sel)
+    if (el && el.classList.contains(cls) !== on) el.classList.toggle(cls, on)
   }
 
   private template(): string {

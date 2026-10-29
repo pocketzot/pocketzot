@@ -202,7 +202,12 @@ export class TileMapView {
 
     this.canvas = document.createElement('canvas')
     this.canvas.className = 'map-tile-canvas'
-    const ctx = this.canvas.getContext('2d')
+    // Opaque backing store: every paint path lays down an opaque black box
+    // before drawing (fullRender, drawCell) and nothing clears to transparent
+    // or reads pixels back, so the compositor gets a surface it need not
+    // blend over #map-grid every frame. globalAlpha/clip passes composite
+    // source-over onto it exactly as before.
+    const ctx = this.canvas.getContext('2d', { alpha: false })
     if (!ctx) throw new Error('canvas 2d context unavailable')
     this.ctx = ctx
     this.ctx.imageSmoothingEnabled = false

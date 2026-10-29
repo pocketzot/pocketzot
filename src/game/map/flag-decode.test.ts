@@ -112,6 +112,37 @@ describe('server backend (installed enums module)', () => {
     expect(fgFlags(FG_PET).PET).toBe(true)  // fallback still active
   })
 
+  it('memoises by wire value (number and [lo, 0] share an entry)', () => {
+    const calls = vi.spyOn(fakeEnums, 'prepare_fg_flags')
+    setEnumsModule(fakeEnums)
+    const f = fgFlags(0xAB01)
+    expect(fgFlags(0xAB01)).toBe(f)
+    expect(fgFlags([0xAB01, 0])).toBe(f)
+    expect(calls).toHaveBeenCalledTimes(1)
+    // A hi word is a different value.
+    expect(fgFlags([0xAB01, 1])).not.toBe(f)
+    expect(calls).toHaveBeenCalledTimes(2)
+  })
+
+  it('forgets memoised flags when the module changes', () => {
+    setEnumsModule(fakeEnums)
+    const stale = fgFlags(0x01)
+    expect(stale.PET).toBe(true)
+    // A second module with PET on another bit: the same wire value must
+    // decode through it, not come back from the first module's memo.
+    setEnumsModule({
+      prepare_fg_flags: (raw: number | number[]) => ({ value: 0, PET: ((typeof raw === 'number' ? raw : raw[0]) & 0x02) !== 0 }),
+      prepare_bg_flags: () => ({ value: 0 }),
+    })
+    expect(fgFlags(0x01)).not.toBe(stale)
+    expect(fgFlags(0x01).PET).toBe(false)
+    // And clearing the module leaves nothing behind for a later install.
+    setEnumsModule(null)
+    setEnumsModule(fakeEnums)
+    expect(fgFlags(0x01)).not.toBe(stale)
+    expect(fgFlags(0x01).PET).toBe(true)
+  })
+
   it('drops a module that throws and reverts to the fallback', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     setEnumsModule({

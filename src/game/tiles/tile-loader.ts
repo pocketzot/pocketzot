@@ -151,6 +151,10 @@ export class TileLoader {
   // need to await a promise per cell layer.
   private atlasSync = new Map<string, HTMLImageElement>()
   private moduleSync = new Map<string, TileinfoModule>()
+  // getSync's result per texture and tile id. Atlas and tileinfo are fixed for
+  // this loader's version and nothing writes to a TileSprite, so one object
+  // per tile serves every paint instead of a fresh one per cell layer.
+  private spriteSync = new Map<string, Map<number, TileSprite>>()
 
   // Use getTileLoader() rather than `new TileLoader()` directly so instances
   // are registry-memoized (and reachable by the routing shim).
@@ -215,9 +219,18 @@ export class TileLoader {
     const img = this.atlasSync.get(name)
     const mod = this.moduleSync.get(name)
     if (!img || !mod) return null
+    let sprites = this.spriteSync.get(name)
+    if (!sprites) {
+      sprites = new Map()
+      this.spriteSync.set(name, sprites)
+    }
+    const cached = sprites.get(tileId)
+    if (cached) return cached
     const info = mod.get_tile_info(tileId)
     if (!info) return null
-    return spriteFrom(img, info)
+    const sprite = spriteFrom(img, info)
+    sprites.set(tileId, sprite)
+    return sprite
   }
 
   // Sync variant of getDngnTex. Requires tileinfo-dngn to be preloaded.
@@ -247,7 +260,17 @@ export class TileLoader {
     if (cached) return cached
     const p = new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image()
-      img.onload = () => { this.atlasSync.set(name, img); resolve(img) }
+      img.onload = () => {
+        // `load` means fetched, not decoded: both engines decode lazily, so
+        // the first drawImage from a cold atlas paid a synchronous decode of
+        // the whole sheet (~40 ms for main.png in a desktop profile). Start
+        // it now, in the background, and never gate on it — WebKit rejects
+        // decode() under memory pressure and may purge the bitmap again, and
+        // a drawImage that lands before it finishes just decodes as before.
+        img.decode?.().catch(() => {})
+        this.atlasSync.set(name, img)
+        resolve(img)
+      }
       img.onerror = () => reject(new Error(`failed to load atlas ${name}.png`))
       img.src = `${this.base}/${name}.png`
     })

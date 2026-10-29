@@ -103,6 +103,7 @@ let serverEnums: EnumsModule | null = null
 export function setEnumsModule(mod: unknown): void {
   if (mod == null) {
     serverEnums = null
+    clearServerMemo()
     return
   }
   const m = mod as Partial<EnumsModule>
@@ -111,6 +112,7 @@ export function setEnumsModule(mod: unknown): void {
     return
   }
   serverEnums = m as EnumsModule
+  clearServerMemo()
 }
 
 // Exposed for the __dcssEnums dev hook / tests.
@@ -137,14 +139,50 @@ function decode<T>(
   fallback: (raw: number | number[] | undefined) => T,
 ): T {
   if (serverEnums) {
+    const memo = serverMemo[fn]
+    const key = memoKey(raw)
+    const hit = memo.get(key)
+    if (hit !== undefined) return hit as T
     try {
-      return serverEnums[fn](raw ?? 0) as T
+      const flags = serverEnums[fn](raw ?? 0) as T
+      if (memo.size >= SERVER_MEMO_MAX) memo.clear()
+      memo.set(key, flags)
+      return flags
     } catch (err) {
       console.warn(`enums.js ${fn} threw; reverting to bundled flag layout`, err)
       serverEnums = null
+      clearServerMemo()
     }
   }
   return fallback(raw)
+}
+
+// Memo in front of the server decoder, keyed on the raw wire value. The
+// module has its own value cache (enums.js prepare_flags), but a lookup there
+// costs an array→string coercion for the `cache[[lo,hi]]` key plus a fresh
+// `[raw]` wrapper for the common numeric form — ~200 ns a call against ~20 ns
+// through a numeric Map (node 25), and the map view asks ~6 times per cell
+// per paint. Sharing the returned object is nothing new: the module already
+// hands back one object per value, and annotates an array raw IN PLACE (the
+// store's own cell.fg array grows the named properties). Reset, not LRU, at
+// the cap, like the fallback cache below.
+const SERVER_MEMO_MAX = 4096
+const serverMemo: Record<keyof EnumsModule, Map<number, unknown>> = {
+  prepare_fg_flags: new Map(),
+  prepare_bg_flags: new Map(),
+}
+
+function clearServerMemo(): void {
+  serverMemo.prepare_fg_flags.clear()
+  serverMemo.prepare_bg_flags.clear()
+}
+
+// A number and its [lo, 0] spelling are the same wire value, so they share a
+// key. The hi word is at most a few flag bits, so lo + hi·2³² stays exact.
+function memoKey(raw: number | number[] | undefined): number {
+  if (typeof raw === 'number') return raw
+  if (raw === undefined) return 0
+  return (raw[0] ?? 0) + (raw[1] ?? 0) * 4294967296
 }
 
 // ── fallback backend (bundled 0.34 layout) ─────────────────────────────────
