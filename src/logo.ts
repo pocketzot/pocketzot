@@ -246,8 +246,12 @@ export function decorateLogo(titleEl: HTMLElement): void {
   // delayed reveal and rapid taps don't pile up. Reduced motion settles instantly,
   // ignoring delayMs and the per-character stagger. Decoration and tell land
   // at settle (after the last letter); the timed hideTell is for reduced
-  // motion, where the caption has no fade-out animation.
+  // motion, where the caption has no fade-out animation. A decorated roll
+  // ignores taps from the tap that rolled it until its caption fades, so
+  // mashing the title can't skip past it; the tier is known at roll time, so
+  // the lock covers the reveal stagger too.
   let timers: number[] = []
+  let locked = false
   const roll = (delayMs: number): void => {
     timers.forEach(clearTimeout)
     timers = []
@@ -261,11 +265,12 @@ export function decorateLogo(titleEl: HTMLElement): void {
                                     delayMs + i * LOGO_CONFIG.staggerMs))
     })
     const tier = scoreRoll(rolls)
+    locked = decorated(tier)
     const settle = (): void => {
       setTierDecor(titleEl, tier)
       if (decorated(tier)) {
         timers.push(window.setTimeout(() => showTell(tier), 400))
-        timers.push(window.setTimeout(hideTell, 3000))
+        timers.push(window.setTimeout(() => { hideTell(); locked = false }, 3000))
       }
     }
     if (reduceMotion) settle()
@@ -278,7 +283,7 @@ export function decorateLogo(titleEl: HTMLElement): void {
   titleEl.classList.add('logo-tappable')
   const prevTap = tapHandlers.get(titleEl)
   if (prevTap) titleEl.removeEventListener('click', prevTap)
-  const onTap = (): void => roll(0)
+  const onTap = (): void => { if (!locked) roll(0) }
   tapHandlers.set(titleEl, onTap)
   titleEl.addEventListener('click', onTap)
 

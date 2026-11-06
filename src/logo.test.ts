@@ -266,6 +266,32 @@ describe('decorateLogo', () => {
     }
   })
 
+  it('a decorated roll ignores taps until its tell fades, so mashing cannot skip it', () => {
+    // Motion on: the lock must already hold during the reveal stagger.
+    const savedMM = window.matchMedia
+    window.matchMedia = (() => ({ matches: false })) as unknown as typeof window.matchMedia
+    vi.useFakeTimers()
+    try {
+      LOGO_CONFIG.pGlyphShift = 1 // artifact
+      const el = makeTitle(LOGO_WORD)
+      decorateLogo(el)
+      el.click()
+      LOGO_CONFIG.pGlyphShift = 0 // any roll that got through would be mundane
+      el.click()                  // mid-stagger
+      const unlockAt = LOGO_WORD.length * LOGO_CONFIG.staggerMs + 3000
+      vi.advanceTimersByTime(unlockAt - 1)
+      el.click()                  // tell still showing
+      expect(el.classList.contains('decor-artifact')).toBe(true)
+      vi.advanceTimersByTime(1)   // tell fades: unlocked
+      el.click()
+      vi.runAllTimers()
+      expect([...el.classList].some((c) => c.startsWith('decor-'))).toBe(false)
+    } finally {
+      vi.useRealTimers()
+      window.matchMedia = savedMM
+    }
+  })
+
   it('the page\'s roll sticks: a rebuilt title replays it instantly, decorated, without a tell', () => {
     // Motion ON so the replay's instant-ness is observable: a fresh roll would
     // leave stagger timers pending; a replay leaves none.
