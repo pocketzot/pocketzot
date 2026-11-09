@@ -27,20 +27,17 @@ Progressive Web App.
 
 ## Features
 
-- Play online (WebTiles) or offline (local).
-- ASCII-first design that fits the full standard console map onto a phone in
-  portrait mode, with a font still large enough to read.
-- Graphical tiles support.
-- Chat support.
-- Customizable controls.
-- Log in with multiple WebTiles server accounts and switch between them.
-- Inline tap regions in many menus and descriptions for quick touch interaction.
-- Context-aware control sets for common situations.
+- Online play on WebTiles servers.
+- Offline play entirely on your device.
+- ASCII and tiles map modes.
+- Context-aware controls for in-game menus.
+- Customizable touch controls.
+- Map gestures.
+- Inline tap targets in many menus and descriptions.
+- Floating, collapsible monster list; tap to inspect monsters.
 - Spectator mode with an expanded map view.
-- Floating, collapsible monster list; tap for details.
-- Map double-tap toggles zoom; two-finger long-press toggles tiles.
+- Chat.
 - 8.6 trillion logos.
-- Installs to your home screen as a PWA.
 
 See [ABOUT.md](ABOUT.md) for more, including the controls model and the
 security and privacy notes.
