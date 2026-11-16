@@ -110,7 +110,13 @@ describe('xlogToCard', () => {
   it('maps the real probe entry', () => {
     const m = xlogToCard(rec)
     expect(m.charName).toBe('TmsgProbe')
-    expect(m.charTitle).toBe('the Trooper')
+    expect(m.charTitle).toBe(' the Trooper')
+    // bare xlog titles get player_title_prefix's joiner, not always "the"
+    expect(xlogToCard({ ...rec, title: 'Who Moves the Sun' }).charTitle).toBe(', Who Moves the Sun')
+    expect(xlogToCard({ ...rec, title: 'Petite Mort' }).charTitle).toBe(' La Petite Mort')
+    expect(xlogToCard({ ...rec, title: 'Ex Machina' }).charTitle).toBe(' Ex Machina')
+    expect(xlogToCard({ ...rec, title: 'Hundred Blades' }).charTitle).toBe(' of a Hundred Blades')
+    expect(xlogToCard({ ...rec, title: "Xom's Canvas" }).charTitle).toBe(", Xom's Canvas")
     expect(m.species).toBe('Minotaur')
     expect(m.background).toBe('Berserker')
     expect(m.god).toBe('Trog')

@@ -10,7 +10,7 @@
 // dolls place instantly) after the card is in the tree.
 
 import type { Avatar } from '../avatars'
-import { compactPlace, nameTitle } from '../game/char-label'
+import { compactPlace, nameTitle, titlePrefix, titleTail } from '../game/char-label'
 import { parseExitBlurb } from '../game/exit-blurb'
 import { parseGemCount } from '../game/rune-messages'
 import { tagFor } from '../servers'
@@ -34,7 +34,7 @@ export interface CardResult {
 
 export interface CharCardModel {
   charName: string           // headline identity, bold: "Bram" (name) or species+background
-  charTitle?: string         // headline tail, regular weight, own joiner: "the Chopper" / ", Duchess of …"
+  charTitle?: string         // headline tail, regular weight, own joiner (titleTail)
   badge?: 'wizmode' | 'explore' // headline tail " *WIZ*" / " *EXPLORE*" — the game's own
                              // marker (hiscores.cc: trails the identity line; W/E in
                              // the scores list), so it qualifies the character, not the death
@@ -131,8 +131,7 @@ export function renderCharCard(
   }
   const body = line(card, 'char-card-body', '')
 
-  // Bold identity, regular-weight title — the title carries its own joiner
-  // (leading space added here for plain forms; comma forms attach bare).
+  // Bold identity, regular-weight title (joiner rule: titleTail).
   const head = line(body, 'char-card-head', model.charName)
   if (model.charTitle) {
     const t = document.createElement('span')
@@ -230,13 +229,6 @@ export function renderCharCard(
     })
   }
   return card
-}
-
-// The title's rendered tail for the in-DOM bold/regular split: comma-joined
-// forms (", Duchess of …") attach bare, plain forms get the separating space
-// (the same joiner rule nameTitle applies to the whole string).
-function titleTail(title: string): string {
-  return title.startsWith(',') ? title : ` ${title}`
 }
 
 // The headline as one plain string ("Bram the Chopper") for surfaces that
@@ -418,13 +410,12 @@ export function xlogToCard(
         }
       : undefined
   const morgue = e['name'] ? morgueFileName(e['name'], e['end']) : null
-  // xlog `title` is the bare skill title ("Trooper") — unlike wire titles,
-  // which carry their own joiner ("the Trooper", ", Duchess of …"). Restore
-  // the article unless the title brings its own comma joiner.
+  // xlog `title` is the bare skill title ("Trooper"); wire titles carry
+  // their joiner, so restore it.
   const title = e['title']
   return {
     charName: e['name'] ?? '',
-    charTitle: title && !title.startsWith(',') ? `the ${title}` : title,
+    charTitle: title ? titlePrefix(title) + title : title,
     // wiz/explore are presence-written (hiscores.cc set_base_xlog_fields);
     // policy is badge, not filter — it's the player's own device.
     badge: e['wiz'] !== undefined ? 'wizmode' : e['explore'] !== undefined ? 'explore' : undefined,

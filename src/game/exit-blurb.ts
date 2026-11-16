@@ -35,7 +35,10 @@ export interface ExitBlurb {
   rest: string                   // the remaining lines, '\n'-joined
 }
 
-const HEAD = /^(\d+) (.+?) the (.+?) \(level (\d+)(?:, (-?\d+)\/(\d+)(?: \(\d+\))? HPs)?\)(?: \*(WIZ|EXPLORE)\*)?$/
+// Never re-anchor on " the " between name and title: since trunk 2a1ee2751f
+// the joiner varies (skills.cc player_title_prefix: " La ", " of a ", ", ",
+// bare " "), and nothing here reads the name or title.
+const HEAD = /^(\d+) .+ \(level (\d+)(?:, -?\d+\/\d+(?: \(\d+\))? HPs)?\)(?: \*(WIZ|EXPLORE)\*)?$/
 const BEGAN = /^Began as an? (.+?) on .+\.$/
 const GOD = /^Was (?:an? |the )?.+ of .+\.$|^Was a (?:Favourite )?Plaything of Xom\.$/
 // make_time_string (stringutil.cc:601) prefixes "N day(s) " past 24 h of
@@ -57,9 +60,9 @@ export function parseExitBlurb(message: string): ExitBlurb | null {
   const lines = message.split('\n').map((l) => l.trim()).filter((l) => l !== '')
   const head = lines[0]?.match(HEAD)
   if (!head) return null
-  const out: ExitBlurb = { score: Number(head[1]), xl: Number(head[4]), rest: '' }
-  if (head[7] === 'WIZ') out.mode = 'wizmode'
-  else if (head[7] === 'EXPLORE') out.mode = 'explore'
+  const out: ExitBlurb = { score: Number(head[1]), xl: Number(head[2]), rest: '' }
+  if (head[3] === 'WIZ') out.mode = 'wizmode'
+  else if (head[3] === 'EXPLORE') out.mode = 'explore'
   const rest: string[] = []
   for (const l of lines.slice(1)) {
     const began = l.match(BEGAN)

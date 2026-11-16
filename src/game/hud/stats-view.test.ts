@@ -161,6 +161,14 @@ describe('StatsView identity line', () => {
     expect(identityText(v)).toContain('Zap, Duchess of Dis')
   })
 
+  it('joins trunk titles that carry their own leading space (2a1ee2751f)', () => {
+    const v = makeView()
+    v.update({ name: 'Zap', title: ' the Chiller', species: 'Human' })
+    expect(identityText(v)).toContain('Zap the Chiller')
+    v.update({ name: 'Zap', title: ', Who Moves the Sun', species: 'Human' })
+    expect(identityText(v)).toContain('Zap, Who Moves the Sun')
+  })
+
   it('flags wizard and explore games', () => {
     const v = makeView()
     v.update({ name: 'Zap', title: 'the Chiller', species: 'Human', explore: true })

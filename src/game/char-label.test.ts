@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { looksLikeWelcome, parseWelcome } from './char-label'
+import { looksLikeWelcome, nameTitle, parseWelcome } from './char-label'
+
+describe('nameTitle', () => {
+  it('joins 0.34-era titles (no leading space; comma forms attach bare)', () => {
+    expect(nameTitle('Bram', 'the Trooper')).toBe('Bram the Trooper')
+    expect(nameTitle('Bram', 'La Petite Mort')).toBe('Bram La Petite Mort')
+    expect(nameTitle('Bram', ', Who Hides the Stars')).toBe('Bram, Who Hides the Stars')
+  })
+
+  it('joins trunk titles whose joiner brings its own space (2a1ee2751f)', () => {
+    expect(nameTitle('Bram', ' the Trooper')).toBe('Bram the Trooper')
+    expect(nameTitle('Bram', ' of a Hundred Blades')).toBe('Bram of a Hundred Blades')
+    expect(nameTitle('Bram', ' Ex Machina')).toBe('Bram Ex Machina')
+    expect(nameTitle('Bram', ', Who Moves the Sun')).toBe('Bram, Who Moves the Sun')
+  })
+})
 
 describe('looksLikeWelcome', () => {
   it('gates the same forms the parser accepts, not other Welcome lines', () => {

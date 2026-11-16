@@ -5,13 +5,32 @@
 
 import { abbrevPlace } from './place-abbrev'
 
-// Join a character name with its wire title. The title carries its own
-// joiner: ones that begin with a comma (", Duchess of …") attach without a
-// space, per the reference titleline.
+// The title as it follows the name. Wire titles carry their own joiner in
+// two eras: through 0.34 without the leading space ("the Trooper", comma
+// forms ", Who Hides the Stars" attach bare); trunk 2a1ee2751f (skills.cc
+// player_title_prefix) moved the space into the joiner (" the Trooper",
+// ", Who …", " of a Hundred Blades", " Ex Machina") and player.js now
+// concatenates bare. Only the old plain form needs a space added.
+export function titleTail(title: string): string {
+  return title.startsWith(',') || title.startsWith(' ') ? title : ` ${title}`
+}
+
+// Join a character name with its wire title.
 export function nameTitle(name: string, title?: string): string {
-  return name && title
-    ? (title.startsWith(',') ? name + title : `${name} ${title}`)
-    : name || title || ''
+  return name && title ? name + titleTail(title) : name || title?.trimStart() || ''
+}
+
+// The joiner for a BARE skill title (xlog `title` is player_title(false)):
+// a port of trunk skills.cc player_title_prefix as of 33b38161b2 — re-sync
+// when trunk adds joiners. Only offline records use it, and the offline
+// engine tracks trunk.
+export function titlePrefix(title: string): string {
+  if (title === 'Petite Mort') return ' La '
+  if (title === 'Ex Machina') return ' '
+  if (title === 'Hundred Blades') return ' of a '
+  if (title === "Xom's Canvas" || title === 'Unburdened By Reality'
+      || title === 'Survivor of Endless Pranks' || title.startsWith('Who')) return ', '
+  return ' the '
 }
 
 // The abbreviated branch:depth form the lobby rows, milestones, and morgue

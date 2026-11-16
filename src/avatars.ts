@@ -48,7 +48,7 @@ export type McachePart = [number, number, number]
 // there. Refreshed on every upsert and finalized by recordAvatarOutcome.
 export interface AvatarMeta {
   species?: string  // full species name ("Minotaur")
-  title?: string    // XL-scaled job title ("Slayer") — the closest thing to a
+  title?: string    // wire title with its joiner ("the Slayer"; titleTail) — the closest thing to a
                     // background the player message carries (no job field)
   background?: string // full job name ("Berserker"), parsed from the game-start
                       // welcome line (char-label.ts parseWelcome) — the

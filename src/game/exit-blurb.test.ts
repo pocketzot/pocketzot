@@ -32,6 +32,15 @@ describe('parseExitBlurb', () => {
     expect(parseExitBlurb('1 A the B (level 1) *EXPLORE*')?.mode).toBe('explore')
   })
 
+  it('reads headers whose title joiner is not " the " (trunk player_title_prefix)', () => {
+    for (const who of ['A La Petite Mort', 'A of a Hundred Blades', 'A Ex Machina', 'A, Who Moves the Sun']) {
+      const b = parseExitBlurb(`500 ${who} (level 12, 3/40 HPs)\n  Began as a Minotaur Berserker on Aug 24, 2026.`)
+      expect(b?.score).toBe(500)
+      expect(b?.xl).toBe(12)
+      expect(b?.combo).toBe('Minotaur Berserker')
+    }
+  })
+
   it('keeps the dated runes line of a win — it is not a place line', () => {
     // Orb escape more than a day after creation: the date rides on the
     // "... and N runes" line (hiscores.cc death_description). PLAIN_PLACE
