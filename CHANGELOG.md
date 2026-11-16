@@ -7,6 +7,10 @@ formatting and HTML chrome differ. Drift is a bug.
 
 # What's new
 
+## 2026-11-16
+
+- Updated character title display for the new trunk format.
+
 ## 2026-10-29
 
 - Performance improvements to map and HUD rendering.
