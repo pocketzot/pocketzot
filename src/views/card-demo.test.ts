@@ -21,7 +21,7 @@ describe('buildDemoCards', () => {
   it('covers the rare states through the production adapters', () => {
     const cards = buildDemoCards(null)
     const by = (s: string) => cards.find((c) => c.label.startsWith(s))!.model
-    expect(by('Online win').score).toBe(17930053)
+    expect(by('Online win').score).toBe(12345678)
     expect(by('Online win').runes).toHaveLength(15)
     expect(by('Wizmode').badge).toBe('wizmode')
     expect(by('Wizmode').runes).toBeUndefined()

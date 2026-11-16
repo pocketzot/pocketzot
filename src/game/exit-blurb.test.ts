@@ -1,24 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { parseExitBlurb } from './exit-blurb'
 
-// Real headers from dev-material/winning-morgues (the wire blurb is the same
-// hiscore block), continuation indents as _hiscore_newline_string emits.
-const SEKAI = [
-  '17930053 sekai the Intangible (level 27, 323/323 HPs)',
-  '             Began as a Merfolk Wanderer on May 1, 2026.',
+// Header shape per hiscores.cc; continuation indents as
+// _hiscore_newline_string emits.
+const WIN = [
+  '12345678 Bram the Intangible (level 27, 300/300 HPs)',
+  '             Began as a Merfolk Wanderer on Jan 1, 2026.',
   '             Was the Champion of Cheibriados.',
   '             Escaped with the Orb',
   '             ... and 15 runes!',
   '             ',
-  '             The game lasted 03:29:45 (86006 turns).',
+  '             The game lasted 01:23:45 (60000 turns).',
 ].join('\n')
 
 describe('parseExitBlurb', () => {
-  it('splits a real win blurb into facts + the death description', () => {
-    expect(parseExitBlurb(SEKAI)).toEqual({
-      score: 17930053, xl: 27,
+  it('splits a win blurb into facts + the death description', () => {
+    expect(parseExitBlurb(WIN)).toEqual({
+      score: 12345678, xl: 27,
       combo: 'Merfolk Wanderer', godRank: 'Was the Champion of Cheibriados.',
-      duration: '03:29:45', turns: 86006,
+      duration: '01:23:45', turns: 60000,
       rest: 'Escaped with the Orb\n... and 15 runes!',
     })
   })
@@ -46,32 +46,32 @@ describe('parseExitBlurb', () => {
     // "... and N runes" line (hiscores.cc death_description). PLAIN_PLACE
     // must not eat it — the rune count is the card's verbose result.
     const b = parseExitBlurb([
-      '1811892 Oblivion the Ruinous (level 26, 141/141 HPs)',
-      '             Began as a Deep Elf Conjurer on Aug 17, 2026.',
+      '1234567 Bram the Ruinous (level 26, 140/140 HPs)',
+      '             Began as a Deep Elf Conjurer on Jan 1, 2026.',
       '             Was an Elder of Yredelemnul.',
       '             Escaped with the Orb',
-      '             ... and 3 runes on Aug 25, 2026!',
+      '             ... and 3 runes on Jan 9, 2026!',
       '             ',
-      '             The game lasted 15:59:03 (60309 turns).',
+      '             The game lasted 10:00:00 (50000 turns).',
     ].join('\n'))
-    expect(b?.rest).toBe('Escaped with the Orb\n... and 3 runes on Aug 25, 2026!')
+    expect(b?.rest).toBe('Escaped with the Orb\n... and 3 runes on Jan 9, 2026!')
     expect(b?.godRank).toBe('Was an Elder of Yredelemnul.')
   })
 
   it('reads a multi-day duration (make_time_string day prefix) without leaking the line', () => {
-    const b = parseExitBlurb('5 A the B (level 27)\nEscaped with the Orb\nThe game lasted 2 days 03:29:45 (186006 turns).')
-    expect(b?.duration).toBe('2 days 03:29:45')
-    expect(b?.turns).toBe(186006)
+    const b = parseExitBlurb('5 A the B (level 27)\nEscaped with the Orb\nThe game lasted 2 days 01:23:45 (160000 turns).')
+    expect(b?.duration).toBe('2 days 01:23:45')
+    expect(b?.turns).toBe(160000)
     expect(b?.rest).toBe('Escaped with the Orb')
   })
 
   it('keeps the death sentence and the Xom rank; drops the plain closing place line', () => {
     const b = parseExitBlurb([
-      '1648 particleface the Impregnable (level 12, -3/95 HPs)',
-      'Began as a Minotaur Fighter on Feb 13, 2026.',
+      '1648 Bram the Impregnable (level 12, -3/95 HPs)',
+      'Began as a Minotaur Fighter on Jan 1, 2026.',
       'Was a Favourite Plaything of Xom.',
       'Slain by an orc warrior (13 damage)',
-      '... on level 9 of the Dungeon on Feb 14, 2026.',
+      '... on level 9 of the Dungeon on Jan 2, 2026.',
       'The game lasted 00:40:12 (9904 turns).',
     ].join('\n'))
     expect(b?.godRank).toBe('Was a Favourite Plaything of Xom.')

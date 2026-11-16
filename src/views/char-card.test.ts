@@ -245,13 +245,13 @@ describe('avatarToCard', () => {
 
   it('consumes the blurb header into facts, leaving the death description verbose', () => {
     const message = [
-      '17930053 tester the Slayer (level 27, 323/323 HPs) *WIZ*',
-      '             Began as a Minotaur Wanderer on May 1, 2026.',
+      '12345678 tester the Slayer (level 27, 300/300 HPs) *WIZ*',
+      '             Began as a Minotaur Wanderer on Jan 1, 2026.',
       '             Was the Champion of Cheibriados.',
       '             Escaped with the Orb',
       '             ... and 15 runes!',
       '             ',
-      '             The game lasted 03:29:45 (86006 turns).',
+      '             The game lasted 01:23:45 (60000 turns).',
     ].join('\n')
     const m = avatarToCard(makeAvatar({ outcome: { reason: 'won', message, endedAt: 1 } }))
     expect(m.charName).toBe('tester')      // headline untouched
@@ -260,9 +260,9 @@ describe('avatarToCard', () => {
     expect(m.background).toBe('Wanderer')  // split on the known species
     expect(m.godRank).toBe('Was the Champion of Cheibriados.')
     expect(m.xl).toBe(27)                  // blurb's final XL over the last capture's 12
-    expect(m.score).toBe(17930053)
-    expect(m.turns).toBe(86006)
-    expect(m.duration).toBe('03:29:45')
+    expect(m.score).toBe(12345678)
+    expect(m.turns).toBe(60000)
+    expect(m.duration).toBe('01:23:45')
     expect(m.result.verbose).toBe('Escaped with the Orb\n... and 15 runes!')
     // The welcome-parsed background wins over the combo split when present.
     expect(avatarToCard(makeAvatar({ background: 'Berserker', outcome: { reason: 'won', message, endedAt: 1 } })).background)
@@ -272,7 +272,7 @@ describe('avatarToCard', () => {
     const card = renderCharCard(m)
     expect(card.querySelector('.char-card-result')?.textContent).toBe('Escaped with the Orb\n... and 15 runes!')
     expect(card.querySelector('.char-card-head')?.textContent).toBe('tester Slayer *WIZ*') // fixture title has no joiner
-    expect(card.querySelector('.char-card-meta')?.textContent).toContain('17,930,053 pts')
+    expect(card.querySelector('.char-card-meta')?.textContent).toContain('12,345,678 pts')
   })
 
   it('treats a live save as saved with no result line', () => {

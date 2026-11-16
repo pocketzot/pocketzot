@@ -9,13 +9,13 @@
 // character_description / game_time, continuation lines indented by
 // _hiscore_newline_string):
 //
-//   17930053 sekai the Intangible (level 27, 323/323 HPs)            *
-//                Began as a Merfolk Wanderer on May 1, 2026.         *
+//   12345678 Bram the Intangible (level 27, 300/300 HPs)             *
+//                Began as a Merfolk Wanderer on Jan 1, 2026.         *
 //                Was the Champion of Cheibriados.                    (godded)
 //                Escaped with the Orb                                 ┐ death
 //                ... and 15 runes!                                    │ desc +
 //                                                                     │ place
-//                The game lasted 03:29:45 (86006 turns).             *
+//                The game lasted 01:23:45 (60000 turns).             *
 //
 // Starred lines are format-fixed and consumed here; everything between is
 // the death description + place, kept as `rest` for the card's verbose
@@ -30,7 +30,7 @@ export interface ExitBlurb {
                                  // clause is matched but not kept — no card slot)
   combo?: string                 // "Merfolk Wanderer" — species + job, unsplit
   godRank?: string               // "Was the Champion of Cheibriados." verbatim
-  duration?: string              // "03:29:45"
+  duration?: string              // "01:23:45"
   turns?: number
   rest: string                   // the remaining lines, '\n'-joined
 }

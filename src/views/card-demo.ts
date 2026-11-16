@@ -16,16 +16,16 @@ import { paintAvatars, type DollRecipe, type MarkedRecipe } from './avatar-tiles
 import { getTileLoader } from '../game/tiles/tile-loader'
 import { gemCell, runeCell } from './rune-sprites'
 
-// A real win blurb (dev-material/winning-morgues, identity swapped) — the
-// exact hiscores.cc verbose block every server and the offline engine send.
+// A synthetic win blurb in the hiscores.cc verbose shape every server and
+// the offline engine send.
 const WIN_BLURB = [
-  '17930053 Demo the Intangible (level 27, 323/323 HPs)',
-  '             Began as a Merfolk Wanderer on May 1, 2026.',
+  '12345678 Demo the Intangible (level 27, 300/300 HPs)',
+  '             Began as a Merfolk Wanderer on Jan 1, 2026.',
   '             Was the Champion of Cheibriados.',
   '             Escaped with the Orb',
   '             ... and 15 runes!',
   '             ',
-  '             The game lasted 03:29:45 (86006 turns).',
+  '             The game lasted 01:23:45 (60000 turns).',
 ].join('\n')
 // runes_gems_desc's gem clause follows the rune clause; the date tail moves
 // to whichever comes last (hiscores.cc:1980).
