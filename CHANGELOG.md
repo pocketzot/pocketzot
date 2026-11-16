@@ -9,7 +9,7 @@ formatting and HTML chrome differ. Drift is a bug.
 
 ## 2026-11-16
 
-- Updated character title display for the new trunk format.
+- Improved character title display and updated it for the new trunk format.
 
 ## 2026-10-29
 
