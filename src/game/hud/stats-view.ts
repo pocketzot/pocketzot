@@ -165,7 +165,7 @@ export class StatsView {
     const speciesGod = speciesDisplay + godStr
     if (this.layout === 'compact') {
       // compact: one combined line
-      const idLine = titled && speciesGod ? `${titled} — ${speciesGod}` : titled || speciesGod
+      const idLine = titled && speciesGod ? `${titled}, ${speciesGod}` : titled || speciesGod
       this.setText('#hud-id', idLine + modeFlag)
     } else {
       // square: separate title and species lines, as in the reference
