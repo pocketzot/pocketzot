@@ -29,6 +29,13 @@ const STATUS_ORDER: ReadonlyArray<readonly [key: string, label: string]> = [
   ['BERSERK', 'berserk'],
   ['HASTED', 'fast'],
   ['INNER_FLAME', 'inner flame'],
+  // Same MB_INNER_FLAME on a SIZE_GIANT monster (bigger death explosion):
+  // trunk status_icons_for() sends this icon instead of INNER_FLAME, never
+  // both (tilepick.cc, since 56fd9592d8). Deliberately not crawl's word —
+  // one flag, one word, "inner flame" (mon-info-flag-name.h:37) — because
+  // the icon is the only size cue and ASCII mode never draws it. Keep the
+  // two distinct when re-porting this table.
+  ['INNER_FLAME_LARGE', 'large inner flame'],
   ['PAIN_MIRROR', 'reflects damage'],
   ['BOUND_SOUL', 'soul bound'],
   ['MIGHT', 'strong'],

@@ -13,7 +13,8 @@ const ICONS = {
   SUMMONED: 100, BERSERK: 101, HASTED: 102, PETRIFIED: 103, FRENZIED: 104,
   SLOWED: 105, CONFUSED: 106, NOBODY_MEMORY_1: 107, NOBODY_MEMORY_3: 108,
   GHOSTLY: 109, SOME_NEW_STATUS: 110, MINION: 112, DRAGON_VEIN_FIRE: 111,
-  ICONS_MAX: 113, TILEI_ICONS_MAX: 113,
+  INNER_FLAME: 113, INNER_FLAME_LARGE: 114,
+  ICONS_MAX: 115, TILEI_ICONS_MAX: 115,
 }
 const names = iconNameMap(ICONS)
 const HOSTILE = 0, NEUTRAL = 1, GOOD_NEUTRAL = 3, FRIENDLY = 4
@@ -21,7 +22,7 @@ const HOSTILE = 0, NEUTRAL = 1, GOOD_NEUTRAL = 3, FRIENDLY = 4
 describe('iconNameMap', () => {
   it('reverses numeric constants, skipping *_MAX sentinels and functions', () => {
     expect(names.get(101)).toBe('BERSERK')
-    expect(names.get(113)).toBeUndefined()
+    expect(names.get(115)).toBeUndefined()
     expect([...names.values()]).not.toContain('get_tile_info')
   })
 
@@ -76,6 +77,11 @@ describe('monsterStatusLabels — icons and order', () => {
   it('drops silent icons and unknown ids; humanises unknown names at the end', () => {
     expect(monsterStatusLabels(0, [109, 999, 110, 101], HOSTILE, names))
       .toEqual(['berserk', 'some new status'])
+  })
+
+  it('words the giant-monster inner flame icon distinctly, in the inner flame slot', () => {
+    expect(monsterStatusLabels(0, [114, 102, 101], HOSTILE, names)).toEqual(['berserk', 'fast', 'large inner flame'])
+    expect(monsterStatusLabels(0, [113], HOSTILE, names)).toEqual(['inner flame'])
   })
 
   it('never words the dragon-vein terrain overlay', () => {
