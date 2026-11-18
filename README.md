@@ -28,7 +28,7 @@ Progressive Web App.
 ## Features
 
 - Online play on WebTiles servers.
-- Offline play entirely on your device.
+- Offline play on your device.
 - ASCII and tiles map modes.
 - Context-aware controls for in-game menus.
 - Customizable touch controls.

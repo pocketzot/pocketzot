@@ -1,6 +1,6 @@
 # About PocketZot
 
-PocketZot is an unofficial [DCSS](https://crawl.develz.org) app designed for iOS and Android phones in portrait mode. Play online on [WebTiles](https://crawl.develz.org/wordpress/howto) servers, or offline with DCSS running entirely on your device.
+PocketZot is an unofficial [DCSS](https://crawl.develz.org) app designed for iOS and Android phones in portrait mode. Play online on [WebTiles](https://crawl.develz.org/wordpress/howto) servers, or offline with DCSS running on your device.
 
 ## Getting started
 
@@ -9,7 +9,7 @@ DCSS has no app on the App Store, but you don't need one: install PocketZot like
 ## Features
 
 - Online play on WebTiles servers
-- Offline play entirely on your device
+- Offline play on your device
 - ASCII and tiles map modes
 - Context-aware controls for in-game menus
 - Customizable touch controls
@@ -52,9 +52,9 @@ Obligatory virtual keyboard also available.
 
 ## Offline play
 
-Tap the "Play offline" card on the login screen to run DCSS directly on your device with no server, account, or connection required. The first launch installs the engine and tile data as a one-time download. After that, games can start and play even in airplane mode.
+Tap the "Play offline" card on the login screen to run DCSS fully on your device with no server, account, or connection required. The first launch installs the engine and tile data as a one-time download. After that, you can play even in airplane mode.
 
-Offline characters get named save slots, a past-games list with scores and morgues, an editable options (RC) file, and a Backup feature that exports everything to a single file you can keep or move to another device. Saves live in your browser's storage, which the OS can evict under storage pressure. If a character matters to you, export a backup occasionally.
+Offline characters get named save slots, a past-games list with scores and morgues, an editable options (RC) file, and a Backup feature that exports everything to a single file you can keep or move to another device. Saves are stored on your device. Export a backup occasionally to protect your data.
 
 ## Version support
 
