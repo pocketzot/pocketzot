@@ -7,6 +7,11 @@ formatting and HTML chrome differ. Drift is a bug.
 
 # What's new
 
+## 2026-11-18
+
+- Added "large inner flame" descriptor for giant monsters with inner flame,
+  per the new icon in trunk.
+
 ## 2026-11-16
 
 - Improved character title display and updated it for the new trunk format.
